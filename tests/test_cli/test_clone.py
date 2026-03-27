@@ -29,6 +29,11 @@ def _create_run(
     # Write a sample input file
     (run_dir / "input" / "config.txt").write_text("nx=64\nny=64\n")
 
+    # Write a sample job script
+    (run_dir / "submit" / "job.sh").write_text(
+        "#!/bin/bash\n#SBATCH --job-name=test\necho hello\n"
+    )
+
     manifest: dict[str, Any] = {
         "run": {
             "id": run_id,
@@ -68,6 +73,8 @@ def test_clone_basic(tmp_path: Path) -> None:
     assert (new_dir / "manifest.toml").exists()
     assert (new_dir / "input" / "config.txt").exists()
     assert (new_dir / "input" / "config.txt").read_text() == "nx=64\nny=64\n"
+    assert (new_dir / "submit" / "job.sh").exists()
+    assert "#SBATCH" in (new_dir / "submit" / "job.sh").read_text()
 
 
 def test_clone_sets_parent_run(tmp_path: Path) -> None:

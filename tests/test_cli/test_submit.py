@@ -50,6 +50,11 @@ def _create_run(
     job_sh = submit_dir / "job.sh"
     job_sh.write_text("#!/bin/bash\n#SBATCH --job-name=test\necho hello\n")
 
+    # Create input files (pre-flight checks require non-empty input/)
+    input_dir = run_dir / "input"
+    input_dir.mkdir(parents=True, exist_ok=True)
+    (input_dir / "params.json").write_text('{"nx": 64}')
+
     # Create work directory
     (run_dir / "work").mkdir(parents=True, exist_ok=True)
 
@@ -128,6 +133,8 @@ def test_submit_success(tmp_path: Path) -> None:
     updated = read_manifest(run_dir)
     assert updated.job.get("job_id") == "99999"
     assert updated.run.get("status") == "submitted"
+    assert updated.job.get("submitted_at") != ""
+    assert "T" in updated.job["submitted_at"]  # ISO format check
 
 
 def test_submit_dry_run(tmp_path: Path) -> None:
@@ -192,6 +199,29 @@ def test_submit_all_dry_run(tmp_path: Path) -> None:
     assert result.exit_code == 0
     assert "would submit" in result.output
     assert "skip" in result.output
+
+
+def test_submit_empty_input_dir(tmp_path: Path) -> None:
+    """Submit a run with empty input/ should error."""
+    (tmp_path / "simproject.toml").write_text('[project]\nname = "test"\n')
+    run_dir = tmp_path / "runs" / "R20260327-0001"
+    # Create run but remove input files
+    _create_run(run_dir)
+    # Remove the input file we created
+    for f in (run_dir / "input").iterdir():
+        f.unlink()
+
+    with (
+        patch("simctl.cli.submit.Path.cwd", return_value=tmp_path),
+        patch(
+            "simctl.cli.submit.sbatch_submit",
+            return_value="99999",
+        ),
+    ):
+        result = runner.invoke(app, ["submit", str(run_dir)])
+
+    assert result.exit_code != 0
+    assert "input/" in result.output
 
 
 def test_submit_sbatch_failure(tmp_path: Path) -> None:

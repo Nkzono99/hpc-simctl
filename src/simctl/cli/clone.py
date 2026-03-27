@@ -68,6 +68,13 @@ def clone(
             dest_input.rmdir()
             shutil.copytree(source_input, dest_input)
 
+        # Copy submit/ directory (including job.sh) from source
+        source_submit = source_dir / "submit"
+        if source_submit.is_dir():
+            dest_submit = new_run_dir / "submit"
+            dest_submit.rmdir()
+            shutil.copytree(source_submit, dest_submit)
+
         # Build new manifest
         source_run_id = source_manifest.run.get("id", "")
         new_manifest = ManifestData.from_dict(source_manifest.to_dict())

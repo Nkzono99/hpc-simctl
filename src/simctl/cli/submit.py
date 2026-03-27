@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated, Optional
 
@@ -17,6 +19,8 @@ from simctl.core.exceptions import (
 from simctl.core.manifest import read_manifest, update_manifest
 from simctl.core.state import RunState, update_state
 from simctl.slurm.submit import SlurmNotFoundError, SlurmSubmitError, sbatch_submit
+
+logger = logging.getLogger(__name__)
 
 
 def _find_project_runs_dir() -> Path:
@@ -92,6 +96,27 @@ def _submit_single_run(run_dir: Path, *, quiet: bool = False) -> str | None:
         typer.echo(f"Error: Job script not found: {job_script}")
         return None
 
+    # Pre-flight: check input/ directory is not empty
+    input_dir = run_dir / "input"
+    if not input_dir.is_dir() or not any(input_dir.iterdir()):
+        typer.echo(f"Error: input/ directory is empty or missing in {run_dir}")
+        return None
+
+    # Pre-flight: check job.sh contains SBATCH directives
+    job_content = job_script.read_text()
+    if "#SBATCH" not in job_content:
+        typer.echo("Error: job.sh does not contain expected #SBATCH directives")
+        return None
+
+    # Pre-flight: if production tag, warn if git is dirty
+    tags = manifest.classification.get("tags", [])
+    if "production" in tags:
+        sim_source = manifest.simulator_source
+        if sim_source.get("git_dirty", False):
+            typer.echo(
+                "Warning: production run submitted with dirty git working tree"
+            )
+
     # Determine working directory
     work_dir = run_dir / "work"
     if not work_dir.is_dir():
@@ -107,9 +132,12 @@ def _submit_single_run(run_dir: Path, *, quiet: bool = False) -> str | None:
         typer.echo(f"Error: sbatch failed for {run_dir.name}: {e}")
         return None
 
-    # Record job_id in manifest
+    # Record job_id and submitted_at in manifest
     try:
-        update_manifest(run_dir, {"job": {"job_id": job_id}})
+        submitted_at = datetime.now(tz=timezone.utc).isoformat()
+        update_manifest(
+            run_dir, {"job": {"job_id": job_id, "submitted_at": submitted_at}}
+        )
     except SimctlError as e:
         typer.echo(f"Error: Failed to update manifest: {e}")
         return None

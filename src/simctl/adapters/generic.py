@@ -345,21 +345,26 @@ class GenericAdapter(SimulatorAdapter):
         provenance: dict[str, Any] = {
             "resolver_mode": runtime_info.get("resolver_mode", ""),
             "executable": runtime_info.get("executable", ""),
+            "exe_hash": "",
+            "git_commit": "",
+            "git_dirty": False,
+            "source_repo": runtime_info.get("source_repo", ""),
+            "build_command": runtime_info.get("build_command", ""),
+            "package_version": runtime_info.get("package_version", ""),
         }
 
         # Executable hash
         exe_path = Path(runtime_info.get("executable", ""))
         if exe_path.is_file():
-            provenance["executable_hash"] = _compute_file_hash(exe_path)
+            provenance["exe_hash"] = _compute_file_hash(exe_path)
 
         # Git provenance for local_source
         if runtime_info.get("resolver_mode") == "local_source":
             repo = runtime_info.get("source_repo", "")
             if repo:
-                provenance["source_repo"] = repo
-                provenance["git"] = _collect_git_info(Path(repo))
-
-        provenance["build_command"] = runtime_info.get("build_command", "")
+                git_info = _collect_git_info(Path(repo))
+                provenance["git_commit"] = git_info.get("commit", "")
+                provenance["git_dirty"] = git_info.get("dirty", False)
 
         return provenance
 

@@ -494,8 +494,8 @@ class TestCollectProvenance:
         prov = adapter.collect_provenance(rt)
         assert prov["resolver_mode"] == "local_executable"
         assert prov["executable"] == "/nonexistent/solver"
-        # Non-existent file -> no hash
-        assert "executable_hash" not in prov
+        # Non-existent file -> empty hash
+        assert prov["exe_hash"] == ""
 
     def test_provenance_with_real_file(
         self,
@@ -510,13 +510,13 @@ class TestCollectProvenance:
             "executable": str(exe),
         }
         prov = adapter.collect_provenance(rt)
-        assert prov["executable_hash"].startswith("sha256:")
+        assert prov["exe_hash"].startswith("sha256:")
 
     def test_provenance_local_source(
         self,
         adapter: GenericAdapter,
     ) -> None:
-        """local_source mode includes source_repo and git info."""
+        """local_source mode includes source_repo and git info as flat fields."""
         rt: dict[str, Any] = {
             "resolver_mode": "local_source",
             "source_repo": "/nonexistent/repo",
@@ -525,8 +525,10 @@ class TestCollectProvenance:
         }
         prov = adapter.collect_provenance(rt)
         assert prov["source_repo"] == "/nonexistent/repo"
-        assert "git" in prov
+        assert "git_commit" in prov
+        assert "git_dirty" in prov
         assert prov["build_command"] == "make"
+        assert prov["package_version"] == ""
 
     def test_provenance_empty_runtime(
         self,
@@ -536,3 +538,8 @@ class TestCollectProvenance:
         prov = adapter.collect_provenance({})
         assert prov["resolver_mode"] == ""
         assert prov["executable"] == ""
+        assert prov["exe_hash"] == ""
+        assert prov["git_commit"] == ""
+        assert prov["git_dirty"] is False
+        assert prov["build_command"] == ""
+        assert prov["package_version"] == ""

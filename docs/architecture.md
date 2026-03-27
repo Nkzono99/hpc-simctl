@@ -1,0 +1,597 @@
+# アーキテクチャ
+
+このドキュメントでは、hpc-simctl のシステムアーキテクチャと設計思想を説明します。
+
+## 設計原則
+
+1. **run ディレクトリが主単位**: すべての操作は run_id または run ディレクトリを基点とする
+2. **不変と可変の分離**: run_id は不変、パスは可変（分類・整理用）
+3. **Simulator Adapter パターン**: シミュレータ固有処理は Adapter に閉じ込める。core はシミュレータに依存しない
+4. **Launcher Profile パターン**: MPI 起動方式は Launcher に閉じ込める
+5. **MPI に介入しない**: Python ツールは MPI rank ごとのラッパにならない。job.sh で srun/mpirun を直接実行
+6. **manifest.toml が正本**: run の状態・由来・provenance はすべて manifest.toml に記録
+
+---
+
+## モジュール構成
+
+```
+simctl/
+  cli/                 -----> CLI 層 (typer)
+    |                         ユーザー入力のパース・出力フォーマット
+    v
+  core/                -----> ドメインロジック層
+    |                         Project / Case / Survey / Run / Manifest / State
+    |
+    +----> adapters/   -----> Simulator Adapter 層
+    |                         シミュレータ固有処理の抽象化
+    |
+    +----> launchers/  -----> Launcher Profile 層
+    |                         MPI 起動方式の抽象化
+    |
+    +----> jobgen/     -----> Job Script 生成
+    |                         Slurm batch script のテンプレート生成
+    |
+    +----> slurm/      -----> Slurm 連携層
+                              sbatch / squeue / sacct のラッパー
+```
+
+### モジュール依存関係
+
+```
+cli/
+ |
+ +--> core/project    (プロジェクト読込)
+ +--> core/case       (Case 読込)
+ +--> core/survey     (Survey 展開)
+ +--> core/run        (Run 生成)
+ +--> core/manifest   (Manifest 読書き)
+ +--> core/state      (状態遷移)
+ +--> core/discovery  (Run 探索)
+ +--> core/provenance (Provenance 収集)
+ +--> adapters/       (Adapter 取得・使用)
+ +--> launchers/      (Launcher 取得・使用)
+ +--> jobgen/         (job.sh 生成)
+ +--> slurm/          (Slurm 連携)
+
+core/
+ +--> core/exceptions (共通例外)
+
+adapters/
+ +--> adapters/base   (抽象基底)
+ +--> adapters/registry (登録・lookup)
+
+launchers/
+ +--> launchers/base  (抽象基底 + ファクトリ)
+```
+
+重要なルール: `core/` は `adapters/` や `launchers/` に直接依存しません。CLI 層が Adapter と Launcher を取得し、core のロジックに注入します。
+
+---
+
+## コアコンセプト
+
+### Project
+
+プロジェクト全体を表す最上位のエンティティです。
+
+- **定義ファイル**: `simproject.toml` (必須)、`simulators.toml` (任意)、`launchers.toml` (任意)
+- **データクラス**: `ProjectConfig` (`core/project.py`)
+- **主な責務**: プロジェクトルートの検出、設定ファイルの読込・検証
+
+```python
+@dataclass(frozen=True)
+class ProjectConfig:
+    name: str
+    description: str
+    root_dir: Path
+    simulators: dict[str, dict[str, Any]]
+    launchers: dict[str, dict[str, Any]]
+    raw: dict[str, Any]
+```
+
+プロジェクトルートは `simproject.toml` が存在するディレクトリです。`find_project_root()` が cwd から上位ディレクトリを辿って自動検出します。
+
+### Case
+
+run を生成するための再利用可能な雛形です。
+
+- **定義ファイル**: `cases/<name>/case.toml`
+- **データクラス**: `CaseData` (`core/case.py`)
+- **主な責務**: シミュレーション条件（パラメータ・ジョブ設定・分類情報）の定義
+
+```python
+@dataclass(frozen=True)
+class CaseData:
+    name: str
+    simulator: str
+    launcher: str
+    description: str
+    classification: ClassificationData
+    job: JobData
+    params: dict[str, Any]
+    case_dir: Path
+    raw: dict[str, Any]
+```
+
+Case 自体は直接実行しません。create コマンドまたは survey の base_case として参照されます。
+
+### Survey
+
+パラメータサーベイの親単位です。
+
+- **定義ファイル**: `runs/.../survey.toml`
+- **データクラス**: `SurveyData` (`core/survey.py`)
+- **主な責務**: パラメータ軸の定義、直積展開、display_name のテンプレート生成
+
+```python
+@dataclass(frozen=True)
+class SurveyData:
+    id: str
+    name: str
+    base_case: str
+    simulator: str
+    launcher: str
+    classification: ClassificationData
+    axes: dict[str, list[Any]]
+    naming_template: str
+    job: JobData
+    survey_dir: Path
+    raw: dict[str, Any]
+```
+
+`expand_axes()` 関数が `[axes]` セクションの直積を計算します:
+
+```python
+expand_axes({"u": [2e5, 4e5], "aspect": [2.0, 4.0]})
+# => [
+#   {"u": 2e5, "aspect": 2.0},
+#   {"u": 2e5, "aspect": 4.0},
+#   {"u": 4e5, "aspect": 2.0},
+#   {"u": 4e5, "aspect": 4.0},
+# ]
+```
+
+### Run
+
+1 回のシミュレーション実行を表す最小単位です。
+
+- **定義ファイル**: `runs/.../Rxxxx/manifest.toml`
+- **データクラス**: `RunInfo` (`core/run.py`)
+- **ディレクトリ構造**: `input/`, `submit/`, `work/`, `analysis/`, `status/`
+
+```python
+@dataclass(frozen=True)
+class RunInfo:
+    run_id: str        # "R20260327-0001"
+    run_dir: Path
+    display_name: str
+    created_at: str
+    params: dict[str, Any]
+```
+
+run_id は `RYYYYMMDD-NNNN` 形式で、プロジェクト内で一意です。`next_run_id()` が既存の run_id を走査して次の連番を決定します。
+
+### Manifest
+
+run の正本情報を保持する台帳です。
+
+- **ファイル**: `manifest.toml`
+- **データクラス**: `ManifestData` (`core/manifest.py`)
+- **主な責務**: run の識別・状態・由来・provenance・ジョブ情報の永続化
+
+ManifestData は以下のセクションで構成されます:
+
+| セクション | 内容 |
+|-----------|------|
+| `run` | id, display_name, status, created_at |
+| `path` | run_dir |
+| `origin` | case, survey, parent_run |
+| `classification` | model, submodel, tags |
+| `simulator` | name, adapter, resolver_mode |
+| `launcher` | name |
+| `simulator_source` | git_commit, exe_hash, source_repo 等 |
+| `job` | scheduler, job_id, partition, nodes, ntasks, walltime |
+| `variation` | changed_keys (survey で変化したパラメータ) |
+| `params_snapshot` | 全パラメータのスナップショット |
+| `files` | 標準ディレクトリ名 |
+
+---
+
+## Adapter パターン
+
+### 目的
+
+シミュレータごとに異なる以下の処理を Adapter に閉じ込めます:
+
+- 入力ファイルの形式と生成方法
+- 実行コマンドの構築
+- 出力ファイルの検出
+- 成功/失敗の判定
+- summary の抽出
+- provenance の収集
+
+### クラス階層
+
+```
+SimulatorAdapter (ABC)     ← 抽象基底クラス
+  |
+  +-- GenericAdapter       ← 汎用実装（組み込み）
+  +-- YourCustomAdapter    ← ユーザー定義
+```
+
+### 抽象インタフェース
+
+`SimulatorAdapter` (`adapters/base.py`) は以下の 7 つの抽象メソッドを定義します:
+
+```python
+class SimulatorAdapter(ABC):
+    @property
+    @abstractmethod
+    def name(self) -> str: ...
+
+    @abstractmethod
+    def render_inputs(self, case_data, run_dir) -> list[str]: ...
+
+    @abstractmethod
+    def resolve_runtime(self, simulator_config, resolver_mode) -> dict: ...
+
+    @abstractmethod
+    def build_program_command(self, runtime_info, run_dir) -> list[str]: ...
+
+    @abstractmethod
+    def detect_outputs(self, run_dir) -> dict: ...
+
+    @abstractmethod
+    def detect_status(self, run_dir) -> str: ...
+
+    @abstractmethod
+    def summarize(self, run_dir) -> dict: ...
+
+    @abstractmethod
+    def collect_provenance(self, runtime_info) -> dict: ...
+```
+
+### GenericAdapter
+
+`adapters/generic.py` に組み込みの汎用 Adapter が実装されています。多くのシンプルなシミュレータはこの Adapter で対応可能です:
+
+- **入力**: `params` を `input/params.json` として書き出す。`case.input_files` があればコピーする
+- **ランタイム解決**: `package` / `local_source` / `local_executable` の 3 モードに対応
+- **実行コマンド**: `[executable, input/params.json]`
+- **出力検出**: `work/` ディレクトリを走査
+- **状態検出**: `work/exit_code` ファイルの値で判定 (0 = completed, 非 0 = failed)
+- **provenance**: 実行ファイルの SHA-256 ハッシュ、git commit 情報
+
+### Adapter Registry
+
+`adapters/registry.py` の `AdapterRegistry` が Adapter の登録と検索を管理します。
+
+```
+register(adapter_cls)     # Adapter クラスを登録
+get(name)                 # 名前で Adapter クラスを取得
+load_from_config(config)  # simulators.toml から自動登録
+```
+
+自動登録の規約: `simulators.toml` の `adapter` フィールドの値を使い、`simctl.adapters.<adapter_name>` モジュールを `importlib` で読み込みます。
+
+---
+
+## Launcher パターン
+
+### 目的
+
+MPI 起動方式の違いを Launcher に閉じ込めます。Simulator Adapter が返す本体コマンドを Launcher が MPI ラッパーで包みます。
+
+### クラス階層
+
+```
+Launcher (ABC)         ← 抽象基底クラス
+  |
+  +-- SrunLauncher     ← Slurm srun
+  +-- MpirunLauncher   ← OpenMPI mpirun
+  +-- MpiexecLauncher  ← mpiexec
+```
+
+### 処理の流れ
+
+```
+Adapter.build_program_command()
+  => ["./solver", "input/params.json"]
+
+Launcher.build_exec_line()
+  => "srun ./solver input/params.json"
+```
+
+### ファクトリメソッド
+
+`Launcher.from_config(name, config)` が `launchers.toml` の `kind` フィールドに基づいて適切な Launcher サブクラスをインスタンス化します:
+
+| kind | クラス | コマンド例 |
+|------|--------|-----------|
+| `srun` | `SrunLauncher` | `srun ./solver input.toml` |
+| `mpirun` | `MpirunLauncher` | `mpirun -np 32 ./solver input.toml` |
+| `mpiexec` | `MpiexecLauncher` | `mpiexec -n 32 ./solver input.toml` |
+
+`use_slurm_ntasks = true` の場合、タスク数の明示指定が省略され、Slurm の `SLURM_NTASKS` 環境変数が使用されます。
+
+---
+
+## 状態マシン
+
+### 状態の定義
+
+`core/state.py` の `RunState` 列挙型:
+
+```python
+class RunState(str, Enum):
+    CREATED = "created"
+    SUBMITTED = "submitted"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+    ARCHIVED = "archived"
+    PURGED = "purged"
+```
+
+### 遷移図
+
+```
+                  +----------+
+                  | created  |
+                  +----+-----+
+                       |
+                       v
+                  +----------+
+              +---| submitted|---+
+              |   +----+-----+   |
+              |        |         |
+              v        v         v
+         +--------+ +-------+ +----------+
+         |cancelled| |running| |  failed  |
+         +--------+ +---+---+ +----------+
+                         |
+              +----------+----------+
+              |          |          |
+              v          v          v
+         +--------+ +----------+ +--------+
+         |cancelled| |completed | | failed |
+         +--------+ +----+-----+ +--------+
+                         |
+                         v
+                    +----------+
+                    | archived |
+                    +----+-----+
+                         |
+                         v
+                    +----------+
+                    |  purged  |
+                    +----------+
+```
+
+### 遷移の実装
+
+`VALID_TRANSITIONS` ディクショナリが許可された遷移を定義し、`transition_state()` が遷移の正当性を検証します。不正な遷移は `InvalidStateTransitionError` を送出します。
+
+`update_state()` は以下を実行します:
+1. manifest.toml から現在の状態を読み取り
+2. 遷移の正当性を検証
+3. manifest.toml の `run.status` を更新
+4. `status/state.json` にタイムスタンプ付きの状態変更を記録
+
+---
+
+## 主要操作のデータフロー
+
+### create (単一 run 生成)
+
+```
+CLI: simctl create CASE --dest DIR
+  |
+  +--> find_project_root() --> load_project()
+  |      ProjectConfig を取得
+  |
+  +--> resolve_case() --> load_case()
+  |      CaseData を取得
+  |
+  +--> get_adapter_instance()
+  |      AdapterRegistry から SimulatorAdapter を取得
+  |
+  +--> get_launcher()
+  |      Launcher.from_config() で Launcher を取得
+  |
+  +--> collect_existing_run_ids()
+  |      runs/ を再帰探索して既存 run_id を収集
+  |
+  +--> create_run()
+  |      run_id 採番 + ディレクトリ作成
+  |
+  +--> adapter.render_inputs()
+  |      入力ファイル生成
+  |
+  +--> adapter.resolve_runtime()
+  |      実行ファイル解決
+  |
+  +--> adapter.build_program_command()
+  |      実行コマンド構築
+  |
+  +--> launcher.build_exec_line()
+  |      MPI ラッパー付き実行行生成
+  |
+  +--> generate_job_script()
+  |      submit/job.sh 生成
+  |
+  +--> adapter.collect_provenance()
+  |      provenance 情報収集
+  |
+  +--> write_manifest()
+         manifest.toml 書き出し (status = "created")
+```
+
+### sweep (パラメータサーベイ展開)
+
+```
+CLI: simctl sweep DIR
+  |
+  +--> load_project() + load_survey() + load_case()
+  |
+  +--> expand_axes()
+  |      パラメータ直積を展開 (N 個の組合せ)
+  |
+  +--> N 回ループ:
+         +--> merge params (base_case + sweep 差分)
+         +--> generate_display_name()
+         +--> _generate_run()  (create と同一ロジック)
+         |      run_id 採番 + ディレクトリ作成
+         |      入力生成 + job.sh 生成 + manifest 書き出し
+         +--> existing_ids に追加 (重複防止)
+```
+
+### submit (job 投入)
+
+```
+CLI: simctl submit RUN
+  |
+  +--> resolve_run()
+  |      run_id またはパスから run ディレクトリを特定
+  |
+  +--> read_manifest()
+  |      現在の状態が "created" であることを確認
+  |
+  +--> sbatch_submit()
+  |      sbatch --chdir=work/ submit/job.sh
+  |      job_id をパース
+  |
+  +--> update_manifest()
+  |      job.job_id を記録
+  |
+  +--> update_state(SUBMITTED)
+         manifest.toml と status/state.json を更新
+```
+
+### sync (Slurm 状態同期)
+
+```
+CLI: simctl sync RUN
+  |
+  +--> resolve_run() --> read_manifest()
+  |      job_id を取得
+  |
+  +--> query_job_status(job_id)
+  |      1. squeue で照会 (アクティブ job)
+  |      2. 見つからなければ sacct で照会 (完了 job)
+  |      3. Slurm 状態を RunState にマッピング
+  |
+  +--> update_state(new_state)
+         manifest.toml と status/state.json を更新
+```
+
+---
+
+## Slurm 連携
+
+### sbatch 投入 (`slurm/submit.py`)
+
+- `sbatch_submit(job_script, working_dir)` が `sbatch --chdir=... job.sh` を実行
+- 出力の `Submitted batch job 12345` をパースして job_id を返す
+- テスト用に `CommandRunner` 型を注入可能（モック対応）
+
+### 状態照会 (`slurm/query.py`)
+
+- `squeue_status(job_id)`: アクティブ job の状態を照会
+- `sacct_status(job_id)`: 完了 job の状態と exit code を照会
+- `query_job_status(job_id)`: squeue -> sacct の順で照会し、RunState にマッピング
+- `map_slurm_state()`: Slurm 固有の状態文字列 (PENDING, RUNNING, COMPLETED 等) を RunState に変換
+
+Slurm 状態のマッピング:
+
+| Slurm 状態 | simctl RunState |
+|-----------|-----------------|
+| PENDING | submitted |
+| RUNNING, COMPLETING, CONFIGURING, SUSPENDED | running |
+| COMPLETED | completed |
+| FAILED, NODE_FAIL, OUT_OF_MEMORY, TIMEOUT, PREEMPTED | failed |
+| CANCELLED | cancelled |
+
+---
+
+## job.sh 生成 (`jobgen/generator.py`)
+
+`generate_job_script()` は以下の構造の Slurm batch script を生成します:
+
+```bash
+#!/bin/bash
+#SBATCH --job-name=R20260327-0001
+#SBATCH --partition=gr20001a
+#SBATCH --nodes=1
+#SBATCH --ntasks=32
+#SBATCH --time=12:00:00
+#SBATCH --output=<run_dir>/work/%j.out
+#SBATCH --error=<run_dir>/work/%j.err
+
+set -euo pipefail
+
+# module load ... (任意)
+# export ENV_VAR=value (任意)
+
+cd <run_dir>/work
+
+exec srun ./solver input/params.json
+```
+
+---
+
+## Run 探索 (`core/discovery.py`)
+
+`discover_runs(runs_dir)` は `runs/` ディレクトリ以下を再帰的に走査し、`manifest.toml` を持つディレクトリを run として認識します。
+
+これにより、`runs/` 以下の任意の深さの多重ネストに対応できます:
+
+```
+runs/
+  cavity/
+    rectangular/
+      production/
+        scan_u_aspect/
+          R20260327-0001/    <-- manifest.toml があれば run として認識
+```
+
+`resolve_run(identifier, runs_dir)` は:
+1. 絶対パス -> そのまま使用
+2. 相対パス -> cwd からの解決を試行
+3. run_id 文字列 -> 全 manifest.toml を走査して検索
+
+---
+
+## エラーハンドリング
+
+`core/exceptions.py` に定義されたドメイン例外の階層:
+
+```
+SimctlError (基底)
+  +-- ProjectNotFoundError
+  +-- ProjectConfigError
+  +-- CaseNotFoundError
+  +-- CaseConfigError
+  +-- SurveyConfigError
+  +-- ManifestNotFoundError
+  +-- ManifestError
+  +-- InvalidStateTransitionError
+  +-- DuplicateRunIdError
+  +-- RunNotFoundError
+  +-- ProvenanceError
+```
+
+CLI 層で `SimctlError` をキャッチし、ユーザーフレンドリーなメッセージを表示してから `typer.Exit(code=1)` で終了します。
+
+---
+
+## テスタビリティ
+
+テスト容易性を確保するための設計:
+
+- **Slurm モック**: `CommandRunner` 型を注入することで、実際の Slurm 環境なしでテスト可能
+- **ファイルシステム**: pytest の `tmp_path` fixture を使った一時ディレクトリでの統合テスト
+- **CLI**: typer の `CliRunner` による CLI テスト
+- **Adapter / Launcher**: 抽象基底クラスの contract test で実装の正しさを検証

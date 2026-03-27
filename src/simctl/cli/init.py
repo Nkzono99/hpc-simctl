@@ -2,15 +2,24 @@
 
 from __future__ import annotations
 
+import logging
 import shutil
+import sys
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated, Any, Optional
 
 import typer
 
 from simctl.core.discovery import validate_uniqueness
 from simctl.core.exceptions import DuplicateRunIdError, ProjectConfigError
 from simctl.core.project import load_project
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
+
+logger = logging.getLogger(__name__)
 
 _SIMPROJECT_FILE = "simproject.toml"
 _SIMULATORS_FILE = "simulators.toml"
@@ -177,6 +186,66 @@ def doctor(
     else:
         typer.echo("[FAIL] sbatch not found in PATH")
         failures.append("sbatch")
+
+    # Check simulator adapters from simulators.toml
+    simulators_path = project_dir / _SIMULATORS_FILE
+    if simulators_path.exists():
+        try:
+            with open(simulators_path, "rb") as f:
+                sim_data = tomllib.load(f)
+            simulators: dict[str, Any] = sim_data.get("simulators", {})
+            if simulators:
+                from simctl.adapters.registry import AdapterRegistry
+
+                registry = AdapterRegistry()
+                for sim_name, sim_cfg in simulators.items():
+                    if not isinstance(sim_cfg, dict):
+                        continue
+                    adapter_name = sim_cfg.get("adapter", "")
+                    if not adapter_name:
+                        continue
+                    try:
+                        registry.load_from_config(
+                            {"simulators": {sim_name: sim_cfg}}
+                        )
+                        typer.echo(
+                            f"[PASS] Simulator adapter '{adapter_name}' "
+                            f"for '{sim_name}' is importable"
+                        )
+                    except Exception as e:
+                        typer.echo(
+                            f"[FAIL] Simulator adapter '{adapter_name}' "
+                            f"for '{sim_name}': {e}"
+                        )
+                        failures.append(f"adapter:{adapter_name}")
+        except tomllib.TOMLDecodeError as e:
+            typer.echo(f"[FAIL] simulators.toml parse error: {e}")
+            failures.append(_SIMULATORS_FILE)
+
+    # Check launcher configs from launchers.toml
+    launchers_path = project_dir / _LAUNCHERS_FILE
+    if launchers_path.exists():
+        try:
+            with open(launchers_path, "rb") as f:
+                launcher_data = tomllib.load(f)
+            launchers: dict[str, Any] = launcher_data.get("launchers", {})
+            if launchers:
+                from simctl.launchers.base import Launcher, LauncherConfigError
+
+                for lname, lcfg in launchers.items():
+                    if not isinstance(lcfg, dict):
+                        continue
+                    try:
+                        Launcher.from_config(lname, lcfg)
+                        typer.echo(
+                            f"[PASS] Launcher profile '{lname}' is valid"
+                        )
+                    except LauncherConfigError as e:
+                        typer.echo(f"[FAIL] Launcher profile '{lname}': {e}")
+                        failures.append(f"launcher:{lname}")
+        except tomllib.TOMLDecodeError as e:
+            typer.echo(f"[FAIL] launchers.toml parse error: {e}")
+            failures.append(_LAUNCHERS_FILE)
 
     # Check run_id uniqueness
     runs_dir = project_dir / "runs"
