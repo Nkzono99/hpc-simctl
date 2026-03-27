@@ -2,6 +2,11 @@
 
 Generates Slurm batch scripts from run configuration, launcher profile,
 and simulator adapter output.
+
+Supports two resource specification modes:
+
+- **Standard mode**: ``#SBATCH --nodes`` / ``#SBATCH --ntasks``
+- **RSC mode**: ``#SBATCH --rsc p=N:t=T:c=C`` (custom Slurm environments)
 """
 
 from __future__ import annotations
@@ -59,6 +64,24 @@ def generate_job_script(
     """
     _validate_job_config(job_config)
 
+    # Merge modules from job_config and explicit parameter
+    all_modules = list(modules or [])
+    config_modules = job_config.get("modules", [])
+    if isinstance(config_modules, list):
+        for m in config_modules:
+            if m not in all_modules:
+                all_modules.append(m)
+
+    # Merge setup/post commands from job_config and explicit parameter
+    all_setup = list(setup_commands or [])
+    config_pre = job_config.get("pre_commands", job_config.get("setup_commands", []))
+    if isinstance(config_pre, list):
+        all_setup.extend(config_pre)
+
+    all_post = list(job_config.get("post_commands", []))
+    if post_commands:
+        all_post.extend(post_commands)
+
     content = _render_script(
         job_config=job_config,
         exec_line=exec_line,
@@ -66,9 +89,9 @@ def generate_job_script(
         run_id=run_id,
         extra_sbatch=extra_sbatch or [],
         extra_env=extra_env or {},
-        modules=modules or [],
-        setup_commands=setup_commands or [],
-        post_commands=post_commands or [],
+        modules=all_modules,
+        setup_commands=all_setup,
+        post_commands=all_post,
         resource_style=resource_style,
         stdout_format=stdout_format,
         stderr_format=stderr_format,
@@ -114,7 +137,9 @@ def _validate_job_config(job_config: dict[str, Any]) -> None:
     """
     missing = [k for k in _REQUIRED_JOB_KEYS if k not in job_config]
     if missing:
-        raise JobScriptError(f"Missing required job config keys: {', '.join(missing)}")
+        raise JobScriptError(
+            f"Missing required job config keys: {', '.join(missing)}"
+        )
 
 
 def _render_script(
@@ -177,20 +202,17 @@ def _render_script(
 
     lines.append("")
 
-    # --- Preamble ---
-    lines.append("set -euo pipefail")
-    lines.append("")
-
-    # Module loads
+    # --- Module loads ---
     if modules:
         for mod in modules:
             lines.append(f"module load {mod}")
+        lines.append("module list")
         lines.append("")
 
-    # Environment variables
+    # --- Environment variables ---
     if extra_env:
         for key, value in sorted(extra_env.items()):
-            lines.append(f"export {key}={value!r}")
+            lines.append(f"export {key}={value}")
         lines.append("")
 
     # --- Change to work directory ---

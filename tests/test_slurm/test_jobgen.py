@@ -24,7 +24,7 @@ def run_dir(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def job_config() -> dict[str, object]:
-    """Return a valid minimal job config."""
+    """Return a valid minimal standard-mode job config."""
     return {
         "partition": "debug",
         "nodes": 1,
@@ -33,13 +33,25 @@ def job_config() -> dict[str, object]:
     }
 
 
+@pytest.fixture()
+def rsc_job_config() -> dict[str, object]:
+    """Return a valid rsc-mode job config."""
+    return {
+        "partition": "gr10451a",
+        "walltime": "120:00:00",
+        "ntasks": 800,
+        "threads_per_process": 1,
+        "cores_per_thread": 1,
+    }
+
+
 # ---------------------------------------------------------------------------
-# generate_job_script
+# Standard mode tests
 # ---------------------------------------------------------------------------
 
 
 class TestGenerateJobScript:
-    """Tests for generate_job_script."""
+    """Tests for generate_job_script in standard mode."""
 
     def test_basic_generation(
         self, run_dir: Path, job_config: dict[str, object]
@@ -103,7 +115,9 @@ class TestGenerateJobScript:
         assert "#SBATCH --mem=8G" in content
         assert "#SBATCH --exclusive" in content
 
-    def test_module_loads(self, run_dir: Path, job_config: dict[str, object]) -> None:
+    def test_module_loads(
+        self, run_dir: Path, job_config: dict[str, object]
+    ) -> None:
         path = generate_job_script(
             run_dir,
             job_config,
@@ -113,8 +127,11 @@ class TestGenerateJobScript:
         content = path.read_text()
         assert "module load gcc/12.0" in content
         assert "module load openmpi/4.1" in content
+        assert "module list" in content
 
-    def test_extra_env_vars(self, run_dir: Path, job_config: dict[str, object]) -> None:
+    def test_extra_env_vars(
+        self, run_dir: Path, job_config: dict[str, object]
+    ) -> None:
         path = generate_job_script(
             run_dir,
             job_config,
@@ -122,21 +139,18 @@ class TestGenerateJobScript:
             extra_env={"OMP_NUM_THREADS": "4"},
         )
         content = path.read_text()
-        assert "export OMP_NUM_THREADS='4'" in content
+        assert "export OMP_NUM_THREADS=4" in content
 
-    def test_cd_to_work_dir(self, run_dir: Path, job_config: dict[str, object]) -> None:
-        path = generate_job_script(run_dir, job_config, "srun ./solver")
-        content = path.read_text()
-        assert f"cd {run_dir / 'work'}" in content
-
-    def test_set_euo_pipefail(
+    def test_cd_to_work_dir(
         self, run_dir: Path, job_config: dict[str, object]
     ) -> None:
         path = generate_job_script(run_dir, job_config, "srun ./solver")
         content = path.read_text()
-        assert "set -euo pipefail" in content
+        assert f"cd {run_dir / 'work'}" in content
 
-    def test_executable_bit(self, run_dir: Path, job_config: dict[str, object]) -> None:
+    def test_executable_bit(
+        self, run_dir: Path, job_config: dict[str, object]
+    ) -> None:
         path = generate_job_script(run_dir, job_config, "srun ./solver")
         assert path.stat().st_mode & 0o100  # owner execute bit
 
@@ -161,7 +175,6 @@ class TestGenerateJobScript:
     def test_creates_submit_dir(
         self, tmp_path: Path, job_config: dict[str, object]
     ) -> None:
-        """submit/ directory should be created even if it doesn't exist."""
         rd = tmp_path / "new_run"
         rd.mkdir()
         path = generate_job_script(rd, job_config, "srun ./solver")
@@ -227,6 +240,202 @@ class TestGenerateJobScript:
         assert "#SBATCH --ntasks" not in content
         assert "#SBATCH -o stdout.%J.log" in content
         assert "#SBATCH -e stderr.%J.log" in content
+
+
+# ---------------------------------------------------------------------------
+# RSC mode tests
+# ---------------------------------------------------------------------------
+
+
+class TestRscModeJobScript:
+    """Tests for generate_job_script in rsc mode."""
+
+    def test_rsc_directive(
+        self, run_dir: Path, rsc_job_config: dict[str, object]
+    ) -> None:
+        path = generate_job_script(
+            run_dir, rsc_job_config, "srun ./mpiemses3D plasma.inp",
+            resource_style="rsc",
+        )
+        content = path.read_text()
+        assert "#SBATCH --rsc p=800:t=1:c=1" in content
+        assert "--nodes" not in content
+
+    def test_rsc_partition_and_walltime(
+        self, run_dir: Path, rsc_job_config: dict[str, object]
+    ) -> None:
+        path = generate_job_script(
+            run_dir, rsc_job_config, "srun ./solver",
+            resource_style="rsc",
+        )
+        content = path.read_text()
+        assert "#SBATCH -p gr10451a" in content
+        assert "#SBATCH -t 120:00:00" in content
+
+    def test_rsc_with_threads_and_cores(self, run_dir: Path) -> None:
+        config: dict[str, object] = {
+            "partition": "gr10451a",
+            "ntasks": 400,
+            "threads_per_process": 2,
+            "cores_per_thread": 2,
+            "walltime": "24:00:00",
+        }
+        path = generate_job_script(
+            run_dir, config, "srun ./solver",
+            resource_style="rsc",
+        )
+        content = path.read_text()
+        assert "#SBATCH --rsc p=400:t=2:c=2" in content
+
+    def test_rsc_cores_gt_threads(self, run_dir: Path) -> None:
+        """c > t for more memory per process."""
+        config: dict[str, object] = {
+            "partition": "gr10451a",
+            "ntasks": 200,
+            "threads_per_process": 1,
+            "cores_per_thread": 4,
+            "walltime": "48:00:00",
+        }
+        path = generate_job_script(
+            run_dir, config, "srun ./solver",
+            resource_style="rsc",
+        )
+        content = path.read_text()
+        assert "#SBATCH --rsc p=200:t=1:c=4" in content
+
+    def test_rsc_with_modules(
+        self, run_dir: Path, rsc_job_config: dict[str, object]
+    ) -> None:
+        path = generate_job_script(
+            run_dir,
+            rsc_job_config,
+            "srun ./solver",
+            modules=["intel/2023.2", "intelmpi/2023.2"],
+            resource_style="rsc",
+        )
+        content = path.read_text()
+        assert "module load intel/2023.2" in content
+        assert "module load intelmpi/2023.2" in content
+        assert "module list" in content
+
+
+# ---------------------------------------------------------------------------
+# Pre/post commands tests
+# ---------------------------------------------------------------------------
+
+
+class TestPrePostCommands:
+    """Tests for setup_commands and post_commands."""
+
+    def test_setup_commands(
+        self, run_dir: Path, job_config: dict[str, object]
+    ) -> None:
+        path = generate_job_script(
+            run_dir,
+            job_config,
+            "srun ./solver input.toml",
+            setup_commands=["echo 'starting'", "rm -f *.h5"],
+        )
+        content = path.read_text()
+        assert "echo 'starting'" in content
+        assert "rm -f *.h5" in content
+        # Setup commands should appear before exec
+        setup_idx = content.index("rm -f")
+        exec_idx = content.index("srun ./solver")
+        assert setup_idx < exec_idx
+
+    def test_post_commands(
+        self, run_dir: Path, job_config: dict[str, object]
+    ) -> None:
+        path = generate_job_script(
+            run_dir,
+            job_config,
+            "srun ./solver input.toml",
+            post_commands=["mypython plot.py ./", "mypython plot_hole.py ./"],
+        )
+        content = path.read_text()
+        assert "mypython plot.py ./" in content
+        assert "mypython plot_hole.py ./" in content
+        # exec should not be used when post_commands exist
+        assert "exec srun" not in content
+        # Main command still present
+        assert "srun ./solver input.toml" in content
+
+    def test_modules_from_job_config(self, run_dir: Path) -> None:
+        config: dict[str, object] = {
+            "partition": "debug",
+            "nodes": 1,
+            "ntasks": 4,
+            "walltime": "00:10:00",
+            "modules": ["intel/2023.2", "hdf5/1.12"],
+        }
+        path = generate_job_script(run_dir, config, "srun ./solver")
+        content = path.read_text()
+        assert "module load intel/2023.2" in content
+        assert "module load hdf5/1.12" in content
+
+    def test_pre_commands_from_job_config(self, run_dir: Path) -> None:
+        config: dict[str, object] = {
+            "partition": "debug",
+            "nodes": 1,
+            "ntasks": 4,
+            "walltime": "00:10:00",
+            "pre_commands": [
+                'if [ -f ./plasma.preinp ]; then\n    preinp\nfi',
+            ],
+        }
+        path = generate_job_script(run_dir, config, "srun ./solver")
+        content = path.read_text()
+        assert "preinp" in content
+
+    def test_full_emses_style(self, run_dir: Path) -> None:
+        """Test generating a script similar to the user's real EMSES setup."""
+        config: dict[str, object] = {
+            "partition": "gr10451a",
+            "walltime": "120:00:00",
+            "ntasks": 800,
+            "threads_per_process": 1,
+            "cores_per_thread": 1,
+            "modules": [
+                "intel/2023.2",
+                "intelmpi/2023.2",
+                "hdf5/1.12.2_intel-2023.2-impi",
+                "fftw/3.3.10_intel-2022.3-impi",
+            ],
+            "pre_commands": [
+                'if [ -f ./plasma.preinp ]; then\n    preinp\nfi',
+                "export EMSES_DEBUG=no",
+                "rm -f *_0000.h5",
+            ],
+            "post_commands": [
+                "mypython plot.py ./",
+                "mypython plot_hole.py ./",
+            ],
+        }
+        path = generate_job_script(
+            run_dir,
+            config,
+            "srun ./mpiemses3D plasma.inp",
+            run_id="R20260327-0001",
+            resource_style="rsc",
+        )
+        content = path.read_text()
+        # SBATCH directives
+        assert "#SBATCH --rsc p=800:t=1:c=1" in content
+        assert "#SBATCH -p gr10451a" in content
+        assert "#SBATCH -t 120:00:00" in content
+        # Modules
+        assert "module load intel/2023.2" in content
+        assert "module list" in content
+        # Pre-commands (merged from job_config into setup_commands)
+        assert "preinp" in content
+        assert "EMSES_DEBUG=no" in content
+        assert "rm -f *_0000.h5" in content
+        # Main command (no exec because post_commands exist)
+        assert "srun ./mpiemses3D plasma.inp" in content
+        # Post-commands
+        assert "mypython plot.py ./" in content
+        assert "mypython plot_hole.py ./" in content
 
 
 # ---------------------------------------------------------------------------

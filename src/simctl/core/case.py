@@ -40,17 +40,36 @@ class ClassificationData:
 class JobData:
     """Slurm job configuration.
 
+    Supports both standard Slurm (nodes/ntasks) and custom rsc mode
+    (``#SBATCH --rsc p=N:t=T:c=C``).  When ``rsc`` is True, the
+    ``processes``, ``threads``, and ``cores`` fields define the resource
+    allocation instead of ``nodes``/``ntasks``.
+
     Attributes:
         partition: Slurm partition name.
-        nodes: Number of nodes.
-        ntasks: Number of MPI tasks.
-        walltime: Wall-clock time limit string (HH:MM:SS).
+        nodes: Number of nodes (standard mode).
+        ntasks: Number of MPI tasks (standard mode).
+        walltime: Wall-clock time limit string (HH:MM:SS or H:MM:SS).
+        rsc: If True, use --rsc directive instead of --nodes/--ntasks.
+        processes: Number of MPI processes (rsc mode, ``p``).
+        threads: Threads per process (rsc mode, ``t``). Must be <= cores.
+        cores: Cores per process (rsc mode, ``c``). Must be >= threads.
+        modules: Module names to load before execution.
+        pre_commands: Shell commands to run before the main execution.
+        post_commands: Shell commands to run after the main execution.
     """
 
     partition: str = ""
     nodes: int = 1
     ntasks: int = 1
     walltime: str = "01:00:00"
+    rsc: bool = False
+    processes: int = 1
+    threads: int = 1
+    cores: int = 1
+    modules: list[str] = field(default_factory=list)
+    pre_commands: list[str] = field(default_factory=list)
+    post_commands: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -105,17 +124,34 @@ def _parse_classification(data: dict[str, Any]) -> ClassificationData:
 def _parse_job(data: dict[str, Any]) -> JobData:
     """Parse a [job] section from TOML data.
 
+    Supports both standard mode (nodes/ntasks) and rsc mode
+    (processes/threads/cores).
+
     Args:
         data: Raw job dictionary.
 
     Returns:
         JobData instance.
     """
+    modules_raw = data.get("modules", [])
+    modules = list(modules_raw) if isinstance(modules_raw, list) else []
+    pre_raw = data.get("pre_commands", [])
+    pre_commands = list(pre_raw) if isinstance(pre_raw, list) else []
+    post_raw = data.get("post_commands", [])
+    post_commands = list(post_raw) if isinstance(post_raw, list) else []
+
     return JobData(
         partition=str(data.get("partition", "")),
         nodes=int(data.get("nodes", 1)),
         ntasks=int(data.get("ntasks", 1)),
         walltime=str(data.get("walltime", "01:00:00")),
+        rsc=bool(data.get("rsc", False)),
+        processes=int(data.get("processes", 1)),
+        threads=int(data.get("threads", 1)),
+        cores=int(data.get("cores", 1)),
+        modules=[str(m) for m in modules],
+        pre_commands=[str(c) for c in pre_commands],
+        post_commands=[str(c) for c in post_commands],
     )
 
 

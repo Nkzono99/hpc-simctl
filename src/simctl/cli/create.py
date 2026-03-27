@@ -128,21 +128,94 @@ def _get_simulator_config(
     return dict(project.simulators.get(simulator_name, {}))
 
 
-def _build_job_config(case_job: dict[str, Any]) -> dict[str, Any]:
-    """Build a job config dict from case/survey job data.
+def _build_job_config(job: Any) -> dict[str, Any]:
+    """Build a job config dict from a JobData instance or raw dict.
+
+    Supports both standard mode (nodes/ntasks) and rsc mode
+    (processes/threads/cores).
 
     Args:
-        case_job: Job section dict (partition, nodes, ntasks, walltime).
+        job: JobData instance or raw job dict.
 
     Returns:
         Job configuration dictionary for job script generation.
     """
-    return {
-        "partition": case_job.get("partition", ""),
-        "nodes": case_job.get("nodes", 1),
-        "ntasks": case_job.get("ntasks", 1),
-        "walltime": case_job.get("walltime", "01:00:00"),
+    from simctl.core.case import JobData
+
+    if isinstance(job, JobData):
+        config: dict[str, Any] = {
+            "partition": job.partition,
+            "walltime": job.walltime,
+        }
+        if job.rsc:
+            config["rsc"] = True
+            config["processes"] = job.processes
+            config["threads"] = job.threads
+            config["cores"] = job.cores
+        else:
+            config["nodes"] = job.nodes
+            config["ntasks"] = job.ntasks
+        if job.modules:
+            config["modules"] = list(job.modules)
+        if job.pre_commands:
+            config["pre_commands"] = list(job.pre_commands)
+        if job.post_commands:
+            config["post_commands"] = list(job.post_commands)
+        return config
+
+    # Fallback for raw dict
+    result: dict[str, Any] = {
+        "partition": job.get("partition", ""),
+        "walltime": job.get("walltime", "01:00:00"),
     }
+    if job.get("rsc"):
+        result["rsc"] = True
+        result["processes"] = job.get("processes", 1)
+        result["threads"] = job.get("threads", 1)
+        result["cores"] = job.get("cores", 1)
+    else:
+        result["nodes"] = job.get("nodes", 1)
+        result["ntasks"] = job.get("ntasks", 1)
+    for key in ("modules", "pre_commands", "post_commands"):
+        if key in job:
+            result[key] = list(job[key])
+    return result
+
+
+def _build_manifest_job(job: Any) -> dict[str, Any]:
+    """Build the [job] section for manifest.toml from JobData.
+
+    Args:
+        job: JobData instance.
+
+    Returns:
+        Job section dict for the manifest.
+    """
+    from simctl.core.case import JobData
+
+    if not isinstance(job, JobData):
+        return {
+            "scheduler": "slurm",
+            "job_id": "",
+            "submitted_at": "",
+        }
+
+    result: dict[str, Any] = {
+        "scheduler": "slurm",
+        "job_id": "",
+        "partition": job.partition,
+        "walltime": job.walltime,
+        "submitted_at": "",
+    }
+    if job.rsc:
+        result["rsc"] = True
+        result["processes"] = job.processes
+        result["threads"] = job.threads
+        result["cores"] = job.cores
+    else:
+        result["nodes"] = job.nodes
+        result["ntasks"] = job.ntasks
+    return result
 
 
 def _build_manifest(
@@ -201,15 +274,7 @@ def _build_manifest(
             "name": case_data.launcher,
         },
         simulator_source=provenance,
-        job={
-            "scheduler": "slurm",
-            "job_id": "",
-            "partition": case_data.job.partition,
-            "nodes": case_data.job.nodes,
-            "ntasks": case_data.job.ntasks,
-            "walltime": case_data.job.walltime,
-            "submitted_at": "",
-        },
+        job=_build_manifest_job(case_data.job),
         variation={
             "changed_keys": list(variation_keys) if variation_keys else [],
         },
@@ -300,18 +365,12 @@ def _generate_run(
     program_cmd = adapter.build_program_command(runtime_info, run_info.run_dir)
 
     # 4. Build launcher exec line and generate job.sh
+    ntasks = case_data.job.processes if case_data.job.rsc else case_data.job.ntasks
     exec_line = launcher.build_exec_line(
         program_cmd,
-        case_data.job.ntasks,
+        ntasks,
     )
-    job_config = _build_job_config(
-        {
-            "partition": case_data.job.partition,
-            "nodes": case_data.job.nodes,
-            "ntasks": case_data.job.ntasks,
-            "walltime": case_data.job.walltime,
-        }
-    )
+    job_config = _build_job_config(case_data.job)
     generate_job_script(
         run_info.run_dir,
         job_config,
