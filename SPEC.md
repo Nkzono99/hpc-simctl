@@ -1,0 +1,1175 @@
+# HPCシミュレーション実行管理ツール 仕様書 v1.0
+
+## 1. 目的
+
+本ツールは、HPC 環境において `sbatch` を用いて投入する各種シミュレーションについて、以下を一貫して管理するための実行管理基盤を提供する。
+
+* run ディレクトリ生成
+* パラメータサーベイ展開
+* Slurm job script 生成
+* job 投入
+* 状態追跡
+* run 単位の解析補助
+* 実験条件とコード provenance の記録
+* 多数 run の分類・整理
+
+本ツールは **シミュレーションコード本体ではなく、run 管理と実験運用のためのツール** である。
+
+---
+
+## 2. 対象運用
+
+本仕様は、以下のような運用を主対象とする。
+
+* `sbatch` により HPC 上でジョブ投入する
+* 複数種類のシミュレータを扱う
+* シミュレータごとにパラメータファイル形式や命名規則が異なる
+* MPI 並列実行を行う
+* parameter survey により多数の run が生成される
+* `runs/` 以下を階層的に整理したい
+* 実際の解析作業は run ディレクトリ内で行いたい
+* 大容量出力は run の近くに置きたいが Git では管理したくない
+* シミュレーションコードは package install とローカル build の両方を使いたい
+* Agent/AI にも扱いやすい構造にしたい
+
+---
+
+## 3. 基本設計方針
+
+### 3.1 中心思想
+
+本ツールは、**run ディレクトリを日常運用の主単位** とする。
+
+利用者は通常、`runs/.../Rxxxx/` に入って以下を行う。
+
+* 入力確認
+* job 投入
+* ログ確認
+* 出力確認
+* 解析
+* 図作成
+* 状態確認
+
+### 3.2 不変と可変の分離
+
+* run の同一性は **`run_id`** によって表す
+* run の所属パスや階層は **分類・整理のための可変情報** とする
+
+### 3.3 共通化の範囲
+
+共通化するのは以下に限定する。
+
+* run の識別
+* manifest
+* job 管理
+* provenance
+* survey 展開
+* 状態遷移
+* 解析補助の枠組み
+
+一方で、以下はシミュレータごとに異なってよい。
+
+* 入力ファイル形式
+* 入力ファイル名
+* 実行コマンド本体
+* 出力検出方法
+* summary 抽出方法
+
+### 3.4 大容量出力の扱い
+
+v1 では、大容量出力は **run ディレクトリ配下に置いてよい**。
+ただし Git 管理対象には含めず、`.gitignore` により除外することを標準とする。
+
+### 3.5 MPI 実行方針
+
+MPI 実行は `job.sh` 内で **`srun` / `mpirun` / `mpiexec` を直接実行** する。
+Python ツールは MPI rank ごとのラッパにはならない。
+
+---
+
+## 4. 非目標
+
+v1 では以下を対象外とする。
+
+* Web UI
+* リアルタイム監視ダッシュボード
+* DB 必須設計
+* 複数 scheduler の完全汎用化
+* すべての simulator の入力仕様の共通 schema 化
+* 高度な workflow engine 化
+
+---
+
+## 5. 用語定義
+
+### Project
+
+本ツールで管理するシミュレーション管理用 repository 全体。
+
+### Case
+
+run や survey を生成するための再利用可能な基底定義。
+
+### Survey
+
+複数 run をまとめて生成・整理するための親単位。
+通常は parameter sweep に対応する。
+
+### Run
+
+1回の実行単位。
+1つの `run_id` を持ち、入力・job script・状態・解析結果を保持する。
+
+### Simulator
+
+個別のシミュレータ本体。
+
+### Simulator Adapter
+
+シミュレータ固有仕様を吸収するための拡張コンポーネント。
+
+### Launcher Profile
+
+HPC 上での起動方式を定義する設定単位。
+`srun` / `mpirun` / `mpiexec` などを扱う。
+
+### Manifest
+
+各 run の台帳ファイル。
+run の識別、状態、由来、入力、コード provenance、job 情報を記録する。
+
+---
+
+## 6. ディレクトリ構造
+
+## 6.1 全体構造
+
+```text
+sim-manager/
+  simproject.toml
+  simulators.toml
+  launchers.toml
+  .gitignore
+
+  cases/
+    cavity_base/
+      case.toml
+      notes.md
+    layer_base/
+      case.toml
+
+  runs/
+    cavity/
+      rectangular/
+        u_aspect_scan_20260327/
+          survey.toml
+          notes.md
+          summary/
+            survey_summary.csv
+            figures/
+          R20260327-0001/
+            manifest.toml
+            input/
+            submit/
+            work/
+            analysis/
+            status/
+          R20260327-0002/
+            ...
+      particle_layer/
+        fcc_seed_scan_20260328/
+          survey.toml
+          R20260328-0001/
+            ...
+```
+
+---
+
+## 6.2 構造の考え方
+
+### `cases/`
+
+再利用可能な雛形定義を置く場所。
+通常ここから直接実行しない。
+
+### `runs/`
+
+日常運用の主場所。
+利用者は主にここを触る。
+
+### `runs/.../<survey_dir>/`
+
+survey の親ディレクトリ。
+同一テーマ・同一 parameter sweep の run をまとめる。
+
+### `runs/.../<survey_dir>/R.../`
+
+実際の run ディレクトリ。
+実行、確認、解析の基本単位。
+
+---
+
+## 6.3 多重ネスト
+
+`runs/` 以下は **多重ネストを正式に許可** する。
+
+例:
+
+```text
+runs/
+  cavity/
+    rectangular/
+      production/
+        scan_u_aspect/
+          R20260327-0001/
+```
+
+ただし、run の一意識別には path ではなく `run_id` を使う。
+
+---
+
+## 7. run の識別
+
+## 7.1 run_id
+
+run の主キー。
+永続・不変とする。
+
+形式例:
+
+```text
+RYYYYMMDD-NNNN
+```
+
+例:
+
+```text
+R20260327-0001
+R20260327-0124
+```
+
+### 要件
+
+* Project 内で一意
+* path 変更の影響を受けない
+* 人間が扱える程度に短い
+
+---
+
+## 7.2 survey_id
+
+survey の識別子。
+必須ではないが、`survey.toml` 内で持つことを推奨する。
+
+形式例:
+
+```text
+S20260327-cavity-u-a
+```
+
+---
+
+## 7.3 display_name
+
+人間向けの短い表示名。
+suffix 的な役割を持つ。
+
+例:
+
+```text
+u400_a4_s03
+phi30_seed2
+periodic_fix2
+```
+
+これは補助情報であり、主キーではない。
+
+---
+
+## 8. run ディレクトリ構成
+
+各 run ディレクトリは次の構成を標準とする。
+
+```text
+R20260327-0001/
+  manifest.toml
+  input/
+  submit/
+  work/
+  analysis/
+  status/
+```
+
+---
+
+## 8.1 `manifest.toml`
+
+run の台帳。
+最重要ファイル。
+
+---
+
+## 8.2 `input/`
+
+実行に使用する入力ファイルを置く。
+ファイル名・形式は simulator ごとに自由。
+
+例:
+
+* `input.toml`
+* `plasma.nml`
+* `mesh.inp`
+
+---
+
+## 8.3 `submit/`
+
+job script を置く。
+
+例:
+
+* `job.sh`
+
+必要なら submit 補助ファイルもここに置ける。
+
+---
+
+## 8.4 `work/`
+
+実行時に生成されるファイルを置く。
+原則として run の実作業空間。
+
+例:
+
+* stdout/stderr
+* 出力ファイル
+* restart
+* tmp
+* checkpoint
+* bin
+
+---
+
+## 8.5 `analysis/`
+
+run 単位の解析成果を置く。
+
+例:
+
+* `summary.json`
+* `figures/`
+* `notebooks/`
+* `notes.md`
+
+---
+
+## 8.6 `status/`
+
+状態追跡情報を置く。
+
+例:
+
+* `state.json`
+* `sacct.txt`
+* `submit.log`
+
+---
+
+## 9. Git 管理方針
+
+## 9.1 標準方針
+
+大容量出力は **run 配下に置いてよい**。
+ただし Git 管理対象には含めず、`.gitignore` によって除外する。
+
+---
+
+## 9.2 管理対象
+
+通常は以下を Git 管理対象とする。
+
+* `simproject.toml`
+* `simulators.toml`
+* `launchers.toml`
+* `cases/**`
+* `runs/**/survey.toml`
+* `runs/**/manifest.toml`
+* `runs/**/input/**`
+* `runs/**/submit/**`
+* `runs/**/status/**`
+* `runs/**/analysis/summary.json`
+* 軽量な図やノート
+* Agent 用文書
+
+---
+
+## 9.3 非管理対象
+
+通常は以下を Git 管理しない。
+
+* `runs/**/work/outputs/**`
+* `runs/**/work/restart/**`
+* `runs/**/work/tmp/**`
+* 巨大ログ
+* 解析 cache
+* notebook checkpoint
+
+---
+
+## 9.4 `.gitignore` 例
+
+```gitignore
+# heavy run outputs
+runs/**/work/outputs/
+runs/**/work/restart/
+runs/**/work/tmp/
+
+# logs
+runs/**/work/*.out
+runs/**/work/*.err
+runs/**/work/*.log
+
+# analysis cache
+runs/**/analysis/cache/
+runs/**/analysis/.ipynb_checkpoints/
+```
+
+---
+
+## 9.5 symlink 方針
+
+v1 では symlink は **必須ではない**。
+必要になった場合のみ任意で利用可能とする。
+
+想定用途:
+
+* `work/outputs` の実体だけ別ストレージへ逃がす
+* archive 移動後も run 側の見た目を保つ
+
+ただし標準運用は `.gitignore` による in-place 管理とする。
+
+---
+
+## 10. Case 仕様
+
+## 10.1 役割
+
+Case は run や survey の生成元となる基底定義である。
+Case 自体は通常、直接実行しない。
+
+---
+
+## 10.2 `case.toml` 例
+
+```toml
+[case]
+name = "cavity_base"
+simulator = "lunar_pic"
+launcher = "slurm_srun"
+description = "baseline cavity model"
+
+[classification]
+model = "cavity"
+submodel = "rectangular"
+tags = ["baseline"]
+
+[job]
+partition = "gr20001a"
+nodes = 1
+ntasks = 32
+walltime = "12:00:00"
+
+[params]
+nx = 256
+ny = 256
+nz = 512
+dt = 1.0e-8
+u = 4.0e5
+aspect = 4.0
+seed = 1
+```
+
+---
+
+## 10.3 `params` の意味
+
+`[params]` の意味は simulator ごとに異なってよい。
+解釈は Simulator Adapter が行う。
+
+---
+
+## 11. Survey 仕様
+
+## 11.1 役割
+
+Survey は parameter sweep などに対応する親単位である。
+通常は `runs/` 配下の親ディレクトリに `survey.toml` を置く。
+
+---
+
+## 11.2 `survey.toml` 例
+
+```toml
+[survey]
+id = "S20260327-cavity-u-a"
+name = "u-aspect scan"
+base_case = "cavity_base"
+simulator = "lunar_pic"
+launcher = "slurm_srun"
+
+[classification]
+model = "cavity"
+submodel = "rectangular"
+tags = ["scan", "paper1"]
+
+[axes]
+u = [2.0e5, 4.0e5, 8.0e5]
+aspect = [2.0, 4.0, 8.0]
+seed = [1, 2, 3]
+
+[naming]
+display_name = "u{u}_a{aspect}_s{seed}"
+
+[job]
+partition = "gr20001a"
+nodes = 1
+ntasks = 32
+walltime = "12:00:00"
+```
+
+---
+
+## 11.3 run 生成位置
+
+Survey から生成される run は、**その `survey.toml` のあるディレクトリ直下** に配置する。
+
+---
+
+## 11.4 survey summary
+
+survey 単位の summary や図は survey 親ディレクトリに置いてよい。
+
+例:
+
+```text
+u_aspect_scan_20260327/
+  survey.toml
+  summary/
+    survey_summary.csv
+    figures/
+```
+
+---
+
+## 12. Manifest 仕様
+
+## 12.1 役割
+
+Manifest は各 run の正本情報を保持する台帳である。
+
+---
+
+## 12.2 `manifest.toml` 例
+
+```toml
+[run]
+id = "R20260327-0001"
+display_name = "u400_a4_s03"
+status = "created"
+created_at = "2026-03-27T13:00:00+09:00"
+
+[path]
+run_dir = "runs/cavity/rectangular/u_aspect_scan_20260327/R20260327-0001"
+
+[origin]
+case = "cavity_base"
+survey = "S20260327-cavity-u-a"
+parent_run = ""
+
+[classification]
+model = "cavity"
+submodel = "rectangular"
+tags = ["scan", "paper1", "production"]
+
+[simulator]
+name = "lunar_pic"
+adapter = "lunar_pic_adapter"
+resolver_mode = "local_source"
+
+[launcher]
+name = "slurm_srun"
+
+[simulator_source]
+source_repo = "/home/user/work/lunar-pic"
+git_commit = "abc1234"
+git_dirty = false
+build_command = "make -j"
+executable = "/home/user/work/lunar-pic/build/solver"
+exe_hash = "sha256:..."
+package_version = ""
+
+[job]
+scheduler = "slurm"
+job_id = ""
+partition = "gr20001a"
+nodes = 1
+ntasks = 32
+walltime = "12:00:00"
+submitted_at = ""
+
+[variation]
+changed_keys = ["u", "aspect", "seed"]
+
+[params_snapshot]
+u = 4.0e5
+aspect = 4.0
+seed = 3
+
+[files]
+input_dir = "input"
+submit_dir = "submit"
+work_dir = "work"
+analysis_dir = "analysis"
+status_dir = "status"
+```
+
+---
+
+## 12.3 必須記録項目
+
+最低限、以下を保持する。
+
+* `run.id`
+* `run.status`
+* `origin.case`
+* simulator 名
+* launcher 名
+* code provenance
+* job 情報
+* params snapshot
+
+---
+
+## 13. 状態遷移
+
+run の状態は以下を持つ。
+
+* `created`
+* `submitted`
+* `running`
+* `completed`
+* `failed`
+* `cancelled`
+* `archived`
+* `purged`
+
+---
+
+## 13.1 状態の意味
+
+### `created`
+
+run ディレクトリ・manifest・入力・job script が生成済み
+
+### `submitted`
+
+`sbatch` 済みで job_id を取得済み
+
+### `running`
+
+実行中
+
+### `completed`
+
+正常終了
+
+### `failed`
+
+異常終了または失敗判定
+
+### `cancelled`
+
+途中停止
+
+### `archived`
+
+必要に応じて出力整理済み
+
+### `purged`
+
+不要 work を削除済み
+
+---
+
+## 13.2 基本遷移
+
+```text
+created -> submitted -> running -> completed
+created/submitted/running -> failed
+submitted/running -> cancelled
+completed -> archived -> purged
+```
+
+---
+
+## 14. Simulator Adapter 仕様
+
+## 14.1 役割
+
+Simulator Adapter は simulator 固有仕様を吸収する。
+
+責務は以下とする。
+
+* 入力ファイル生成
+* 入力ファイル名決定
+* 実行コマンド本体生成
+* 出力検出
+* 成功判定
+* summary 抽出
+* provenance 取得
+
+---
+
+## 14.2 抽象インタフェース
+
+概念仕様:
+
+```python
+class SimulatorAdapter:
+    name: str
+
+    def render_inputs(case_data, run_dir) -> list[str]:
+        ...
+
+    def resolve_runtime(simulator_config, resolver_mode) -> dict:
+        ...
+
+    def build_program_command(runtime_info, run_dir) -> list[str]:
+        ...
+
+    def detect_outputs(run_dir) -> dict:
+        ...
+
+    def detect_status(run_dir) -> str:
+        ...
+
+    def summarize(run_dir) -> dict:
+        ...
+
+    def collect_provenance(runtime_info) -> dict:
+        ...
+```
+
+---
+
+## 14.3 性能要件
+
+Adapter は **実行準備と後処理のみ** を担当する。
+MPI 実行中の rank ごとのホットパスには介入しない。
+
+---
+
+## 15. Launcher Profile 仕様
+
+## 15.1 役割
+
+Launcher Profile は HPC 上での起動方式を定義する。
+
+例:
+
+* `srun`
+* `mpirun`
+* `mpiexec`
+
+---
+
+## 15.2 `launchers.toml` 例
+
+```toml
+[launchers.slurm_srun]
+kind = "srun"
+command = "srun"
+use_slurm_ntasks = true
+
+[launchers.openmpi]
+kind = "mpirun"
+command = "mpirun"
+np_flag = "-np"
+use_slurm_ntasks = true
+
+[launchers.mpiexec]
+kind = "mpiexec"
+command = "mpiexec"
+n_flag = "-n"
+use_slurm_ntasks = true
+```
+
+---
+
+## 15.3 責務
+
+Launcher Profile は以下を担当する。
+
+* MPI launcher コマンド選択
+* task 数との結合
+* 付加オプションの組み立て
+* OpenMP 環境変数の補助
+* `job.sh` の実行行生成
+
+---
+
+## 15.4 実行方式
+
+Simulator Adapter が返す本体コマンドを Launcher Profile が包む。
+
+例:
+
+Adapter が返す本体:
+
+```text
+./work/bin/solver input/input.toml
+```
+
+Launcher が生成する最終実行:
+
+```text
+srun ./work/bin/solver input/input.toml
+```
+
+または
+
+```text
+mpirun -np ${SLURM_NTASKS} ./work/bin/solver input/input.toml
+```
+
+---
+
+## 15.5 性能要件
+
+最終的な `job.sh` では、MPI 実行を **直接** 行う。
+たとえば以下のようにする。
+
+```bash
+exec srun ./work/bin/solver input/input.toml
+```
+
+Python や別 wrapper を rank ごとに挟まないことを原則とする。
+
+---
+
+## 16. Resolver 仕様
+
+同一 simulator について、コード実体の解決方法を複数持つ。
+
+### `package`
+
+インストール済み package を使う
+
+### `local_source`
+
+ローカル source repo を参照し、必要に応じて build する
+
+### `local_executable`
+
+ローカル build 済み実行ファイルを直接使う
+
+---
+
+## 16.1 方針
+
+* 開発中は `local_source` / `local_executable` を許可
+* 本番では provenance を厳密に記録
+* 毎回 `pip install -e .` を必須にはしない
+
+---
+
+## 17. Provenance 要件
+
+各 run について以下を記録する。
+
+* simulator 名
+* resolver mode
+* source repo path
+* git commit hash
+* dirty 状態
+* package version
+* executable path
+* executable hash
+* build command
+* launcher 名
+* job_id
+* params snapshot
+
+---
+
+## 17.1 本番 run の追加要件
+
+production tag を持つ run では、以下を推奨または要求する。
+
+* clean working tree
+* commit 固定
+* executable hash 記録
+* 可能なら run 用の bin を固定配置
+
+---
+
+## 18. CLI 仕様
+
+## 18.1 初期化
+
+* `simctl init`
+* `simctl doctor`
+
+---
+
+## 18.2 run 生成
+
+* `simctl create CASE_NAME --dest <survey_dir>`
+* `simctl sweep <survey.toml のあるディレクトリ>`
+
+---
+
+## 18.3 job 実行
+
+* `simctl submit <run_dir or run_id>`
+* `simctl submit --all <survey_dir>`
+
+---
+
+## 18.4 状態追跡
+
+* `simctl status <run_dir or run_id>`
+* `simctl sync <run_dir or run_id>`
+
+---
+
+## 18.5 一覧
+
+* `simctl list`
+* `simctl list <path>`
+* `simctl list --status failed`
+* `simctl list --tag production`
+
+---
+
+## 18.6 複製・派生
+
+* `simctl clone <run_dir or run_id> --dest <survey_dir>`
+* `simctl clone <run_id> --set key=value`
+
+---
+
+## 18.7 解析補助
+
+* `simctl summarize <run_dir or run_id>`
+* `simctl collect <survey_dir>`
+
+---
+
+## 18.8 整理
+
+* `simctl archive <run_dir or run_id>`
+* `simctl purge-work <run_dir or run_id>`
+
+---
+
+## 19. コマンド動作定義
+
+## 19.1 `create`
+
+* Case を読み込む
+* `run_id` を採番
+* 指定 survey ディレクトリ配下に run ディレクトリを作成
+* input 生成
+* `job.sh` 生成
+* `manifest.toml` 生成
+* 状態を `created` にする
+
+---
+
+## 19.2 `sweep`
+
+* `survey.toml` を読み込む
+* parameter 組合せを展開
+* 各 run を survey 親ディレクトリ直下に生成
+* 各 manifest に survey 情報を記録
+
+---
+
+## 19.3 `submit`
+
+* submit 対象 run を特定
+* 必要な provenance を取得
+* `sbatch submit/job.sh` を実行
+* job_id を manifest に記録
+* 状態を `submitted` にする
+
+---
+
+## 19.4 `status`
+
+* `squeue` / `sacct` / adapter 判定により状態を更新
+* `status/state.json` を更新
+* manifest の `run.status` を同期
+
+---
+
+## 19.5 `summarize`
+
+* Adapter により出力を読み取り
+* 主要指標を抽出
+* `analysis/summary.json` を生成または更新
+
+---
+
+## 19.6 `collect`
+
+* 指定 survey 配下の各 run の summary を収集
+* `survey_summary.csv` などを生成
+
+---
+
+## 20. run 探索仕様
+
+ツールは `runs/` 以下を **再帰探索** し、`manifest.toml` を持つディレクトリを run とみなす。
+
+これにより、`runs/` 以下の多重ネストに対応する。
+
+---
+
+## 20.1 一意性
+
+同一 Project 内で `run_id` の重複は不可とする。
+
+---
+
+## 21. 解析運用方針
+
+### 21.1 基本方針
+
+解析は原則として **各 run の `analysis/` 配下で行う**。
+
+### 21.2 survey 解析
+
+複数 run を横断する解析は survey 親ディレクトリ配下の `summary/` 等で扱ってよい。
+
+### 21.3 共通解析コード
+
+共通解析スクリプトは Project 外または別ディレクトリで管理してよい。
+ただし生成物は各 run または survey に保存可能とする。
+
+---
+
+## 22. Agent/AI 統合方針
+
+Agent が扱う主対象は以下とする。
+
+* `case.toml`
+* `survey.toml`
+* `manifest.toml`
+* `status/state.json`
+* `analysis/summary.json`
+
+Agent による主要操作:
+
+* Case / Survey 生成補助
+* run 生成
+* 失敗 run 抽出
+* summary 収集
+* 図生成補助
+* tags 更新
+
+破壊的操作は慎重に制限する。
+
+---
+
+## 23. 運用モード
+
+## 23.1 development
+
+* `local_source` / `local_executable` 可
+* dirty tree 可
+* provenance 記録必須
+* tag に `dev` を推奨
+
+## 23.2 production
+
+* clean tree 推奨または要求
+* commit 固定
+* executable hash 必須
+* tag に `production` を推奨
+
+---
+
+## 24. エラー処理
+
+## 24.1 `doctor`
+
+以下を検査する。
+
+* Project 設定妥当性
+* simulator 解決可否
+* launcher 定義妥当性
+* `sbatch` 利用可否
+* build command 存在
+* template 未解決変数
+* `run_id` 重複
+
+---
+
+## 24.2 submit 前検査
+
+* 入力ファイル存在
+* 実行ファイル存在
+* provenance 取得可否
+* production 条件
+* `job.sh` 妥当性
+
+---
+
+## 25. v1 必須機能
+
+* Project 初期化
+* Case 読込
+* Survey 展開
+* run 生成
+* run_id 採番
+* `manifest.toml` 生成
+* Simulator Adapter
+* Launcher Profile
+* Slurm submit
+* 状態同期
+* run 一覧取得
+* survey 単位集計
+* `.gitignore` 前提の heavy output 運用
+
+---
+
+## 26. v1.1 以降の拡張候補
+
+* symlink/external output mode
+* SQLite index
+* failed run 一括再投入
+* richer query
+* scheduler 複数対応
+* archive policy 自動化
+* notebook テンプレート連携
+
+---
+
+## 27. 採用方針の要約
+
+本仕様では以下を正式採用する。
+
+* `runs/` 配下の多重ネストを許可
+* run ディレクトリを主作業単位とする
+* survey は `runs/` 配下で親ディレクトリとして管理可能
+* 大容量出力は run 配下に置き `.gitignore` で除外
+* symlink は optional
+* run の一意性は `run_id`
+* simulator 固有処理は Adapter
+* MPI 起動方式は Launcher Profile
+* `job.sh` で `srun` / `mpirun` / `mpiexec` を直接実行
+* `pip install -e .` は必須ではなく、resolver で柔軟に扱う
+
+---
