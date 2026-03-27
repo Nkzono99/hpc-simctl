@@ -208,3 +208,17 @@ __marimo__/
 
 # Claude Code
 .claude/settings.local.json
+
+# HPC simulation heavy run outputs
+runs/**/work/outputs/
+runs/**/work/restart/
+runs/**/work/tmp/
+
+# Run logs
+runs/**/work/*.out
+runs/**/work/*.err
+runs/**/work/*.log
+
+# Analysis cache
+runs/**/analysis/cache/
+runs/**/analysis/.ipynb_checkpoints/
