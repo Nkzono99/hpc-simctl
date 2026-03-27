@@ -1,0 +1,225 @@
+"""Tests for simctl init and simctl doctor CLI commands."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from unittest.mock import patch
+
+from typer.testing import CliRunner
+
+from simctl.cli.main import app
+
+runner = CliRunner()
+
+
+class TestInit:
+    """Tests for the 'simctl init' command."""
+
+    def test_init_creates_all_files(self, tmp_path: Path) -> None:
+        """Init in an empty directory creates all expected files and dirs."""
+        result = runner.invoke(app, ["init", str(tmp_path)])
+        assert result.exit_code == 0
+        assert (tmp_path / "simproject.toml").exists()
+        assert (tmp_path / "simulators.toml").exists()
+        assert (tmp_path / "launchers.toml").exists()
+        assert (tmp_path / "cases").is_dir()
+        assert (tmp_path / "runs").is_dir()
+        assert (tmp_path / ".gitignore").exists()
+
+    def test_init_simproject_content(self, tmp_path: Path) -> None:
+        """simproject.toml has correct project name derived from dir name."""
+        result = runner.invoke(app, ["init", str(tmp_path)])
+        assert result.exit_code == 0
+        content = (tmp_path / "simproject.toml").read_text()
+        assert "[project]" in content
+        assert f'name = "{tmp_path.name}"' in content
+
+    def test_init_custom_name(self, tmp_path: Path) -> None:
+        """--name option overrides directory name in simproject.toml."""
+        result = runner.invoke(app, ["init", str(tmp_path), "--name", "my-project"])
+        assert result.exit_code == 0
+        content = (tmp_path / "simproject.toml").read_text()
+        assert 'name = "my-project"' in content
+        assert "my-project" in result.output
+
+    def test_init_simulators_content(self, tmp_path: Path) -> None:
+        """simulators.toml has empty [simulators] section."""
+        runner.invoke(app, ["init", str(tmp_path)])
+        content = (tmp_path / "simulators.toml").read_text()
+        assert "[simulators]" in content
+
+    def test_init_launchers_content(self, tmp_path: Path) -> None:
+        """launchers.toml has empty [launchers] section."""
+        runner.invoke(app, ["init", str(tmp_path)])
+        content = (tmp_path / "launchers.toml").read_text()
+        assert "[launchers]" in content
+
+    def test_init_gitignore_content(self, tmp_path: Path) -> None:
+        """.gitignore contains run output exclusion patterns."""
+        runner.invoke(app, ["init", str(tmp_path)])
+        content = (tmp_path / ".gitignore").read_text()
+        assert "runs/**/work/outputs/" in content
+        assert "runs/**/work/restart/" in content
+        assert "runs/**/work/tmp/" in content
+
+    def test_init_skips_existing_files(self, tmp_path: Path) -> None:
+        """Init does not overwrite existing files."""
+        (tmp_path / "simproject.toml").write_text('[project]\nname = "original"\n')
+        result = runner.invoke(app, ["init", str(tmp_path)])
+        assert result.exit_code == 0
+        content = (tmp_path / "simproject.toml").read_text()
+        assert 'name = "original"' in content
+        assert "Skipped" in result.output
+
+    def test_init_reports_created_items(self, tmp_path: Path) -> None:
+        """Init output lists created items."""
+        result = runner.invoke(app, ["init", str(tmp_path)])
+        assert result.exit_code == 0
+        assert "Created:" in result.output
+        assert "simproject.toml" in result.output
+
+    def test_init_creates_target_directory(self, tmp_path: Path) -> None:
+        """Init creates the target directory if it does not exist."""
+        target = tmp_path / "new-project"
+        result = runner.invoke(app, ["init", str(target)])
+        assert result.exit_code == 0
+        assert target.is_dir()
+        assert (target / "simproject.toml").exists()
+
+    def test_init_defaults_to_cwd(self, tmp_path: Path) -> None:
+        """Init without path argument uses current working directory."""
+        import os
+
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(tmp_path)
+            result = runner.invoke(app, ["init"])
+            assert result.exit_code == 0
+            assert (tmp_path / "simproject.toml").exists()
+        finally:
+            os.chdir(original_cwd)
+
+
+class TestDoctor:
+    """Tests for the 'simctl doctor' command."""
+
+    def test_doctor_all_pass(self, tmp_path: Path) -> None:
+        """Doctor passes on a properly initialized project with sbatch."""
+        # Set up a valid project
+        (tmp_path / "simproject.toml").write_text(
+            '[project]\nname = "test-project"\n'
+        )
+        (tmp_path / "simulators.toml").write_text("[simulators]\n")
+        (tmp_path / "launchers.toml").write_text("[launchers]\n")
+        (tmp_path / "runs").mkdir()
+
+        with patch("simctl.cli.init.shutil.which", return_value="/usr/bin/sbatch"):
+            result = runner.invoke(app, ["doctor", str(tmp_path)])
+
+        assert result.exit_code == 0
+        assert "All checks passed" in result.output
+
+    def test_doctor_missing_simproject(self, tmp_path: Path) -> None:
+        """Doctor fails if simproject.toml is missing."""
+        result = runner.invoke(app, ["doctor", str(tmp_path)])
+        assert result.exit_code == 1
+        assert "[FAIL] simproject.toml not found" in result.output
+
+    def test_doctor_invalid_simproject(self, tmp_path: Path) -> None:
+        """Doctor fails if simproject.toml is invalid."""
+        (tmp_path / "simproject.toml").write_text("invalid content\n")
+        (tmp_path / "simulators.toml").write_text("[simulators]\n")
+        (tmp_path / "launchers.toml").write_text("[launchers]\n")
+
+        with patch("simctl.cli.init.shutil.which", return_value="/usr/bin/sbatch"):
+            result = runner.invoke(app, ["doctor", str(tmp_path)])
+
+        assert result.exit_code == 1
+        assert "[FAIL] simproject.toml" in result.output
+
+    def test_doctor_missing_simulators(self, tmp_path: Path) -> None:
+        """Doctor fails if simulators.toml is missing."""
+        (tmp_path / "simproject.toml").write_text(
+            '[project]\nname = "test-project"\n'
+        )
+        (tmp_path / "launchers.toml").write_text("[launchers]\n")
+
+        with patch("simctl.cli.init.shutil.which", return_value="/usr/bin/sbatch"):
+            result = runner.invoke(app, ["doctor", str(tmp_path)])
+
+        assert result.exit_code == 1
+        assert "[FAIL] simulators.toml not found" in result.output
+
+    def test_doctor_missing_launchers(self, tmp_path: Path) -> None:
+        """Doctor fails if launchers.toml is missing."""
+        (tmp_path / "simproject.toml").write_text(
+            '[project]\nname = "test-project"\n'
+        )
+        (tmp_path / "simulators.toml").write_text("[simulators]\n")
+
+        with patch("simctl.cli.init.shutil.which", return_value="/usr/bin/sbatch"):
+            result = runner.invoke(app, ["doctor", str(tmp_path)])
+
+        assert result.exit_code == 1
+        assert "[FAIL] launchers.toml not found" in result.output
+
+    def test_doctor_missing_sbatch(self, tmp_path: Path) -> None:
+        """Doctor fails if sbatch is not in PATH."""
+        (tmp_path / "simproject.toml").write_text(
+            '[project]\nname = "test-project"\n'
+        )
+        (tmp_path / "simulators.toml").write_text("[simulators]\n")
+        (tmp_path / "launchers.toml").write_text("[launchers]\n")
+
+        with patch("simctl.cli.init.shutil.which", return_value=None):
+            result = runner.invoke(app, ["doctor", str(tmp_path)])
+
+        assert result.exit_code == 1
+        assert "[FAIL] sbatch not found in PATH" in result.output
+
+    def test_doctor_duplicate_run_ids(self, tmp_path: Path) -> None:
+        """Doctor fails if duplicate run_ids exist."""
+        (tmp_path / "simproject.toml").write_text(
+            '[project]\nname = "test-project"\n'
+        )
+        (tmp_path / "simulators.toml").write_text("[simulators]\n")
+        (tmp_path / "launchers.toml").write_text("[launchers]\n")
+        runs_dir = tmp_path / "runs"
+        runs_dir.mkdir()
+
+        # Create two runs with the same run_id
+        for sub in ("run_a", "run_b"):
+            run_dir = runs_dir / sub
+            run_dir.mkdir()
+            (run_dir / "manifest.toml").write_text(
+                '[run]\nid = "R20260327-0001"\nstatus = "created"\n'
+            )
+
+        with patch("simctl.cli.init.shutil.which", return_value="/usr/bin/sbatch"):
+            result = runner.invoke(app, ["doctor", str(tmp_path)])
+
+        assert result.exit_code == 1
+        assert "[FAIL] Duplicate run_id" in result.output
+
+    def test_doctor_no_runs_dir(self, tmp_path: Path) -> None:
+        """Doctor passes run_id check when runs/ does not exist."""
+        (tmp_path / "simproject.toml").write_text(
+            '[project]\nname = "test-project"\n'
+        )
+        (tmp_path / "simulators.toml").write_text("[simulators]\n")
+        (tmp_path / "launchers.toml").write_text("[launchers]\n")
+
+        with patch("simctl.cli.init.shutil.which", return_value="/usr/bin/sbatch"):
+            result = runner.invoke(app, ["doctor", str(tmp_path)])
+
+        assert result.exit_code == 0
+        assert "[PASS] No runs/ directory" in result.output
+
+    def test_doctor_reports_failure_count(self, tmp_path: Path) -> None:
+        """Doctor output includes the number of failed checks."""
+        # Empty dir: simproject, simulators, launchers all missing + no sbatch
+        with patch("simctl.cli.init.shutil.which", return_value=None):
+            result = runner.invoke(app, ["doctor", str(tmp_path)])
+
+        assert result.exit_code == 1
+        assert "check(s) failed" in result.output
