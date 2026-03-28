@@ -7,28 +7,24 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
+import tomli_w
 
 from simctl.adapters.emses import EmseAdapter
 
-SAMPLE_PREINP = """\
-!!key dx=[0.5],to_c=[10000.0]
-&real
-/
-&jobcon
-    nstep = 2000
-/
-&plasma
-    wc = 0.0
-    phiz = 0.0
-/
-&tmgrid
-    dt = 0.002
-    nx = 1000, ny = 1, nz = 800
-/
-&system
-    nspec = 2
-/
-"""
+SAMPLE_PLASMA_CONFIG: dict[str, Any] = {
+    "meta": {
+        "format_version": 2,
+        "unit_conversion": {"dx": 0.5, "to_c": 10000.0},
+    },
+    "jobcon": {"nstep": 2000},
+    "plasma": {"wc": 0.0, "phiz": 0.0, "cv": 10000.0},
+    "tmgrid": {"dt": 0.002, "nx": 1000, "ny": 1, "nz": 800},
+    "system": {"nspec": 2},
+    "species": [
+        {"wp": 2.1, "qm": -1.0, "npin": 24000000},
+        {"wp": 0.049, "qm": 0.00054, "npin": 24000000},
+    ],
+}
 
 
 @pytest.fixture()
@@ -47,10 +43,11 @@ def run_dir(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def case_dir(tmp_path: Path) -> Path:
-    """Create a case directory with a plasma.preinp template."""
+    """Create a case directory with a plasma.toml template."""
     cdir = tmp_path / "case_flat"
     cdir.mkdir()
-    (cdir / "plasma.preinp").write_text(SAMPLE_PREINP)
+    with open(cdir / "plasma.toml", "wb") as f:
+        tomli_w.dump(SAMPLE_PLASMA_CONFIG, f)
     return cdir
 
 
@@ -65,8 +62,8 @@ def case_data(case_dir: Path) -> dict[str, Any]:
             "case_dir": str(case_dir),
         },
         "params": {
-            "nstep": 5000,
-            "wc": 0.147,
+            "jobcon.nstep": 5000,
+            "plasma.wc": 0.147,
         },
     }
 
@@ -87,23 +84,35 @@ class TestName:
 
 
 class TestRenderInputs:
-    def test_renders_preinp_with_overrides(
+    def test_renders_plasma_toml(
         self, adapter: EmseAdapter, run_dir: Path, case_data: dict[str, Any]
     ) -> None:
         created = adapter.render_inputs(case_data, run_dir)
-        assert "input/plasma.preinp" in created
-        content = (run_dir / "input" / "plasma.preinp").read_text()
-        assert "nstep = 5000" in content
-        assert "wc = 0.147" in content
+        assert "input/plasma.toml" in created
+        assert (run_dir / "input" / "plasma.toml").exists()
+
+    def test_applies_overrides(
+        self, adapter: EmseAdapter, run_dir: Path, case_data: dict[str, Any]
+    ) -> None:
+        adapter.render_inputs(case_data, run_dir)
+        import tomli
+
+        with open(run_dir / "input" / "plasma.toml", "rb") as f:
+            config = tomli.load(f)
+        assert config["jobcon"]["nstep"] == 5000
+        assert config["plasma"]["wc"] == 0.147
 
     def test_preserves_unmodified_params(
         self, adapter: EmseAdapter, run_dir: Path, case_data: dict[str, Any]
     ) -> None:
         adapter.render_inputs(case_data, run_dir)
-        content = (run_dir / "input" / "plasma.preinp").read_text()
-        # phiz was not overridden
-        assert "phiz = 0.0" in content
-        assert "dt = 0.002" in content
+        import tomli
+
+        with open(run_dir / "input" / "plasma.toml", "rb") as f:
+            config = tomli.load(f)
+        assert config["plasma"]["phiz"] == 0.0
+        assert config["tmgrid"]["dt"] == 0.002
+        assert config["tmgrid"]["nx"] == 1000
 
     def test_no_case_section_raises(
         self, adapter: EmseAdapter, run_dir: Path
@@ -120,21 +129,21 @@ class TestRenderInputs:
         created = adapter.render_inputs(data, run_dir)
         assert created == []
 
-    def test_copies_companion_plasma_inp(
+    def test_species_override(
         self, adapter: EmseAdapter, run_dir: Path, case_dir: Path
     ) -> None:
-        (case_dir / "plasma.inp").write_text(
-            "&jobcon\n    nstep = 2000\n/\n"
-        )
+        """Dot-notation with numeric index targets array-of-tables."""
         data: dict[str, Any] = {
             "case": {"name": "test", "simulator": "emses", "case_dir": str(case_dir)},
-            "params": {"nstep": 9999},
+            "params": {"species.0.wp": 3.0},
         }
-        created = adapter.render_inputs(data, run_dir)
-        assert "input/plasma.preinp" in created
-        assert "input/plasma.inp" in created
-        content = (run_dir / "input" / "plasma.inp").read_text()
-        assert "nstep = 9999" in content
+        adapter.render_inputs(data, run_dir)
+        import tomli
+
+        with open(run_dir / "input" / "plasma.toml", "rb") as f:
+            config = tomli.load(f)
+        assert config["species"][0]["wp"] == 3.0
+        assert config["species"][1]["wp"] == 0.049  # unchanged
 
 
 # ===================================================================
@@ -188,7 +197,8 @@ class TestBuildProgramCommand:
         cmd = adapter.build_program_command(
             {"executable": "/opt/mpiemses3D"}, run_dir
         )
-        assert cmd == ["/opt/mpiemses3D", "plasma.inp"]
+        assert cmd[0] == "/opt/mpiemses3D"
+        assert "plasma.toml" in cmd[1]
 
     def test_default_executable(
         self, adapter: EmseAdapter, run_dir: Path
@@ -270,10 +280,9 @@ class TestDetectStatus:
     def test_completed_when_nstep_reached(
         self, adapter: EmseAdapter, run_dir: Path
     ) -> None:
-        # Set up input with nstep = 100
-        (run_dir / "input" / "plasma.inp").write_text(
-            "&jobcon\n    nstep = 100\n/\n"
-        )
+        # Set up plasma.toml with nstep = 100
+        with open(run_dir / "input" / "plasma.toml", "wb") as f:
+            tomli_w.dump({"jobcon": {"nstep": 100}}, f)
         # Energy file showing step 100 reached
         (run_dir / "work" / "energy").write_text(
             "50 1.0 2.0\n100 1.1 2.1\n"
@@ -283,9 +292,8 @@ class TestDetectStatus:
     def test_running_when_not_finished(
         self, adapter: EmseAdapter, run_dir: Path
     ) -> None:
-        (run_dir / "input" / "plasma.inp").write_text(
-            "&jobcon\n    nstep = 1000\n/\n"
-        )
+        with open(run_dir / "input" / "plasma.toml", "wb") as f:
+            tomli_w.dump({"jobcon": {"nstep": 1000}}, f)
         (run_dir / "work" / "energy").write_text("50 1.0 2.0\n")
         assert adapter.detect_status(run_dir) == "running"
 
@@ -317,16 +325,17 @@ class TestSummarize:
         assert summary["total_energy_lines"] == 2
         assert summary["last_step"] == 100
 
-    def test_summary_reads_params(
+    def test_summary_reads_toml_params(
         self, adapter: EmseAdapter, run_dir: Path
     ) -> None:
-        (run_dir / "input" / "plasma.inp").write_text(
-            "&tmgrid\n    nx = 512\n    dt = 0.001\n/\n"
-            "&jobcon\n    nstep = 5000\n/\n"
-        )
+        with open(run_dir / "input" / "plasma.toml", "wb") as f:
+            tomli_w.dump(
+                {"tmgrid": {"nx": 512, "dt": 0.001}, "jobcon": {"nstep": 5000}},
+                f,
+            )
         summary = adapter.summarize(run_dir)
-        assert summary["nx"] == "512"
-        assert summary["nstep"] == "5000"
+        assert summary["nx"] == 512
+        assert summary["nstep"] == 5000
 
 
 # ===================================================================
@@ -340,7 +349,7 @@ class TestCollectProvenance:
             {"resolver_mode": "local_executable", "executable": "/x/solver"}
         )
         assert prov["resolver_mode"] == "local_executable"
-        assert prov["exe_hash"] == ""  # file doesn't exist
+        assert prov["exe_hash"] == ""
 
     def test_provenance_with_real_file(
         self, adapter: EmseAdapter, tmp_path: Path
@@ -363,8 +372,7 @@ class TestHelpers:
         self, adapter: EmseAdapter, run_dir: Path
     ) -> None:
         cmds = adapter.get_setup_commands(run_dir)
-        assert any("plasma" in c for c in cmds)
-        assert any("preinp" in c for c in cmds)
+        assert any("plasma.toml" in c for c in cmds)
 
     def test_get_modules(self, adapter: EmseAdapter) -> None:
         modules = adapter.get_modules()

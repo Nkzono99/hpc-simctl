@@ -1,0 +1,68 @@
+#:schema https://raw.githubusercontent.com/CS12-Laboratory/mpiemses3d-schema/refs/heads/main/plasma.schema.json
+
+[meta]
+format_version = 2
+
+[meta.unit_conversion]
+dx = 0.5
+to_c = 10000.0
+
+[esorem]
+emflag = 0
+
+[jobcon]
+jobnum = [0, 1]
+nstep = 400000
+
+[digcon]
+hdfdigstart = 0
+intfoc = 100
+ifdiag = 200
+ijdiag = 200
+ipahdf = [0, 0, 0]
+ifxyz = [1, 1, 1, 1, 1, 1, 1]
+ijxyz = [1, 1, 1]
+
+[plasma]
+wc = 0.0
+cv = 10000.0
+phiz = 0.0
+phixy = 0.0
+
+[tmgrid]
+dt = 0.002
+nx = 4000
+ny = 1
+nz = 800
+
+[system]
+ionchg = 0
+nfbnd = [1, 0, 1]
+nflag_ecrct = 1
+
+[[species]]
+wp = 2.10390362104881
+qm = -1.0
+npin = 96000000
+vdthz = 1414.213562
+vdthxy = 1414.213562
+ipadig = [1024, 1024, 1024]
+
+[[species]]
+wp = 0.04909886429062906
+qm = 0.00054464638986836
+npin = 96000000
+vdthz = 30.39968
+vdthxy = 30.39968
+ipadig = [1024, 1024, 1024]
+
+[ptcond]
+zssurf = 60.0
+
+[[ptcond.boundaries]]
+boundary_type = "flat-surface"
+
+[mpi]
+nodes = [40, 1, 20]
+
+[verbose]

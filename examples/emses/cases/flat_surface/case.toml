@@ -15,19 +15,14 @@ nodes = 1
 ntasks = 800
 walltime = "120:00:00"
 
-# Parameters that override namelist values in plasma.preinp.
-# Keys are namelist parameter names (or group.param for disambiguation).
+# Parameters that override values in plasma.toml via dot-notation.
+# e.g. "tmgrid.nx" -> config["tmgrid"]["nx"]
+#      "species.0.wp" -> config["species"][0]["wp"]
 [params]
-# Time/grid parameters (&tmgrid)
-nx = 4000
-ny = 1
-nz = 800
-dt = 0.002
-
-# Job control (&jobcon)
-nstep = 400000
-
-# Plasma parameters (&plasma)
-wc = 0.0
-phiz = 0.0
-phixy = 0.0
+"tmgrid.nx" = 4000
+"tmgrid.ny" = 1
+"tmgrid.nz" = 800
+"tmgrid.dt" = 0.002
+"jobcon.nstep" = 400000
+"plasma.wc" = 0.0
+"plasma.phiz" = 0.0

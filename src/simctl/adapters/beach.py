@@ -6,7 +6,6 @@ detection, and OpenMP/MPI hybrid execution.
 
 from __future__ import annotations
 
-import copy
 import hashlib
 import logging
 import shutil
@@ -26,6 +25,7 @@ except ImportError:
     tomli_w = None  # type: ignore[assignment]
 
 from simctl.adapters.base import SimulatorAdapter
+from simctl.adapters.toml_utils import apply_dotted_overrides
 
 logger = logging.getLogger(__name__)
 
@@ -44,37 +44,6 @@ _OUTPUT_FILES = {
     "rng_state": "rng_state.txt",
     "performance_profile": "performance_profile.csv",
 }
-
-
-def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
-    """Deep-merge *override* into *base* dict.  Lists are replaced, dicts merged."""
-    result = copy.deepcopy(base)
-    for key, value in override.items():
-        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-            result[key] = _deep_merge(result[key], value)
-        else:
-            result[key] = copy.deepcopy(value)
-    return result
-
-
-def _apply_dotted_overrides(
-    config: dict[str, Any],
-    overrides: dict[str, Any],
-) -> dict[str, Any]:
-    """Apply flat dot-notation overrides to a nested config dict.
-
-    Example: ``{"sim.dt": 1e-8}`` sets ``config["sim"]["dt"] = 1e-8``.
-    """
-    result = copy.deepcopy(config)
-    for key, value in overrides.items():
-        parts = key.split(".")
-        target = result
-        for part in parts[:-1]:
-            if part not in target:
-                target[part] = {}
-            target = target[part]
-        target[parts[-1]] = value
-    return result
 
 
 class BeachAdapter(SimulatorAdapter):
@@ -159,7 +128,7 @@ class BeachAdapter(SimulatorAdapter):
 
         # Apply parameter overrides
         if params and template_config:
-            template_config = _apply_dotted_overrides(template_config, params)
+            template_config = apply_dotted_overrides(template_config, params)
 
         # Set output directory to work/ subdirectory
         if "output" not in template_config:

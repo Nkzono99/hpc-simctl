@@ -1,13 +1,12 @@
 [simulators.emses]
 adapter = "emses"
-resolver_mode = "local_executable"
+resolver_mode = "local_source"
 
-# Point to your compiled mpiemses3D binary.
-# For local_executable mode, this should be an absolute path.
-executable = "/path/to/mpiemses3D"
+# MPIEMSES3D source repository
+source_repo = "/home/b/b36291/large0/Github/MPIEMSES3D"
+build_command = "make"
+executable = "mpiemses3D"
 
-# For local_source mode (builds from source):
-# resolver_mode = "local_source"
-# source_repo = "/path/to/EMSES"
-# build_command = "make -j"
-# executable = "mpiemses3D"
+# For local_executable mode (pre-compiled binary):
+# resolver_mode = "local_executable"
+# executable = "/path/to/mpiemses3D"
