@@ -24,6 +24,8 @@ def generate_job_script(
     extra_sbatch: list[str] | None = None,
     extra_env: dict[str, str] | None = None,
     modules: list[str] | None = None,
+    setup_commands: list[str] | None = None,
+    post_commands: list[str] | None = None,
 ) -> Path:
     """Generate a ``job.sh`` script for Slurm submission.
 
@@ -31,8 +33,8 @@ def generate_job_script(
 
     Args:
         run_dir: Target run directory.
-        job_config: Job parameters.  Required keys: ``partition``, ``nodes``,
-            ``ntasks``, ``walltime``.  Optional: ``job_name``.
+        job_config: Job parameters.  Required keys: ``partition``,
+            ``walltime``.  Optional: ``nodes``, ``ntasks``, ``job_name``.
         exec_line: The execution line produced by the launcher (e.g.
             ``"srun ./solver input.toml"``).
         run_id: Run identifier used as the default job name if ``job_name``
@@ -41,6 +43,10 @@ def generate_job_script(
             prefix) to include verbatim.
         extra_env: Extra environment variables to export before execution.
         modules: Module names to load (via ``module load``).
+        setup_commands: Shell commands to run before the main execution
+            (e.g. copying files to work/, running preprocessors).
+        post_commands: Shell commands to run after the main execution
+            (e.g. post-processing, visualization).
 
     Returns:
         Path to the generated ``submit/job.sh`` file.
@@ -58,6 +64,8 @@ def generate_job_script(
         extra_sbatch=extra_sbatch or [],
         extra_env=extra_env or {},
         modules=modules or [],
+        setup_commands=setup_commands or [],
+        post_commands=post_commands or [],
     )
 
     return write_job_script(run_dir, content)
@@ -89,7 +97,7 @@ def write_job_script(run_dir: Path, content: str) -> Path:
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-_REQUIRED_JOB_KEYS = ("partition", "nodes", "ntasks", "walltime")
+_REQUIRED_JOB_KEYS = ("partition", "walltime")
 
 
 def _validate_job_config(job_config: dict[str, Any]) -> None:
@@ -112,6 +120,8 @@ def _render_script(
     extra_sbatch: list[str],
     extra_env: dict[str, str],
     modules: list[str],
+    setup_commands: list[str],
+    post_commands: list[str],
 ) -> str:
     """Render the complete job script as a string."""
     lines: list[str] = ["#!/bin/bash"]
@@ -120,8 +130,12 @@ def _render_script(
     job_name = job_config.get("job_name", run_id or "simctl-job")
     lines.append(f"#SBATCH --job-name={job_name}")
     lines.append(f"#SBATCH --partition={job_config['partition']}")
-    lines.append(f"#SBATCH --nodes={job_config['nodes']}")
-    lines.append(f"#SBATCH --ntasks={job_config['ntasks']}")
+
+    if "nodes" in job_config:
+        lines.append(f"#SBATCH --nodes={job_config['nodes']}")
+    if "ntasks" in job_config:
+        lines.append(f"#SBATCH --ntasks={job_config['ntasks']}")
+
     lines.append(f"#SBATCH --time={job_config['walltime']}")
 
     work_dir = run_dir / "work"
@@ -149,10 +163,28 @@ def _render_script(
             lines.append(f"export {key}={value!r}")
         lines.append("")
 
-    # --- Change to work directory and execute ---
+    # --- Change to work directory ---
     lines.append(f"cd {work_dir}")
     lines.append("")
-    lines.append(f"exec {exec_line}")
+
+    # --- Setup commands (before main execution) ---
+    if setup_commands:
+        for cmd in setup_commands:
+            lines.append(cmd)
+        lines.append("")
+
+    # --- Main execution ---
+    if post_commands:
+        # Cannot use exec if there are post-commands to run
+        lines.append(exec_line)
+    else:
+        lines.append(f"exec {exec_line}")
     lines.append("")
+
+    # --- Post commands (after main execution) ---
+    if post_commands:
+        for cmd in post_commands:
+            lines.append(cmd)
+        lines.append("")
 
     return "\n".join(lines)

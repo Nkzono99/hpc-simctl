@@ -1,0 +1,33 @@
+[case]
+name = "flat_surface"
+simulator = "emses"
+launcher = "srun"
+description = "Flat surface sheath simulation (2D, no magnetic field)"
+
+[classification]
+model = "sheath"
+submodel = "flat_surface"
+tags = ["2d", "electrostatic"]
+
+[job]
+partition = "gr20001a"
+nodes = 1
+ntasks = 800
+walltime = "120:00:00"
+
+# Parameters that override namelist values in plasma.preinp.
+# Keys are namelist parameter names (or group.param for disambiguation).
+[params]
+# Time/grid parameters (&tmgrid)
+nx = 4000
+ny = 1
+nz = 800
+dt = 0.002
+
+# Job control (&jobcon)
+nstep = 400000
+
+# Plasma parameters (&plasma)
+wc = 0.0
+phiz = 0.0
+phixy = 0.0

@@ -149,10 +149,10 @@ class TestGenerateJobScript:
             )
 
     def test_missing_multiple_keys_raises(self, run_dir: Path) -> None:
-        with pytest.raises(JobScriptError, match=r"partition.*nodes"):
+        with pytest.raises(JobScriptError, match=r"partition.*walltime"):
             generate_job_script(
                 run_dir,
-                {"ntasks": 4, "walltime": "00:10:00"},
+                {"ntasks": 4},
                 "srun ./solver",
             )
 
@@ -165,6 +165,49 @@ class TestGenerateJobScript:
         path = generate_job_script(rd, job_config, "srun ./solver")
         assert path.parent.is_dir()
         assert path.parent.name == "submit"
+
+    def test_setup_commands(
+        self, run_dir: Path, job_config: dict[str, object]
+    ) -> None:
+        """Setup commands appear before the exec line."""
+        path = generate_job_script(
+            run_dir,
+            job_config,
+            "srun ./solver",
+            setup_commands=["cp input/* .", "preinp"],
+        )
+        content = path.read_text()
+        assert "cp input/* ." in content
+        assert "preinp" in content
+        # Setup should come before exec
+        setup_idx = content.index("cp input/*")
+        exec_idx = content.index("srun ./solver")
+        assert setup_idx < exec_idx
+
+    def test_post_commands(
+        self, run_dir: Path, job_config: dict[str, object]
+    ) -> None:
+        """Post commands appear after the main command, without exec prefix."""
+        path = generate_job_script(
+            run_dir,
+            job_config,
+            "srun ./solver",
+            post_commands=["date", "echo done"],
+        )
+        content = path.read_text()
+        assert "date" in content
+        assert "echo done" in content
+        # Main command should NOT have exec prefix when post_commands exist
+        assert "exec srun" not in content
+
+    def test_optional_nodes_ntasks(self, run_dir: Path) -> None:
+        """nodes and ntasks are optional and omitted from SBATCH if absent."""
+        config = {"partition": "debug", "walltime": "01:00:00"}
+        path = generate_job_script(run_dir, config, "srun ./solver")
+        content = path.read_text()
+        assert "--partition=debug" in content
+        assert "--nodes" not in content
+        assert "--ntasks" not in content
 
 
 # ---------------------------------------------------------------------------

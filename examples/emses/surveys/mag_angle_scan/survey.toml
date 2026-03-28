@@ -1,0 +1,27 @@
+[survey]
+id = "S20260328-mag-angle"
+name = "Magnetic field angle scan"
+base_case = "flat_surface"
+simulator = "emses"
+launcher = "srun"
+
+[classification]
+model = "sheath"
+submodel = "with_mag"
+tags = ["magnetic", "angle_scan"]
+
+# Parameter axes: cartesian product generates 3 x 3 = 9 runs.
+# Keys are namelist parameter names (matched in any &group).
+[axes]
+wc = [0.0, 0.147, 0.294]
+phiz = [0.0, 45.0, 90.0]
+
+[naming]
+# Template for run display names. Uses axis parameter names.
+display_name = "wc{wc}_phi{phiz}"
+
+[job]
+partition = "gr20001a"
+nodes = 1
+ntasks = 800
+walltime = "120:00:00"

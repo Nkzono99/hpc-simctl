@@ -185,11 +185,18 @@ def generate_display_name(template: str, params: dict[str, Any]) -> str:
     if not template:
         return ""
 
-    # Build a string-safe mapping
+    # Build a string-safe mapping, including short aliases for dotted keys
     fmt_params: dict[str, str] = {}
     for key, value in params.items():
         formatted = f"{value:g}" if isinstance(value, float) else str(value)
         fmt_params[key] = formatted
+        # For dotted keys like "plasma.wc", also register the leaf name "wc"
+        # and the underscore form "plasma_wc" for use in templates.
+        if "." in key:
+            leaf = key.rsplit(".", 1)[1]
+            if leaf not in fmt_params:
+                fmt_params[leaf] = formatted
+            fmt_params[key.replace(".", "_")] = formatted
 
     try:
         return template.format_map(fmt_params)
