@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "launchers.toml",
+  "description": "MPI launcher profile definitions for simctl",
+  "type": "object",
+  "required": ["launchers"],
+  "properties": {
+    "launchers": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["type"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["srun", "mpirun", "mpiexec"],
+            "description": "Launcher type"
+          },
+          "args": {
+            "type": "string",
+            "description": "Extra launcher arguments"
+          }
+        }
+      }
+    }
+  }
+}

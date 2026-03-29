@@ -1,0 +1,43 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "survey.toml",
+  "description": "Parameter survey definition for simctl (Cartesian product expansion)",
+  "type": "object",
+  "required": ["survey"],
+  "properties": {
+    "survey": {
+      "type": "object",
+      "required": ["case"],
+      "properties": {
+        "case": {
+          "type": "string",
+          "description": "Path to the case.toml to use as template"
+        },
+        "description": {
+          "type": "string",
+          "description": "Survey description"
+        }
+      }
+    },
+    "params": {
+      "type": "object",
+      "description": "Parameter axes for Cartesian product. Each key is a dot-notation parameter, value is an array of values.",
+      "additionalProperties": {
+        "type": "array",
+        "description": "Array of values for this parameter axis"
+      }
+    },
+    "slurm": {
+      "type": "object",
+      "description": "Slurm job parameters (shared across all runs)",
+      "properties": {
+        "partition": { "type": "string" },
+        "nodes": { "type": "integer" },
+        "ntasks": { "type": "integer" },
+        "cpus_per_task": { "type": "integer" },
+        "time": { "type": "string" },
+        "job_name_prefix": { "type": "string" }
+      }
+    }
+  }
+}

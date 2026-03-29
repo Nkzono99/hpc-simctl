@@ -1,0 +1,71 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "manifest.toml",
+  "description": "Run manifest — the source of truth for a simctl run",
+  "type": "object",
+  "required": ["run"],
+  "properties": {
+    "run": {
+      "type": "object",
+      "required": ["id", "status"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^R\\d{8}-\\d{4}$",
+          "description": "Unique run ID (e.g. R20260329-0001)"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["created", "submitted", "running", "completed", "failed", "cancelled", "archived", "purged"],
+          "description": "Current run state"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 creation timestamp"
+        },
+        "simulator": {
+          "type": "string",
+          "description": "Simulator name"
+        },
+        "case": {
+          "type": "string",
+          "description": "Source case name or path"
+        },
+        "parent_run_id": {
+          "type": "string",
+          "description": "Parent run ID (for cloned runs)"
+        }
+      }
+    },
+    "params": {
+      "type": "object",
+      "description": "Parameter snapshot (frozen at run creation)",
+      "additionalProperties": true
+    },
+    "slurm": {
+      "type": "object",
+      "description": "Slurm job information",
+      "properties": {
+        "job_id": { "type": "string" },
+        "partition": { "type": "string" },
+        "nodes": { "type": "integer" },
+        "ntasks": { "type": "integer" },
+        "time": { "type": "string" },
+        "submitted_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "description": "Code provenance information",
+      "properties": {
+        "resolver_mode": { "type": "string" },
+        "executable": { "type": "string" },
+        "exe_hash": { "type": "string" },
+        "git_commit": { "type": "string" },
+        "git_dirty": { "type": "boolean" },
+        "source_repo": { "type": "string" }
+      }
+    }
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "case.toml",
+  "description": "Case template definition for simctl",
+  "type": "object",
+  "required": ["case"],
+  "properties": {
+    "case": {
+      "type": "object",
+      "required": ["simulator"],
+      "properties": {
+        "simulator": {
+          "type": "string",
+          "description": "Simulator name (must match simulators.toml)"
+        },
+        "case_dir": {
+          "type": "string",
+          "description": "Path to case template directory"
+        },
+        "input_files": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Input file paths to copy"
+        },
+        "description": {
+          "type": "string",
+          "description": "Case description"
+        }
+      }
+    },
+    "params": {
+      "type": "object",
+      "description": "Default parameter overrides (dot-notation keys)",
+      "additionalProperties": true
+    },
+    "slurm": {
+      "type": "object",
+      "description": "Slurm job parameters",
+      "properties": {
+        "partition": { "type": "string" },
+        "nodes": { "type": "integer" },
+        "ntasks": { "type": "integer" },
+        "cpus_per_task": { "type": "integer" },
+        "time": { "type": "string" },
+        "job_name": { "type": "string" }
+      }
+    }
+  }
+}

@@ -37,6 +37,51 @@ class SimulatorAdapter(ABC):
         }
 
     @classmethod
+    def interactive_config(cls) -> dict[str, Any]:
+        """Interactively prompt the user to build a simulator config.
+
+        Uses typer.prompt() for each configurable field.
+        Override in subclasses for simulator-specific prompts.
+
+        Returns:
+            Configuration dictionary for simulators.toml.
+        """
+        import typer
+
+        defaults = cls.default_config()
+        adapter_name = defaults.get("adapter", "")
+
+        typer.echo(f"\n  Configuring '{adapter_name}' simulator:")
+
+        resolver_mode = typer.prompt(
+            "    Resolver mode (local_executable / local_source / package)",
+            default=defaults.get("resolver_mode", "local_executable"),
+        )
+        executable = typer.prompt(
+            "    Executable path or name",
+            default=defaults.get("executable", ""),
+        )
+
+        config = {
+            "adapter": adapter_name,
+            "resolver_mode": resolver_mode,
+            "executable": executable,
+        }
+
+        if resolver_mode == "local_source":
+            source_repo = typer.prompt("    Source repository path", default="")
+            build_command = typer.prompt("    Build command", default="make -j")
+            config["source_repo"] = source_repo
+            config["build_command"] = build_command
+
+        # Carry over non-prompted defaults (e.g. modules)
+        for key, value in defaults.items():
+            if key not in config:
+                config[key] = value
+
+        return config
+
+    @classmethod
     def pip_packages(cls) -> list[str]:
         """Return pip packages to install for this simulator.
 

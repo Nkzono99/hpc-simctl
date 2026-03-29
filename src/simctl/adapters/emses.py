@@ -96,6 +96,46 @@ class EmseAdapter(SimulatorAdapter):
         }
 
     @classmethod
+    def interactive_config(cls) -> dict[str, Any]:
+        """Interactively prompt for EMSES configuration."""
+        import typer
+
+        typer.echo("\n  Configuring 'emses' simulator (EMSES PIC):")
+
+        resolver_mode = typer.prompt(
+            "    Resolver mode (local_executable / local_source / package)",
+            default="local_executable",
+        )
+        executable = typer.prompt(
+            "    Executable path or name",
+            default="mpiemses3D",
+        )
+
+        config: dict[str, Any] = {
+            "adapter": "emses",
+            "resolver_mode": resolver_mode,
+            "executable": executable,
+            "modules": list(_DEFAULT_MODULES),
+        }
+
+        if resolver_mode == "local_source":
+            config["source_repo"] = typer.prompt(
+                "    EMSES source repository path", default=""
+            )
+            config["build_command"] = typer.prompt(
+                "    Build command", default="make -j"
+            )
+
+        if typer.confirm("    Customize module list?", default=False):
+            modules_str = typer.prompt(
+                "    Modules (comma-separated)",
+                default=", ".join(_DEFAULT_MODULES),
+            )
+            config["modules"] = [m.strip() for m in modules_str.split(",") if m.strip()]
+
+        return config
+
+    @classmethod
     def pip_packages(cls) -> list[str]:
         """Return pip packages for EMSES analysis."""
         return ["emout", "h5py", "matplotlib", "numpy"]

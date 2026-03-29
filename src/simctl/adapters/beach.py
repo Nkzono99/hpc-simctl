@@ -73,6 +73,47 @@ class BeachAdapter(SimulatorAdapter):
         }
 
     @classmethod
+    def interactive_config(cls) -> dict[str, Any]:
+        """Interactively prompt for BEACH configuration."""
+        import typer
+
+        typer.echo("\n  Configuring 'beach' simulator (BEACH BEM):")
+
+        resolver_mode = typer.prompt(
+            "    Resolver mode (local_executable / local_source / package)",
+            default="local_executable",
+        )
+        executable = typer.prompt(
+            "    Executable path or name",
+            default="beach",
+        )
+
+        default_modules = ["intel/2023.2", "intelmpi/2023.2"]
+        config: dict[str, Any] = {
+            "adapter": "beach",
+            "resolver_mode": resolver_mode,
+            "executable": executable,
+            "modules": default_modules,
+        }
+
+        if resolver_mode == "local_source":
+            config["source_repo"] = typer.prompt(
+                "    BEACH source repository path", default=""
+            )
+            config["build_command"] = typer.prompt(
+                "    Build command", default="make build"
+            )
+
+        if typer.confirm("    Customize module list?", default=False):
+            modules_str = typer.prompt(
+                "    Modules (comma-separated)",
+                default=", ".join(default_modules),
+            )
+            config["modules"] = [m.strip() for m in modules_str.split(",") if m.strip()]
+
+        return config
+
+    @classmethod
     def pip_packages(cls) -> list[str]:
         """Return pip packages for BEACH analysis."""
         return ["matplotlib", "numpy", "pandas"]

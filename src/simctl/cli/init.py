@@ -36,6 +36,10 @@ _SKILLS_MD = "SKILLS.md"
 _VSCODE_DIR = ".vscode"
 _VSCODE_SETTINGS = "settings.json"
 
+_SCHEMA_BASE_URL = (
+    "https://raw.githubusercontent.com/Nkzono99/hpc-simctl/main/schemas"
+)
+
 _GITIGNORE_CONTENT = """\
 # Python venv
 .venv/
@@ -540,6 +544,483 @@ run やサーベイの状態を確認・同期する。
 """
 
 
+def _build_usage_md() -> str:
+    """Build simctl usage guide as standalone markdown."""
+    return f"""\
+# simctl 使い方ガイド
+
+HPC シミュレーション実行管理 CLI ツールの使い方。
+
+## 環境構築
+
+```bash
+# uv のインストール
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# .venv 作成
+uv venv
+source .venv/bin/activate
+
+# simctl のインストール
+uv pip install hpc-simctl
+```
+
+## プロジェクト構成
+
+```
+project/
+  simproject.toml       # プロジェクト設定
+  simulators.toml       # シミュレータ定義
+  launchers.toml        # MPI ランチャー設定
+  cases/                # ケーステンプレート
+    my_case/
+      case.toml         # ケース定義
+      plasma.toml       # 入力ファイル (シミュレータ依存)
+  runs/                 # 実行ディレクトリ (自動生成)
+    survey_name/
+      R20260329-0001/   # 各 run
+        manifest.toml   # メタデータ (正本)
+        input/          # 入力ファイル (不変)
+        work/           # 実行出力 (大容量, Git 管理外)
+        analysis/       # 解析結果
+  surveys/              # パラメータサーベイ定義
+    my_survey/
+      survey.toml
+  CLAUDE.md             # AI エージェント用指示書
+  AGENTS.md             # AI エージェント運用ガイド
+  SKILLS.md             # AI エージェント用スキル定義
+```
+
+## コマンド一覧
+
+### プロジェクト管理
+
+#### `simctl init [SIMULATORS...] -p PATH`
+プロジェクトを初期化する。
+
+```bash
+# 基本
+simctl init -p /path/to/project
+
+# シミュレータ指定 (デフォルト設定を生成)
+simctl init emses beach -p /path/to/project
+
+# 対話型モード
+simctl init -i -p /path/to/project
+```
+
+#### `simctl doctor`
+環境と設定の検査。
+
+```bash
+simctl doctor
+```
+
+チェック項目:
+- simproject.toml / simulators.toml / launchers.toml の存在と妥当性
+- sbatch の可用性
+- Simulator Adapter の読み込み
+- Launcher Profile の妥当性
+- run_id の一意性
+
+#### `simctl config show`
+現在の設定を表示。
+
+```bash
+simctl config show
+```
+
+#### `simctl config add-simulator [NAME]`
+シミュレータを対話的に追加。
+
+```bash
+simctl config add-simulator emses
+simctl config add-simulator  # 対話的に選択
+```
+
+#### `simctl config add-launcher`
+ランチャーを対話的に追加。
+
+```bash
+simctl config add-launcher
+```
+
+### Run の生成
+
+#### `simctl create CASE --dest DIR`
+ケーステンプレートから単一の run を生成。
+
+```bash
+simctl create cases/my_case --dest runs/test/
+```
+
+生成される run ディレクトリ:
+```
+runs/test/R20260329-0001/
+  manifest.toml
+  input/
+    plasma.toml  (or beach.toml etc.)
+```
+
+#### `simctl sweep DIR`
+survey.toml から全 run を一括生成 (パラメータの直積展開)。
+
+```bash
+simctl sweep surveys/my_survey/
+```
+
+### survey.toml の書き方
+
+```toml
+#:schema {_SCHEMA_BASE_URL}/survey.json
+[survey]
+case = "cases/my_case"
+description = "パラメータスキャン"
+
+[params]
+# 各キーが直積の軸になる
+"tmgrid.nx" = [64, 128, 256]
+"species.0.temperature" = [1.0e5, 1.0e6]
+# → 3 x 2 = 6 runs 生成
+
+[slurm]
+partition = "normal"
+nodes = 1
+ntasks = 16
+time = "01:00:00"
+```
+
+### Job 投入
+
+#### `simctl submit RUN`
+sbatch で job を投入。
+
+```bash
+simctl submit runs/test/R20260329-0001
+simctl submit runs/test/R20260329-0001 --dry-run  # 確認のみ
+```
+
+#### `simctl submit --all DIR`
+ディレクトリ内の全 run を一括投入。
+
+```bash
+simctl submit --all surveys/my_survey/
+```
+
+### 状態管理
+
+#### `simctl status RUN`
+run の状態を確認。
+
+```bash
+simctl status runs/test/R20260329-0001
+```
+
+#### `simctl sync RUN`
+Slurm から最新の job 状態を取得し manifest.toml に反映。
+
+```bash
+simctl sync runs/test/R20260329-0001
+```
+
+#### `simctl list [PATH]`
+run の一覧を表示。
+
+```bash
+simctl list                    # プロジェクト全体
+simctl list surveys/my_survey  # 特定ディレクトリ
+```
+
+### 解析
+
+#### `simctl summarize RUN`
+run の結果を要約して analysis/ に保存。
+
+```bash
+simctl summarize runs/test/R20260329-0001
+```
+
+#### `simctl collect DIR`
+survey 内の全 run の結果を集計。
+
+```bash
+simctl collect surveys/my_survey/
+```
+
+### 管理
+
+#### `simctl clone RUN --dest DIR`
+run を複製 (パラメータ変更して再実行したいとき)。
+
+```bash
+simctl clone runs/test/R20260329-0001 --dest runs/retry/
+```
+
+#### `simctl archive RUN`
+run をアーカイブ状態に変更。
+
+```bash
+simctl archive runs/test/R20260329-0001
+```
+
+#### `simctl purge-work RUN`
+work/ 内の不要ファイルを削除してディスク容量を確保。
+
+```bash
+simctl purge-work runs/test/R20260329-0001
+```
+
+## 状態遷移
+
+```
+created → submitted → running → completed
+                                    ↓
+created/submitted/running → failed  archived → purged
+submitted/running → cancelled
+```
+
+## case.toml の書き方
+
+```toml
+#:schema {_SCHEMA_BASE_URL}/case.json
+[case]
+simulator = "emses"
+case_dir = "."
+description = "基本ケース"
+
+[params]
+# デフォルトパラメータ (survey.toml で上書き可能)
+"tmgrid.nx" = 64
+"tmgrid.ny" = 64
+"tmgrid.nz" = 64
+
+[slurm]
+partition = "normal"
+nodes = 1
+ntasks = 16
+time = "01:00:00"
+```
+
+## TOML スキーマ
+
+各設定ファイルには `#:schema` コメントでスキーマ URL が付与されています。
+VS Code の Even Better TOML 拡張などでバリデーションと補完が利用できます。
+
+| ファイル | スキーマ |
+|---------|---------|
+| simproject.toml | `{_SCHEMA_BASE_URL}/simproject.json` |
+| simulators.toml | `{_SCHEMA_BASE_URL}/simulators.json` |
+| launchers.toml | `{_SCHEMA_BASE_URL}/launchers.json` |
+| case.toml | `{_SCHEMA_BASE_URL}/case.json` |
+| survey.toml | `{_SCHEMA_BASE_URL}/survey.json` |
+| manifest.toml | `{_SCHEMA_BASE_URL}/manifest.json` |
+
+## よくあるワークフロー
+
+### 新しいパラメータサーベイを実行
+
+```bash
+# 1. ケーステンプレートを作成
+mkdir -p cases/new_case
+# case.toml と入力ファイルを配置
+
+# 2. survey.toml を作成
+mkdir -p surveys/param_scan
+# survey.toml を作成
+
+# 3. run を一括生成
+simctl sweep surveys/param_scan/
+
+# 4. 確認
+simctl list surveys/param_scan/
+
+# 5. 一括投入
+simctl submit --all surveys/param_scan/
+
+# 6. 状態監視
+simctl list surveys/param_scan/
+
+# 7. 完了後に結果集計
+simctl collect surveys/param_scan/
+```
+
+### 失敗した run を再実行
+
+```bash
+# 1. 状態とログを確認
+simctl status runs/.../Rxxxx
+cat runs/.../Rxxxx/work/*.err
+
+# 2. clone して再実行
+simctl clone runs/.../Rxxxx --dest runs/retry/
+
+# 3. 投入
+simctl submit runs/retry/R...
+```
+"""
+
+
+def _prompt_simulators() -> tuple[list[str], dict[str, dict[str, Any]]]:
+    """Interactively prompt the user to select and configure simulators.
+
+    Returns:
+        Tuple of (simulator_names, {name: config_dict}).
+    """
+    from simctl.adapters.registry import get_global_registry
+
+    import simctl.adapters  # noqa: F401
+
+    registry = get_global_registry()
+    available = registry.list_adapters()
+
+    typer.echo("\nAvailable simulators:")
+    for i, name in enumerate(available, 1):
+        typer.echo(f"  {i}. {name}")
+
+    selection = typer.prompt(
+        "\nSelect simulators (comma-separated numbers or names, Enter to skip)",
+        default="",
+    )
+
+    if not selection.strip():
+        return [], {}
+
+    # Parse selection — accept both numbers and names
+    selected: list[str] = []
+    for token in selection.split(","):
+        token = token.strip()
+        if not token:
+            continue
+        if token.isdigit():
+            idx = int(token) - 1
+            if 0 <= idx < len(available):
+                selected.append(available[idx])
+            else:
+                typer.echo(f"  Warning: ignoring invalid number '{token}'")
+        elif token in available:
+            selected.append(token)
+        else:
+            typer.echo(f"  Warning: unknown simulator '{token}', skipping")
+
+    if not selected:
+        return [], {}
+
+    # Interactive config for each selected simulator
+    use_interactive = typer.confirm(
+        "\nCustomize simulator settings?", default=False
+    )
+
+    configs: dict[str, dict[str, Any]] = {}
+    for sim_name in selected:
+        adapter_cls = registry.get(sim_name)
+        if use_interactive:
+            configs[sim_name] = adapter_cls.interactive_config()
+        else:
+            configs[sim_name] = adapter_cls.default_config()
+
+    return selected, configs
+
+
+def _prompt_launchers() -> dict[str, dict[str, Any]]:
+    """Interactively prompt for launcher configuration.
+
+    Returns:
+        Launcher config dict for launchers.toml.
+    """
+    typer.echo("\nAvailable launcher types:")
+    typer.echo("  1. srun (Slurm)")
+    typer.echo("  2. mpirun (OpenMPI)")
+    typer.echo("  3. mpiexec (MPICH)")
+
+    selection = typer.prompt(
+        "\nSelect launcher type (number or name, Enter to skip)",
+        default="",
+    )
+
+    launcher_map = {"1": "srun", "2": "mpirun", "3": "mpiexec"}
+    launcher_type = launcher_map.get(selection.strip(), selection.strip())
+
+    if not launcher_type:
+        return {}
+
+    if launcher_type not in ("srun", "mpirun", "mpiexec"):
+        typer.echo(f"  Unknown launcher '{launcher_type}', skipping")
+        return {}
+
+    launcher_name = typer.prompt("  Launcher profile name", default="default")
+
+    config: dict[str, Any] = {"type": launcher_type}
+
+    if launcher_type == "srun":
+        config["args"] = typer.prompt(
+            "  Extra srun arguments (e.g. --mpi=pmix)", default=""
+        )
+    elif launcher_type in ("mpirun", "mpiexec"):
+        config["args"] = typer.prompt(
+            f"  Extra {launcher_type} arguments", default=""
+        )
+
+    # Clean empty args
+    if not config.get("args"):
+        config.pop("args", None)
+
+    return {launcher_name: config}
+
+
+def _build_simulators_toml_from_configs(
+    configs: dict[str, dict[str, Any]],
+) -> str:
+    """Serialize simulator configs to TOML string."""
+    full_config: dict[str, Any] = {"simulators": configs}
+
+    if tomli_w is None:
+        lines = ["[simulators]", ""]
+        for sim_name, sim_cfg in configs.items():
+            lines.append(f"[simulators.{sim_name}]")
+            for key, value in sim_cfg.items():
+                if isinstance(value, list):
+                    items = ", ".join(f'"{v}"' for v in value)
+                    lines.append(f"{key} = [{items}]")
+                elif isinstance(value, str):
+                    lines.append(f'{key} = "{value}"')
+                else:
+                    lines.append(f"{key} = {value}")
+            lines.append("")
+        return "\n".join(lines) + "\n"
+
+    import io
+
+    buf = io.BytesIO()
+    tomli_w.dump(full_config, buf)
+    return buf.getvalue().decode("utf-8")
+
+
+def _build_launchers_toml(launchers: dict[str, dict[str, Any]]) -> str:
+    """Serialize launcher configs to TOML string."""
+    if not launchers:
+        return "[launchers]\n"
+
+    full_config: dict[str, Any] = {"launchers": launchers}
+
+    if tomli_w is None:
+        lines = ["[launchers]", ""]
+        for name, cfg in launchers.items():
+            lines.append(f"[launchers.{name}]")
+            for key, value in cfg.items():
+                if isinstance(value, str):
+                    lines.append(f'{key} = "{value}"')
+                else:
+                    lines.append(f"{key} = {value}")
+            lines.append("")
+        return "\n".join(lines) + "\n"
+
+    import io
+
+    buf = io.BytesIO()
+    tomli_w.dump(full_config, buf)
+    return buf.getvalue().decode("utf-8")
+
+
 def init(
     simulators: Annotated[
         Optional[list[str]],
@@ -553,41 +1034,77 @@ def init(
         Optional[str],
         typer.Option("--name", "-n", help="Project name (defaults to directory name)."),
     ] = None,
+    interactive: Annotated[
+        bool,
+        typer.Option("--interactive", "-i", help="Use interactive prompts."),
+    ] = False,
 ) -> None:
     """Initialize a new simctl project (simproject.toml etc.).
 
     Optionally specify simulator names to generate default simulators.toml
     entries. Example: simctl init emses beach
+
+    Use --interactive / -i for guided setup with prompts.
     """
     project_dir = (path or Path.cwd()).resolve()
 
     if not project_dir.exists():
         project_dir.mkdir(parents=True)
 
-    project_name = name or project_dir.name
+    # Interactive project name
+    if interactive and not name:
+        project_name = typer.prompt(
+            "Project name", default=project_dir.name
+        )
+    else:
+        project_name = name or project_dir.name
 
     created: list[str] = []
     skipped: list[str] = []
 
     # simproject.toml
-    simproject_content = f'[project]\nname = "{project_name}"\ndescription = ""\n'
+    simproject_content = (
+        f'#:schema {_SCHEMA_BASE_URL}/simproject.json\n'
+        f'[project]\nname = "{project_name}"\ndescription = ""\n'
+    )
     if _write_if_missing(project_dir / _SIMPROJECT_FILE, simproject_content):
         created.append(_SIMPROJECT_FILE)
     else:
         skipped.append(_SIMPROJECT_FILE)
 
     # simulators.toml
+    sim_configs: dict[str, dict[str, Any]] = {}
+    sim_names: list[str] = []
+
     if simulators:
+        sim_names = simulators
         sim_content = _build_simulators_toml(simulators)
+    elif interactive:
+        sim_names, sim_configs = _prompt_simulators()
+        if sim_configs:
+            sim_content = _build_simulators_toml_from_configs(sim_configs)
+        else:
+            sim_content = "[simulators]\n"
     else:
         sim_content = "[simulators]\n"
+
+    sim_schema = f"#:schema {_SCHEMA_BASE_URL}/simulators.json\n"
+    sim_content = sim_schema + sim_content
     if _write_if_missing(project_dir / _SIMULATORS_FILE, sim_content):
         created.append(_SIMULATORS_FILE)
     else:
         skipped.append(_SIMULATORS_FILE)
 
     # launchers.toml
-    if _write_if_missing(project_dir / _LAUNCHERS_FILE, "[launchers]\n"):
+    if interactive:
+        launcher_configs = _prompt_launchers()
+        launcher_content = _build_launchers_toml(launcher_configs)
+    else:
+        launcher_content = "[launchers]\n"
+
+    launcher_schema = f"#:schema {_SCHEMA_BASE_URL}/launchers.json\n"
+    launcher_content = launcher_schema + launcher_content
+    if _write_if_missing(project_dir / _LAUNCHERS_FILE, launcher_content):
         created.append(_LAUNCHERS_FILE)
     else:
         skipped.append(_LAUNCHERS_FILE)
@@ -603,6 +1120,16 @@ def init(
         created.append("runs/")
     else:
         skipped.append("runs/")
+
+    # docs/simctl-guide.md
+    docs_dir = project_dir / "docs"
+    guide_path = docs_dir / "simctl-guide.md"
+    if guide_path.exists():
+        skipped.append("docs/simctl-guide.md")
+    else:
+        docs_dir.mkdir(exist_ok=True)
+        guide_path.write_text(_build_usage_md(), encoding="utf-8")
+        created.append("docs/simctl-guide.md")
 
     # .gitignore
     if _write_if_missing(project_dir / ".gitignore", _GITIGNORE_CONTENT):

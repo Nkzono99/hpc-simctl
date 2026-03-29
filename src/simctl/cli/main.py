@@ -6,6 +6,7 @@ import typer
 
 from simctl.cli.analyze import collect, summarize
 from simctl.cli.clone import clone
+from simctl.cli.config import config_app
 from simctl.cli.create import create, sweep
 from simctl.cli.init import doctor, init
 from simctl.cli.list import list_runs
@@ -21,6 +22,7 @@ app = typer.Typer(
 
 app.command("init")(init)
 app.command("doctor")(doctor)
+app.add_typer(config_app, name="config")
 app.command("create")(create)
 app.command("sweep")(sweep)
 app.command("submit")(submit)
