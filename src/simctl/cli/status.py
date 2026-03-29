@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Optional
 
 import typer
 
@@ -59,9 +59,9 @@ def _resolve_run_dir(identifier: str) -> Path:
 
 def status(
     run: Annotated[
-        str,
-        typer.Argument(help="Run directory or run_id to check."),
-    ],
+        Optional[str],
+        typer.Argument(help="Run directory or run_id (defaults to cwd)."),
+    ] = None,
 ) -> None:
     """Show the current status of a run.
 
@@ -69,7 +69,15 @@ def status(
     recorded, also queries Slurm for the live job state. Does NOT
     update the manifest (use ``simctl sync`` for that).
     """
-    run_dir = _resolve_run_dir(run)
+    if run is None:
+        cwd = Path.cwd().resolve()
+        if (cwd / "manifest.toml").exists():
+            run_dir = cwd
+        else:
+            typer.echo("Error: No manifest.toml in cwd. Specify a run.")
+            raise typer.Exit(code=1)
+    else:
+        run_dir = _resolve_run_dir(run)
 
     try:
         manifest = read_manifest(run_dir)
@@ -102,16 +110,24 @@ def status(
 
 def sync(
     run: Annotated[
-        str,
-        typer.Argument(help="Run directory or run_id to sync Slurm state."),
-    ],
+        Optional[str],
+        typer.Argument(help="Run directory or run_id (defaults to cwd)."),
+    ] = None,
 ) -> None:
     """Synchronize Slurm job state into the run manifest.
 
     Queries Slurm for the current job state and updates both
     manifest.toml and status/state.json if the state has changed.
     """
-    run_dir = _resolve_run_dir(run)
+    if run is None:
+        cwd = Path.cwd().resolve()
+        if (cwd / "manifest.toml").exists():
+            run_dir = cwd
+        else:
+            typer.echo("Error: No manifest.toml in cwd. Specify a run.")
+            raise typer.Exit(code=1)
+    else:
+        run_dir = _resolve_run_dir(run)
 
     try:
         manifest = read_manifest(run_dir)

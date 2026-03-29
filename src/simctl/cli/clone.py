@@ -16,22 +16,29 @@ from simctl.core.state import RunState
 
 
 def clone(
-    run: str = typer.Argument(..., help="Run directory or run_id to clone."),
+    run: str = typer.Argument(None, help="Run directory or run_id (defaults to cwd)."),
     dest: Optional[Path] = typer.Option(
-        None, "--dest", help="Destination directory for the cloned run."
+        None, "--dest", "-d", help="Destination directory (defaults to cwd)."
     ),
     set_params: Optional[list[str]] = typer.Option(
         None, "--set", help="Override parameters as key=value."
     ),
 ) -> None:
     """Clone a run, optionally modifying parameters."""
-    search_dir = Path.cwd()
-
-    try:
-        source_dir = resolve_run(run, search_dir)
-    except SimctlError as e:
-        typer.echo(f"Error: {e}", err=True)
-        raise typer.Exit(code=1) from None
+    if run is None:
+        cwd = Path.cwd().resolve()
+        if (cwd / "manifest.toml").exists():
+            source_dir = cwd
+        else:
+            typer.echo("Error: No manifest.toml in cwd. Specify a run.", err=True)
+            raise typer.Exit(code=1)
+    else:
+        search_dir = Path.cwd()
+        try:
+            source_dir = resolve_run(run, search_dir)
+        except SimctlError as e:
+            typer.echo(f"Error: {e}", err=True)
+            raise typer.Exit(code=1) from None
 
     try:
         source_manifest = read_manifest(source_dir)

@@ -14,14 +14,7 @@ from simctl.core.state import RunState, update_state
 
 
 def _get_dir_size(dir_path: Path) -> int:
-    """Calculate total size of files in a directory tree.
-
-    Args:
-        dir_path: Directory path.
-
-    Returns:
-        Total size in bytes.
-    """
+    """Calculate total size of files in a directory tree."""
     if not dir_path.is_dir():
         return 0
     total = 0
@@ -32,14 +25,7 @@ def _get_dir_size(dir_path: Path) -> int:
 
 
 def _format_size(size_bytes: int) -> str:
-    """Format a byte count as a human-readable string.
-
-    Args:
-        size_bytes: Size in bytes.
-
-    Returns:
-        Formatted string like "1.5 MB".
-    """
+    """Format a byte count as a human-readable string."""
     value = float(size_bytes)
     for unit in ("B", "KB", "MB", "GB", "TB"):
         if value < 1024:
@@ -48,17 +34,26 @@ def _format_size(size_bytes: int) -> str:
     return f"{value:.1f} PB"
 
 
-def archive(
-    run: str = typer.Argument(..., help="Run directory or run_id to archive."),
-) -> None:
-    """Archive a completed run."""
-    search_dir = Path.cwd()
-
+def _resolve_run_or_cwd(run: str | None) -> Path:
+    """Resolve a run argument or fall back to cwd."""
+    if run is None:
+        cwd = Path.cwd().resolve()
+        if (cwd / "manifest.toml").exists():
+            return cwd
+        typer.echo("Error: No manifest.toml in cwd. Specify a run.", err=True)
+        raise typer.Exit(code=1)
     try:
-        run_dir = resolve_run(run, search_dir)
+        return resolve_run(run, Path.cwd())
     except SimctlError as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=1) from None
+
+
+def archive(
+    run: str = typer.Argument(None, help="Run directory or run_id (defaults to cwd)."),
+) -> None:
+    """Archive a completed run."""
+    run_dir = _resolve_run_or_cwd(run)
 
     try:
         manifest = read_manifest(run_dir)
@@ -87,17 +82,11 @@ def archive(
 
 def purge_work(
     run: str = typer.Argument(
-        ..., help="Run directory or run_id to purge work files from."
+        None, help="Run directory or run_id (defaults to cwd)."
     ),
 ) -> None:
     """Remove unnecessary files from a run's work/ directory."""
-    search_dir = Path.cwd()
-
-    try:
-        run_dir = resolve_run(run, search_dir)
-    except SimctlError as e:
-        typer.echo(f"Error: {e}", err=True)
-        raise typer.Exit(code=1) from None
+    run_dir = _resolve_run_or_cwd(run)
 
     try:
         manifest = read_manifest(run_dir)

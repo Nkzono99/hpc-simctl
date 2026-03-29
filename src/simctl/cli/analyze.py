@@ -15,16 +15,23 @@ from simctl.core.manifest import read_manifest
 
 
 def summarize(
-    run: str = typer.Argument(..., help="Run directory or run_id to summarize."),
+    run: str = typer.Argument(None, help="Run directory or run_id (defaults to cwd)."),
 ) -> None:
     """Generate or update analysis/summary.json for a run."""
-    search_dir = Path.cwd()
-
-    try:
-        run_dir = resolve_run(run, search_dir)
-    except SimctlError as e:
-        typer.echo(f"Error: {e}", err=True)
-        raise typer.Exit(code=1) from None
+    if run is None:
+        cwd = Path.cwd().resolve()
+        if (cwd / "manifest.toml").exists():
+            run_dir = cwd
+        else:
+            typer.echo("Error: No manifest.toml in cwd. Specify a run.", err=True)
+            raise typer.Exit(code=1)
+    else:
+        search_dir = Path.cwd()
+        try:
+            run_dir = resolve_run(run, search_dir)
+        except SimctlError as e:
+            typer.echo(f"Error: {e}", err=True)
+            raise typer.Exit(code=1) from None
 
     try:
         manifest = read_manifest(run_dir)
@@ -74,10 +81,12 @@ def summarize(
 
 def collect(
     survey_dir: Path = typer.Argument(
-        ..., help="Survey directory to collect summaries from."
+        None, help="Survey directory (defaults to cwd)."
     ),
 ) -> None:
     """Collect summaries from all runs in a survey into a CSV."""
+    if survey_dir is None:
+        survey_dir = Path.cwd()
     if not survey_dir.is_dir():
         typer.echo(f"Error: directory not found: {survey_dir}", err=True)
         raise typer.Exit(code=1)

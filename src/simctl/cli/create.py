@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Optional
 
 import typer
 
@@ -319,18 +319,36 @@ def _generate_run(
 def create(
     case_name: Annotated[
         str,
-        typer.Argument(help="Name of the case to create a run from."),
+        typer.Argument(
+            help=(
+                "Case name to create a run from, or 'survey' to expand "
+                "survey.toml in the current directory."
+            ),
+        ),
     ],
     dest: Annotated[
-        Path,
-        typer.Option("--dest", help="Destination survey directory."),
-    ],
+        Optional[Path],
+        typer.Option("--dest", "-d", help="Destination directory (defaults to cwd)."),
+    ] = None,
 ) -> None:
-    """Create a single run from a case definition."""
-    dest = dest.resolve()
+    """Create run(s) in the current directory.
 
+    Examples:
+      cd runs/experiment && simctl create flat_surface
+      cd runs/mag_scan   && simctl create survey
+    """
+    target_dir = (dest or Path.cwd()).resolve()
+
+    if case_name == "survey":
+        _create_survey(target_dir)
+    else:
+        _create_single(case_name, target_dir)
+
+
+def _create_single(case_name: str, target_dir: Path) -> None:
+    """Create a single run from a case template."""
     # Load project
-    project = _load_project_config(dest)
+    project = _load_project_config(target_dir)
 
     # Resolve and load case
     try:
@@ -349,12 +367,12 @@ def create(
     existing_ids = collect_existing_run_ids(runs_dir)
 
     # Ensure destination exists
-    dest.mkdir(parents=True, exist_ok=True)
+    target_dir.mkdir(parents=True, exist_ok=True)
 
     # Generate the run
     try:
         run_info = _generate_run(
-            parent_dir=dest,
+            parent_dir=target_dir,
             case_data=case_data,
             project=project,
             adapter=adapter,
@@ -371,15 +389,8 @@ def create(
     typer.echo(f"  Path: {run_info.run_dir}")
 
 
-def sweep(
-    survey_dir: Annotated[
-        Path,
-        typer.Argument(help="Directory containing survey.toml."),
-    ],
-) -> None:
-    """Generate all runs from a survey.toml parameter sweep."""
-    survey_dir = survey_dir.resolve()
-
+def _create_survey(survey_dir: Path) -> None:
+    """Expand survey.toml into multiple runs."""
     # Load project
     project = _load_project_config(survey_dir)
 
@@ -415,7 +426,6 @@ def sweep(
     existing_ids = collect_existing_run_ids(runs_dir)
 
     # Override case_data with survey-level settings where appropriate
-    # Build a modified CaseData that reflects survey overrides
     effective_case = CaseData(
         name=case_data.name,
         simulator=simulator_name,
@@ -436,10 +446,7 @@ def sweep(
     created_runs: list[RunInfo] = []
 
     for combo in combinations:
-        # Merge base case params with sweep params (sweep overrides)
         merged_params = {**case_data.params, **combo}
-
-        # Generate display_name from naming template
         display_name = generate_display_name(survey_data.naming_template, merged_params)
 
         try:
@@ -460,8 +467,22 @@ def sweep(
             typer.echo(f"Error creating run for {combo}: {exc}", err=True)
             raise typer.Exit(code=1) from exc
 
-    # Print summary
     typer.echo(f"Created {len(created_runs)} runs in {survey_dir}")
     for run_info in created_runs:
         name_part = f" ({run_info.display_name})" if run_info.display_name else ""
         typer.echo(f"  {run_info.run_id}{name_part}")
+
+
+# Keep sweep as an alias for backwards compatibility
+def sweep(
+    survey_dir: Annotated[
+        Optional[Path],
+        typer.Argument(help="Directory containing survey.toml (defaults to cwd)."),
+    ] = None,
+) -> None:
+    """Generate all runs from a survey.toml parameter sweep.
+
+    Alias for 'simctl create survey'. Kept for backwards compatibility.
+    """
+    target = (survey_dir or Path.cwd()).resolve()
+    _create_survey(target)

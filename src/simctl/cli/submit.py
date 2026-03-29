@@ -156,29 +156,96 @@ def _submit_single_run(run_dir: Path, *, quiet: bool = False) -> str | None:
     return job_id
 
 
-def submit(
+def run_cmd(
     run: Annotated[
         Optional[str],
-        typer.Argument(help="Run directory or run_id to submit."),
+        typer.Argument(help="Run directory or run_id (defaults to cwd)."),
     ] = None,
     all_runs: Annotated[
         bool,
-        typer.Option("--all", help="Submit all created runs in a survey directory."),
+        typer.Option("--all", help="Submit all created runs in current directory."),
     ] = False,
-    survey_dir: Annotated[
-        Optional[Path],
-        typer.Option("--survey-dir", help="Survey directory (used with --all)."),
-    ] = None,
     dry_run: Annotated[
         bool,
         typer.Option("--dry-run", help="Show what would be submitted."),
     ] = False,
 ) -> None:
-    """Submit a run or all runs in a survey via sbatch."""
+    """Submit a run or all runs via sbatch.
+
+    Examples:
+      cd runs/experiment/R0001 && simctl run
+      cd runs/mag_scan && simctl run --all
+    """
     if all_runs:
-        _submit_all(run, survey_dir, dry_run=dry_run)
+        target = Path(run) if run else None
+        _submit_all_cwd(target, dry_run=dry_run)
+    elif run is None:
+        # No argument: try to submit cwd as a run
+        _submit_single_cwd(dry_run=dry_run)
     else:
         _submit_single(run, dry_run=dry_run)
+
+
+# Keep submit as alias
+def submit(
+    run: Annotated[
+        Optional[str],
+        typer.Argument(help="Run directory or run_id (defaults to cwd)."),
+    ] = None,
+    all_runs: Annotated[
+        bool,
+        typer.Option("--all", help="Submit all created runs in current directory."),
+    ] = False,
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Show what would be submitted."),
+    ] = False,
+) -> None:
+    """Submit a run (alias for 'simctl run')."""
+    run_cmd(run=run, all_runs=all_runs, dry_run=dry_run)
+
+
+def _submit_single_cwd(*, dry_run: bool = False) -> None:
+    """Submit the run in the current directory."""
+    cwd = Path.cwd().resolve()
+    # Check if cwd itself is a run (has manifest.toml)
+    if (cwd / "manifest.toml").exists():
+        run_dir = cwd
+    else:
+        # Try to find a single run in cwd
+        run_dirs = discover_runs(cwd)
+        if len(run_dirs) == 1:
+            run_dir = run_dirs[0]
+        elif len(run_dirs) > 1:
+            typer.echo(
+                f"Multiple runs found in {cwd}. "
+                "Use 'simctl run --all' or specify a run."
+            )
+            raise typer.Exit(code=1)
+        else:
+            typer.echo(f"No run found in {cwd}")
+            raise typer.Exit(code=1)
+
+    if dry_run:
+        job_script = run_dir / "submit" / "job.sh"
+        typer.echo(f"Would submit: {run_dir}")
+        typer.echo(f"  Job script: {job_script}")
+        typer.echo(f"  Exists: {job_script.exists()}")
+        return
+
+    result = _submit_single_run(run_dir)
+    if result is None:
+        raise typer.Exit(code=1)
+
+
+def _submit_all_cwd(
+    target: Path | None,
+    *,
+    dry_run: bool = False,
+) -> None:
+    """Submit all runs in the given directory or cwd."""
+    target_dir = (target or Path.cwd()).resolve()
+    _submit_all(None, target_dir, dry_run=dry_run)
 
 
 def _submit_single(run_arg: str | None, *, dry_run: bool = False) -> None:
@@ -219,15 +286,14 @@ def _submit_all(
         survey_dir_opt: Explicit --survey-dir option.
         dry_run: If True, only show what would happen.
     """
-    # Determine the survey directory from arguments
+    # Determine the target directory from arguments (fallback to cwd)
     target_dir: Path | None = None
     if survey_dir_opt is not None:
         target_dir = survey_dir_opt
     elif run_arg is not None:
         target_dir = Path(run_arg)
     else:
-        typer.echo("Error: Provide a directory argument or --survey-dir with --all.")
-        raise typer.Exit(code=1)
+        target_dir = Path.cwd()
 
     if not target_dir.is_dir():
         typer.echo(f"Error: Directory not found: {target_dir}")
