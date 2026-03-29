@@ -37,28 +37,30 @@ INPUT_DIR = "input"
 WORK_DIR = "work"
 
 # Known EMSES ASCII diagnostic file names
-_DIAGNOSTIC_FILES = frozenset({
-    "energy",
-    "energy1",
-    "energy2",
-    "ewave",
-    "chgacm1",
-    "chgacm2",
-    "chgmov",
-    "influx",
-    "isflux",
-    "noflux",
-    "icur",
-    "ocur",
-    "currnt",
-    "seyield",
-    "volt",
-    "pbody",
-    "pbodyr",
-    "pbodyd",
-    "oltime",
-    "nesc",
-})
+_DIAGNOSTIC_FILES = frozenset(
+    {
+        "energy",
+        "energy1",
+        "energy2",
+        "ewave",
+        "chgacm1",
+        "chgacm2",
+        "chgmov",
+        "influx",
+        "isflux",
+        "noflux",
+        "icur",
+        "ocur",
+        "currnt",
+        "seyield",
+        "volt",
+        "pbody",
+        "pbodyr",
+        "pbodyd",
+        "oltime",
+        "nesc",
+    }
+)
 
 # Default module set for the HPC environment
 _DEFAULT_MODULES = [
@@ -142,7 +144,7 @@ class EmseAdapter(SimulatorAdapter):
             "case.toml": (
                 '[case]\nname = ""\nsimulator = "emses"\n'
                 'launcher = "default"\ndescription = ""\n'
-                'copy_files = []\n\n'
+                "copy_files = []\n\n"
                 "[params]\n"
                 '# "tmgrid.nx" = 64\n'
                 '# "tmgrid.ny" = 64\n'
@@ -162,7 +164,7 @@ class EmseAdapter(SimulatorAdapter):
                 "nx = 64\nny = 64\nnz = 64\n"
                 "dt = 1.0\n\n"
                 "[[species]]\n"
-                "name = \"electron\"\n"
+                'name = "electron"\n'
                 "# charge, mass, temperature, density, etc.\n\n"
                 "[emfield]\n"
                 "# External field configuration\n"
@@ -178,6 +180,16 @@ class EmseAdapter(SimulatorAdapter):
             "h5py",
             "matplotlib",
             "numpy",
+        ]
+
+    @classmethod
+    def doc_repos(cls) -> list[tuple[str, str]]:
+        """Return documentation repos for EMSES."""
+        return [
+            (
+                "https://github.com/CS12-Laboratory/MPIEMSES3D.git",
+                "MPIEMSES3D",
+            ),
         ]
 
     @classmethod
@@ -405,9 +417,7 @@ srun mpiemses3D plasma.toml
         # HDF5 field files
         h5_files = sorted(work_dir.glob("*.h5"))
         if h5_files:
-            outputs["hdf5_fields"] = [
-                str(f.relative_to(run_dir)) for f in h5_files
-            ]
+            outputs["hdf5_fields"] = [str(f.relative_to(run_dir)) for f in h5_files]
 
         # ASCII diagnostics
         diag_files: list[str] = []
@@ -423,9 +433,7 @@ srun mpiemses3D plasma.toml
         if snapshot_dir.is_dir():
             snap_files = sorted(snapshot_dir.glob("esdat*.h5"))
             if snap_files:
-                outputs["snapshots"] = [
-                    str(f.relative_to(run_dir)) for f in snap_files
-                ]
+                outputs["snapshots"] = [str(f.relative_to(run_dir)) for f in snap_files]
 
         # Log files
         logs: list[str] = []
@@ -512,8 +520,7 @@ srun mpiemses3D plasma.toml
         # Count outputs by category
         outputs = self.detect_outputs(run_dir)
         summary["output_counts"] = {
-            k: len(v) if isinstance(v, list) else 1
-            for k, v in outputs.items()
+            k: len(v) if isinstance(v, list) else 1 for k, v in outputs.items()
         }
 
         # Energy diagnostics

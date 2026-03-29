@@ -120,7 +120,7 @@ class BeachAdapter(SimulatorAdapter):
             "case.toml": (
                 '[case]\nname = ""\nsimulator = "beach"\n'
                 'launcher = "default"\ndescription = ""\n'
-                'copy_files = []\n\n'
+                "copy_files = []\n\n"
                 "[params]\n"
                 '# "sim.dt" = 1.0e-6\n'
                 '# "sim.max_step" = 1000\n'
@@ -144,7 +144,7 @@ class BeachAdapter(SimulatorAdapter):
                 "ion_density = 1.0e12\n"
                 "ion_temperature = 1.0\n\n"
                 "[output]\n"
-                '# dir is set automatically by simctl\n'
+                "# dir is set automatically by simctl\n"
             ),
         }
 
@@ -156,6 +156,16 @@ class BeachAdapter(SimulatorAdapter):
             "matplotlib",
             "numpy",
             "pandas",
+        ]
+
+    @classmethod
+    def doc_repos(cls) -> list[tuple[str, str]]:
+        """Return documentation repos for BEACH."""
+        return [
+            (
+                "https://github.com/Nkzono99/beach.git",
+                "beach",
+            ),
         ]
 
     @classmethod
@@ -513,8 +523,7 @@ OMP_PLACES=cores
         # Output counts
         outputs = self.detect_outputs(run_dir)
         summary["output_counts"] = {
-            k: len(v) if isinstance(v, list) else 1
-            for k, v in outputs.items()
+            k: len(v) if isinstance(v, list) else 1 for k, v in outputs.items()
         }
 
         # Config parameters

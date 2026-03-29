@@ -133,11 +133,13 @@ class TestInit:
         assert "シミュレータ固有知識" not in content
 
     def test_init_agents_md(self, tmp_path: Path) -> None:
-        """AGENTS.md contains agent workflow guidelines."""
+        """AGENTS.md is a symlink to CLAUDE.md."""
         runner.invoke(app, ["init", "emses", "-y", "--path", str(tmp_path)])
-        content = (tmp_path / "AGENTS.md").read_text()
-        assert "エージェントの役割" in content
-        assert "emses" in content
+        agents_path = tmp_path / "AGENTS.md"
+        assert agents_path.is_symlink()
+        assert agents_path.resolve() == (tmp_path / "CLAUDE.md").resolve()
+        content = agents_path.read_text()
+        assert "simctl" in content
 
     def test_init_skills_md(self, tmp_path: Path) -> None:
         """SKILLS.md contains skill definitions."""

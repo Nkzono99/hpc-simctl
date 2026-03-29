@@ -115,6 +115,21 @@ class SimulatorAdapter(ABC):
         return []
 
     @classmethod
+    def doc_repos(cls) -> list[tuple[str, str]]:
+        """Return documentation/reference repositories to clone.
+
+        Override in subclasses to list Git repositories that contain
+        parameter references, usage examples, or documentation that
+        AI agents and users can consult.
+
+        Returns:
+            List of ``(clone_url, dest_dir_name)`` tuples.
+            ``dest_dir_name`` is the directory name under the project's
+            ``refs/`` directory.
+        """
+        return []
+
+    @classmethod
     def agent_guide(cls) -> str:
         """Return AI agent guide for this simulator as markdown.
 
