@@ -17,6 +17,7 @@ from simctl.cli.log import log
 from simctl.cli.manage import archive, purge_work
 from simctl.cli.status import status, sync
 from simctl.cli.submit import run_cmd
+from simctl.cli.update import update
 
 app = typer.Typer(
     name="simctl",
@@ -42,6 +43,7 @@ app.command("summarize")(summarize)
 app.command("collect")(collect)
 app.command("archive")(archive)
 app.command("purge-work")(purge_work)
+app.command("update")(update)
 
 if __name__ == "__main__":
     app()
