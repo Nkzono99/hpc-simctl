@@ -589,6 +589,58 @@ srun mpiemses3D plasma.toml
         """Return default environment variables for EMSES."""
         return {"EMSES_DEBUG": "no"}
 
+    def setup_continuation(
+        self,
+        source_dir: Path,
+        new_dir: Path,
+        nstep_override: int | None = None,
+    ) -> dict[str, Any]:
+        """Set up EMSES continuation from snapshot.
+
+        Links SNAPSHOT1 from source as SNAPSHOT0 in new run,
+        and updates jobcon.jobnum for restart.
+
+        Args:
+            source_dir: Completed run directory.
+            new_dir: New run directory.
+            nstep_override: Override nstep if given.
+
+        Returns:
+            Info dict with continuation details.
+        """
+        info: dict[str, Any] = {}
+        work_dir = new_dir / WORK_DIR
+        work_dir.mkdir(parents=True, exist_ok=True)
+
+        # Link SNAPSHOT1 -> SNAPSHOT0
+        source_snapshot = source_dir / WORK_DIR / "SNAPSHOT1"
+        if source_snapshot.is_dir():
+            target_link = work_dir / "SNAPSHOT0"
+            if not target_link.exists():
+                target_link.symlink_to(source_snapshot.resolve())
+                info["snapshot_link"] = f"SNAPSHOT0 -> {source_snapshot}"
+
+        # Update plasma.toml for restart
+        plasma_toml = new_dir / INPUT_DIR / "plasma.toml"
+        if plasma_toml.is_file() and tomli_w is not None:
+            with open(plasma_toml, "rb") as f:
+                config = tomllib.load(f)
+
+            # Set jobnum = [1, 1] for restart
+            if "jobcon" not in config:
+                config["jobcon"] = {}
+            config["jobcon"]["jobnum"] = [1, 1]
+            info["jobnum"] = [1, 1]
+
+            if nstep_override is not None:
+                config["jobcon"]["nstep"] = nstep_override
+                info["nstep"] = nstep_override
+
+            with open(plasma_toml, "wb") as f:
+                tomli_w.dump(config, f)
+
+        return info
+
     # ------------------------------------------------------------------
     # Internal
     # ------------------------------------------------------------------

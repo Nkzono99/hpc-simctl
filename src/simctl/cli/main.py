@@ -8,8 +8,12 @@ from simctl.cli.analyze import collect, summarize
 from simctl.cli.clone import clone
 from simctl.cli.config import config_app
 from simctl.cli.create import create, sweep
+from simctl.cli.extend import extend
+from simctl.cli.history import history
 from simctl.cli.init import doctor, init
+from simctl.cli.jobs import jobs
 from simctl.cli.list import list_runs
+from simctl.cli.log import log
 from simctl.cli.manage import archive, purge_work
 from simctl.cli.status import status, sync
 from simctl.cli.submit import run_cmd, submit
@@ -27,10 +31,14 @@ app.command("create")(create)
 app.command("sweep")(sweep)
 app.command("run")(run_cmd)
 app.command("submit")(submit)
+app.command("log")(log)
 app.command("status")(status)
 app.command("sync")(sync)
+app.command("jobs")(jobs)
+app.command("history")(history)
 app.command("list")(list_runs)
 app.command("clone")(clone)
+app.command("extend")(extend)
 app.command("summarize")(summarize)
 app.command("collect")(collect)
 app.command("archive")(archive)
