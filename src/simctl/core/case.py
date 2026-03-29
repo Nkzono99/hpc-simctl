@@ -78,6 +78,7 @@ class CaseData:
     classification: ClassificationData = field(default_factory=ClassificationData)
     job: JobData = field(default_factory=JobData)
     params: dict[str, Any] = field(default_factory=dict)
+    copy_files: list[str] = field(default_factory=list)
     case_dir: Path = field(default_factory=lambda: Path("."))
     raw: dict[str, Any] = field(default_factory=dict)
 
@@ -161,6 +162,12 @@ def load_case(case_dir: Path) -> CaseData:
 
     description = str(case_section.get("description", ""))
 
+    # copy_files: paths relative to case_dir or absolute
+    raw_copy_files = case_section.get("copy_files", [])
+    if not isinstance(raw_copy_files, list):
+        raw_copy_files = [str(raw_copy_files)]
+    copy_files = [str(p) for p in raw_copy_files]
+
     classification = _parse_classification(raw.get("classification", {}))
     job = _parse_job(raw.get("job", {}))
     params = dict(raw.get("params", {}))
@@ -173,6 +180,7 @@ def load_case(case_dir: Path) -> CaseData:
         classification=classification,
         job=job,
         params=params,
+        copy_files=copy_files,
         case_dir=case_dir,
         raw=raw,
     )

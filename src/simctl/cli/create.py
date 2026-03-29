@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 from typing import Annotated, Any, Optional
 
@@ -271,6 +272,26 @@ def _generate_run(
         {"case": case_data.raw.get("case", {}), "params": params},
         run_info.run_dir,
     )
+
+    # 2b. Copy extra files from case copy_files list
+    if case_data.copy_files:
+        input_dir = run_info.run_dir / "input"
+        input_dir.mkdir(parents=True, exist_ok=True)
+        for file_spec in case_data.copy_files:
+            src = Path(file_spec)
+            if not src.is_absolute():
+                src = case_data.case_dir / src
+            if src.is_file():
+                shutil.copy2(src, input_dir / src.name)
+            elif src.is_dir():
+                dest = input_dir / src.name
+                shutil.copytree(src, dest, dirs_exist_ok=True)
+            else:
+                import logging
+
+                logging.getLogger(__name__).warning(
+                    "copy_files: not found, skipping: %s", src
+                )
 
     # 3. Resolve runtime and build execution command
     sim_config = _get_simulator_config(project, case_data.simulator)
