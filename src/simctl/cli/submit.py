@@ -186,25 +186,6 @@ def run_cmd(
         _submit_single(run, dry_run=dry_run)
 
 
-# Keep submit as alias
-def submit(
-    run: Annotated[
-        Optional[str],
-        typer.Argument(help="Run directory or run_id (defaults to cwd)."),
-    ] = None,
-    all_runs: Annotated[
-        bool,
-        typer.Option("--all", help="Submit all created runs in current directory."),
-    ] = False,
-    dry_run: Annotated[
-        bool,
-        typer.Option("--dry-run", help="Show what would be submitted."),
-    ] = False,
-) -> None:
-    """Submit a run (alias for 'simctl run')."""
-    run_cmd(run=run, all_runs=all_runs, dry_run=dry_run)
-
-
 def _submit_single_cwd(*, dry_run: bool = False) -> None:
     """Submit the run in the current directory."""
     cwd = Path.cwd().resolve()

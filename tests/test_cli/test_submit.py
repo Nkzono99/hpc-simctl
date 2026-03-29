@@ -61,7 +61,7 @@ def _create_run(
 
 def test_submit_no_args() -> None:
     """Submit without arguments should show an error."""
-    result = runner.invoke(app, ["submit"])
+    result = runner.invoke(app, ["run"])
     assert result.exit_code != 0
     assert "RUN argument is required" in result.output or result.exit_code != 0
 
@@ -73,7 +73,7 @@ def test_submit_run_not_found(tmp_path: Path) -> None:
     (tmp_path / "runs").mkdir()
 
     with patch("simctl.cli.submit.Path.cwd", return_value=tmp_path):
-        result = runner.invoke(app, ["submit", "nonexistent"])
+        result = runner.invoke(app, ["run", "nonexistent"])
     assert result.exit_code != 0
 
 
@@ -84,7 +84,7 @@ def test_submit_already_submitted(tmp_path: Path) -> None:
     _create_run(run_dir, status="submitted", job_id="12345")
 
     with patch("simctl.cli.submit.Path.cwd", return_value=tmp_path):
-        result = runner.invoke(app, ["submit", str(run_dir)])
+        result = runner.invoke(app, ["run", str(run_dir)])
     assert result.exit_code != 0
     assert "submitted" in result.output
 
@@ -103,7 +103,7 @@ def test_submit_missing_job_script(tmp_path: Path) -> None:
     # No submit/job.sh created
 
     with patch("simctl.cli.submit.Path.cwd", return_value=tmp_path):
-        result = runner.invoke(app, ["submit", str(run_dir)])
+        result = runner.invoke(app, ["run", str(run_dir)])
     assert result.exit_code != 0
     assert "Job script not found" in result.output
 
@@ -121,7 +121,7 @@ def test_submit_success(tmp_path: Path) -> None:
             return_value="99999",
         ),
     ):
-        result = runner.invoke(app, ["submit", str(run_dir)])
+        result = runner.invoke(app, ["run", str(run_dir)])
 
     assert result.exit_code == 0
     assert "99999" in result.output
@@ -144,7 +144,7 @@ def test_submit_dry_run(tmp_path: Path) -> None:
     _create_run(run_dir)
 
     with patch("simctl.cli.submit.Path.cwd", return_value=tmp_path):
-        result = runner.invoke(app, ["submit", "--dry-run", str(run_dir)])
+        result = runner.invoke(app, ["run", "--dry-run", str(run_dir)])
 
     assert result.exit_code == 0
     assert "Would submit" in result.output
@@ -172,7 +172,7 @@ def test_submit_all(tmp_path: Path) -> None:
             side_effect=["22222", "33333"],
         ),
     ):
-        result = runner.invoke(app, ["submit", "--all", str(survey_dir)])
+        result = runner.invoke(app, ["run", "--all", str(survey_dir)])
 
     assert result.exit_code == 0
     assert "22222" in result.output
@@ -194,7 +194,7 @@ def test_submit_all_dry_run(tmp_path: Path) -> None:
     )
 
     with patch("simctl.cli.submit.Path.cwd", return_value=tmp_path):
-        result = runner.invoke(app, ["submit", "--all", "--dry-run", str(survey_dir)])
+        result = runner.invoke(app, ["run", "--all", "--dry-run", str(survey_dir)])
 
     assert result.exit_code == 0
     assert "would submit" in result.output
@@ -218,7 +218,7 @@ def test_submit_empty_input_dir(tmp_path: Path) -> None:
             return_value="99999",
         ),
     ):
-        result = runner.invoke(app, ["submit", str(run_dir)])
+        result = runner.invoke(app, ["run", str(run_dir)])
 
     assert result.exit_code != 0
     assert "input/" in result.output
@@ -239,7 +239,7 @@ def test_submit_sbatch_failure(tmp_path: Path) -> None:
             side_effect=SlurmSubmitError("sbatch failed (exit 1):\nPermission denied"),
         ),
     ):
-        result = runner.invoke(app, ["submit", str(run_dir)])
+        result = runner.invoke(app, ["run", str(run_dir)])
 
     assert result.exit_code != 0
     assert "sbatch failed" in result.output

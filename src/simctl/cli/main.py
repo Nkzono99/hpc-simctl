@@ -16,7 +16,7 @@ from simctl.cli.list import list_runs
 from simctl.cli.log import log
 from simctl.cli.manage import archive, purge_work
 from simctl.cli.status import status, sync
-from simctl.cli.submit import run_cmd, submit
+from simctl.cli.submit import run_cmd
 
 app = typer.Typer(
     name="simctl",
@@ -30,7 +30,6 @@ app.add_typer(config_app, name="config")
 app.command("create")(create)
 app.command("sweep")(sweep)
 app.command("run")(run_cmd)
-app.command("submit")(submit)
 app.command("log")(log)
 app.command("status")(status)
 app.command("sync")(sync)

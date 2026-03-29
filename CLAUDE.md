@@ -78,20 +78,29 @@ hpc-simctl/
 
 | コマンド | 説明 |
 |---------|------|
-| `simctl init` | Project 初期化 (simproject.toml 等生成) |
+| `simctl init [SIMS...] -y` | Project 初期化 (対話型がデフォルト) |
 | `simctl doctor` | 環境検査 |
-| `simctl create CASE --dest DIR` | Case から単一 run 生成 |
-| `simctl sweep DIR` | survey.toml から全 run 一括生成 |
-| `simctl submit RUN` | sbatch で job 投入 |
-| `simctl submit --all DIR` | survey 内全 run 投入 |
-| `simctl status RUN` | run 状態確認・同期 |
-| `simctl sync RUN` | Slurm 状態を manifest に反映 |
-| `simctl list [PATH]` | run 一覧表示 |
-| `simctl clone RUN --dest DIR` | run 複製・派生 |
-| `simctl summarize RUN` | run 解析 summary 生成 |
-| `simctl collect DIR` | survey 集計 |
-| `simctl archive RUN` | run アーカイブ |
-| `simctl purge-work RUN` | work/ 内の不要ファイル削除 |
+| `simctl create CASE` | cwd にケースから run 生成 |
+| `simctl create survey` | cwd の survey.toml から全 run 一括生成 |
+| `simctl run` | cwd の run を sbatch で投入 |
+| `simctl run --all` | cwd 内の全 run 投入 |
+| `simctl log` | 最新 job の stdout 表示 + 進捗% |
+| `simctl status` | run 状態確認 |
+| `simctl sync` | Slurm 状態を manifest に反映 |
+| `simctl jobs` | プロジェクト内の実行中ジョブ一覧 |
+| `simctl history` | 投入履歴表示 |
+| `simctl list` | run 一覧表示 |
+| `simctl clone` | run 複製・派生 |
+| `simctl extend` | スナップショットから継続 run 生成 |
+| `simctl summarize` | run 解析 summary 生成 |
+| `simctl collect` | survey 集計 |
+| `simctl archive` | run アーカイブ |
+| `simctl purge-work` | work/ 内の不要ファイル削除 |
+| `simctl config show` | 設定表示 |
+| `simctl config add-simulator` | シミュレータ追加 (対話型) |
+| `simctl config add-launcher` | ランチャー追加 (対話型) |
+
+全コマンドは引数省略時にカレントディレクトリをデフォルトとする。
 
 ## 開発ルール
 
@@ -110,6 +119,14 @@ hpc-simctl/
 - **Launcher Profile パターン**: MPI 起動方式は Launcher に閉じ込める
 - **MPI に介入しない**: Python ツールは rank ごとのラッパにならない。job.sh で srun/mpirun を直接実行
 - **manifest.toml が正本**: run の状態・由来・provenance はすべて manifest.toml に記録
+- **cwd ベース**: 全コマンドはカレントディレクトリをデフォルトターゲットとする
+
+### 後方互換性
+
+- **現在は private リポジトリ**のため、後方互換性は気にしなくてよい
+- コマンド名・引数・ファイル形式は自由に変更可能
+- エイリアスや互換レイヤーは不要。古いインタフェースは削除する
+- 将来 public 化する際に API を固める
 
 ### テスト方針
 
