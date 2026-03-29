@@ -17,7 +17,7 @@ class TestInit:
 
     def test_init_creates_all_files(self, tmp_path: Path) -> None:
         """Init in an empty directory creates all expected files and dirs."""
-        result = runner.invoke(app, ["init", str(tmp_path)])
+        result = runner.invoke(app, ["init", "--path", str(tmp_path)])
         assert result.exit_code == 0
         assert (tmp_path / "simproject.toml").exists()
         assert (tmp_path / "simulators.toml").exists()
@@ -25,10 +25,11 @@ class TestInit:
         assert (tmp_path / "cases").is_dir()
         assert (tmp_path / "runs").is_dir()
         assert (tmp_path / ".gitignore").exists()
+        assert (tmp_path / ".git").is_dir()
 
     def test_init_simproject_content(self, tmp_path: Path) -> None:
         """simproject.toml has correct project name derived from dir name."""
-        result = runner.invoke(app, ["init", str(tmp_path)])
+        result = runner.invoke(app, ["init", "--path", str(tmp_path)])
         assert result.exit_code == 0
         content = (tmp_path / "simproject.toml").read_text()
         assert "[project]" in content
@@ -36,7 +37,7 @@ class TestInit:
 
     def test_init_custom_name(self, tmp_path: Path) -> None:
         """--name option overrides directory name in simproject.toml."""
-        result = runner.invoke(app, ["init", str(tmp_path), "--name", "my-project"])
+        result = runner.invoke(app, ["init", "--path", str(tmp_path), "--name", "my-project"])
         assert result.exit_code == 0
         content = (tmp_path / "simproject.toml").read_text()
         assert 'name = "my-project"' in content
@@ -44,19 +45,19 @@ class TestInit:
 
     def test_init_simulators_content(self, tmp_path: Path) -> None:
         """simulators.toml has empty [simulators] section."""
-        runner.invoke(app, ["init", str(tmp_path)])
+        runner.invoke(app, ["init", "--path", str(tmp_path)])
         content = (tmp_path / "simulators.toml").read_text()
         assert "[simulators]" in content
 
     def test_init_launchers_content(self, tmp_path: Path) -> None:
         """launchers.toml has empty [launchers] section."""
-        runner.invoke(app, ["init", str(tmp_path)])
+        runner.invoke(app, ["init", "--path", str(tmp_path)])
         content = (tmp_path / "launchers.toml").read_text()
         assert "[launchers]" in content
 
     def test_init_gitignore_content(self, tmp_path: Path) -> None:
         """.gitignore contains run output exclusion patterns."""
-        runner.invoke(app, ["init", str(tmp_path)])
+        runner.invoke(app, ["init", "--path", str(tmp_path)])
         content = (tmp_path / ".gitignore").read_text()
         assert "runs/**/work/outputs/" in content
         assert "runs/**/work/restart/" in content
@@ -65,7 +66,7 @@ class TestInit:
     def test_init_skips_existing_files(self, tmp_path: Path) -> None:
         """Init does not overwrite existing files."""
         (tmp_path / "simproject.toml").write_text('[project]\nname = "original"\n')
-        result = runner.invoke(app, ["init", str(tmp_path)])
+        result = runner.invoke(app, ["init", "--path", str(tmp_path)])
         assert result.exit_code == 0
         content = (tmp_path / "simproject.toml").read_text()
         assert 'name = "original"' in content
@@ -73,7 +74,7 @@ class TestInit:
 
     def test_init_reports_created_items(self, tmp_path: Path) -> None:
         """Init output lists created items."""
-        result = runner.invoke(app, ["init", str(tmp_path)])
+        result = runner.invoke(app, ["init", "--path", str(tmp_path)])
         assert result.exit_code == 0
         assert "Created:" in result.output
         assert "simproject.toml" in result.output
@@ -81,7 +82,7 @@ class TestInit:
     def test_init_creates_target_directory(self, tmp_path: Path) -> None:
         """Init creates the target directory if it does not exist."""
         target = tmp_path / "new-project"
-        result = runner.invoke(app, ["init", str(target)])
+        result = runner.invoke(app, ["init", "--path", str(target)])
         assert result.exit_code == 0
         assert target.is_dir()
         assert (target / "simproject.toml").exists()
@@ -98,6 +99,39 @@ class TestInit:
             assert (tmp_path / "simproject.toml").exists()
         finally:
             os.chdir(original_cwd)
+
+    def test_init_skips_git_init_if_exists(self, tmp_path: Path) -> None:
+        """Init skips git init when .git already exists."""
+        (tmp_path / ".git").mkdir()
+        result = runner.invoke(app, ["init", "--path", str(tmp_path)])
+        assert result.exit_code == 0
+        assert "git init" in result.output
+        assert "Skipped" in result.output
+
+    def test_init_with_simulators(self, tmp_path: Path) -> None:
+        """Init with simulator names generates default simulators.toml."""
+        result = runner.invoke(app, ["init", "emses", "beach", "--path", str(tmp_path)])
+        assert result.exit_code == 0
+        content = (tmp_path / "simulators.toml").read_text()
+        assert "[simulators.emses]" in content
+        assert 'adapter = "emses"' in content
+        assert 'executable = "mpiemses3D"' in content
+        assert "[simulators.beach]" in content
+        assert 'adapter = "beach"' in content
+
+    def test_init_with_unknown_simulator(self, tmp_path: Path) -> None:
+        """Init with unknown simulator name fails with helpful error."""
+        result = runner.invoke(app, ["init", "nonexistent", "--path", str(tmp_path)])
+        assert result.exit_code != 0
+        assert "Unknown simulator" in result.output
+
+    def test_init_with_single_simulator(self, tmp_path: Path) -> None:
+        """Init with a single simulator name works."""
+        result = runner.invoke(app, ["init", "emses", "--path", str(tmp_path)])
+        assert result.exit_code == 0
+        content = (tmp_path / "simulators.toml").read_text()
+        assert "[simulators.emses]" in content
+        assert "beach" not in content
 
 
 class TestDoctor:

@@ -20,6 +20,22 @@ class SimulatorAdapter(ABC):
     output detection, status inference, summarization, and provenance.
     """
 
+    @classmethod
+    def default_config(cls) -> dict[str, Any]:
+        """Return the default simulators.toml entry for this adapter.
+
+        Override in subclasses to provide simulator-specific defaults.
+
+        Returns:
+            Dictionary suitable for writing as a ``[simulators.<name>]``
+            section in ``simulators.toml``.
+        """
+        return {
+            "adapter": getattr(cls, "adapter_name", ""),
+            "resolver_mode": "local_executable",
+            "executable": "",
+        }
+
     @property
     @abstractmethod
     def name(self) -> str:

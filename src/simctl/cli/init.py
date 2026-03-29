@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 from typing import Annotated, Any, Optional
@@ -18,6 +19,11 @@ if sys.version_info >= (3, 11):
     import tomllib
 else:
     import tomli as tomllib
+
+try:
+    import tomli_w
+except ImportError:
+    tomli_w = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 
@@ -73,17 +79,79 @@ def _mkdir_if_missing(path: Path) -> bool:
     return True
 
 
+def _build_simulators_toml(simulator_names: list[str]) -> str:
+    """Build simulators.toml content from adapter default configs.
+
+    Args:
+        simulator_names: List of simulator adapter names (e.g. ["emses", "beach"]).
+
+    Returns:
+        TOML string for simulators.toml.
+
+    Raises:
+        typer.BadParameter: If a simulator name is not recognized.
+    """
+    from simctl.adapters.registry import get_global_registry
+
+    # Ensure built-in adapters are registered
+    import simctl.adapters  # noqa: F401
+
+    registry = get_global_registry()
+    available = registry.list_adapters()
+
+    config: dict[str, Any] = {"simulators": {}}
+    for sim_name in simulator_names:
+        if sim_name not in available:
+            msg = (
+                f"Unknown simulator: '{sim_name}'. "
+                f"Available: {', '.join(available)}"
+            )
+            raise typer.BadParameter(msg)
+        adapter_cls = registry.get(sim_name)
+        config["simulators"][sim_name] = adapter_cls.default_config()
+
+    if tomli_w is None:
+        # Fallback to manual TOML generation
+        lines = ["[simulators]", ""]
+        for sim_name, sim_cfg in config["simulators"].items():
+            lines.append(f"[simulators.{sim_name}]")
+            for key, value in sim_cfg.items():
+                if isinstance(value, list):
+                    items = ", ".join(f'"{v}"' for v in value)
+                    lines.append(f"{key} = [{items}]")
+                elif isinstance(value, str):
+                    lines.append(f'{key} = "{value}"')
+                else:
+                    lines.append(f"{key} = {value}")
+            lines.append("")
+        return "\n".join(lines) + "\n"
+
+    import io
+
+    buf = io.BytesIO()
+    tomli_w.dump(config, buf)
+    return buf.getvalue().decode("utf-8")
+
+
 def init(
+    simulators: Annotated[
+        Optional[list[str]],
+        typer.Argument(help="Simulator names to configure (e.g. emses beach)."),
+    ] = None,
     path: Annotated[
         Optional[Path],
-        typer.Argument(help="Directory to initialize as a simctl project."),
+        typer.Option("--path", "-p", help="Directory to initialize (defaults to cwd)."),
     ] = None,
     name: Annotated[
         Optional[str],
         typer.Option("--name", "-n", help="Project name (defaults to directory name)."),
     ] = None,
 ) -> None:
-    """Initialize a new simctl project (simproject.toml etc.)."""
+    """Initialize a new simctl project (simproject.toml etc.).
+
+    Optionally specify simulator names to generate default simulators.toml
+    entries. Example: simctl init emses beach
+    """
     project_dir = (path or Path.cwd()).resolve()
 
     if not project_dir.exists():
@@ -102,7 +170,11 @@ def init(
         skipped.append(_SIMPROJECT_FILE)
 
     # simulators.toml
-    if _write_if_missing(project_dir / _SIMULATORS_FILE, "[simulators]\n"):
+    if simulators:
+        sim_content = _build_simulators_toml(simulators)
+    else:
+        sim_content = "[simulators]\n"
+    if _write_if_missing(project_dir / _SIMULATORS_FILE, sim_content):
         created.append(_SIMULATORS_FILE)
     else:
         skipped.append(_SIMULATORS_FILE)
@@ -130,6 +202,22 @@ def init(
         created.append(".gitignore")
     else:
         skipped.append(".gitignore")
+
+    # git init
+    if (project_dir / ".git").exists():
+        skipped.append("git init")
+    else:
+        result = subprocess.run(
+            ["git", "init"],
+            cwd=project_dir,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode == 0:
+            created.append("git init")
+        else:
+            typer.echo(f"  Warning: git init failed: {result.stderr.strip()}")
 
     # Print results
     typer.echo(f"Initialized project '{project_name}' in {project_dir}")

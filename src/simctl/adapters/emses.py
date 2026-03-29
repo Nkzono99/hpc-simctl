@@ -85,6 +85,16 @@ class EmseAdapter(SimulatorAdapter):
     # SimulatorAdapter interface
     # ------------------------------------------------------------------
 
+    @classmethod
+    def default_config(cls) -> dict[str, Any]:
+        """Return default simulators.toml entry for EMSES."""
+        return {
+            "adapter": "emses",
+            "resolver_mode": "local_executable",
+            "executable": "mpiemses3D",
+            "modules": list(_DEFAULT_MODULES),
+        }
+
     @property
     def name(self) -> str:
         """Return the canonical name of this adapter."""

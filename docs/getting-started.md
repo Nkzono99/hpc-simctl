@@ -12,7 +12,7 @@
 
 ```bash
 # uv を使う場合（推奨）
-git clone https://github.com/your-org/hpc-simctl.git
+git clone https://github.com/Nkzono99/hpc-simctl.git
 cd hpc-simctl
 uv sync --dev
 

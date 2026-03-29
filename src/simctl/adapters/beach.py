@@ -62,6 +62,16 @@ class BeachAdapter(SimulatorAdapter):
     # SimulatorAdapter interface
     # ------------------------------------------------------------------
 
+    @classmethod
+    def default_config(cls) -> dict[str, Any]:
+        """Return default simulators.toml entry for BEACH."""
+        return {
+            "adapter": "beach",
+            "resolver_mode": "local_executable",
+            "executable": "beach",
+            "modules": ["intel/2023.2", "intelmpi/2023.2"],
+        }
+
     @property
     def name(self) -> str:
         """Return the canonical name of this adapter."""
