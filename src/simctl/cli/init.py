@@ -645,13 +645,22 @@ simctl config add-simulator  # 対話的に選択
 simctl config add-launcher
 ```
 
-### Run の生成
+### ケース管理
 
-#### `simctl create CASE --dest DIR`
-ケーステンプレートから単一の run を生成。
+#### `simctl new CASENAME`
+ケーステンプレートを新規作成。`cases/<simulator>/` 内で実行。
 
 ```bash
-simctl create cases/my_case --dest runs/test/
+cd cases/emses && simctl new flat_surface
+```
+
+### Run の生成
+
+#### `simctl create CASE`
+cwd にケーステンプレートから run を生成。
+
+```bash
+cd runs/test && simctl create flat_surface
 ```
 
 生成される run ディレクトリ:
@@ -692,35 +701,64 @@ time = "01:00:00"
 
 ### Job 投入
 
-#### `simctl submit RUN`
-sbatch で job を投入。
+#### `simctl run`
+cwd の run を sbatch で投入。
 
 ```bash
-simctl submit runs/test/R20260329-0001
-simctl submit runs/test/R20260329-0001 --dry-run  # 確認のみ
+cd runs/test/R20260329-0001 && simctl run
+simctl run --dry-run                    # 確認のみ
+simctl run -qn gr10451a                 # パーティション指定
 ```
 
-#### `simctl submit --all DIR`
-ディレクトリ内の全 run を一括投入。
+#### `simctl run --all`
+cwd 内の全 run を一括投入。
 
 ```bash
-simctl submit --all surveys/my_survey/
+cd runs/param_scan && simctl run --all
+simctl run --all -qn gr10451a           # パーティション指定
+```
+
+### Job 監視
+
+#### `simctl log`
+最新 job の stdout を表示 + 進���%。
+
+```bash
+cd runs/test/R0001 && simctl log
+simctl log -f                           # tail -f モード
+simctl log -e                           # stderr を表示
+```
+
+#### `simctl jobs`
+��ロジェクト内の実行中ジョブ一覧。
+
+```bash
+simctl jobs
+simctl jobs --all                       # 全状態のジョブ
+```
+
+#### `simctl history`
+投入履歴を表示。
+
+```bash
+simctl history
+simctl history -n 20                    # 直近20件
 ```
 
 ### 状態管理
 
-#### `simctl status RUN`
+#### `simctl status`
 run の状態を確認。
 
 ```bash
-simctl status runs/test/R20260329-0001
+cd runs/test/R20260329-0001 && simctl status
 ```
 
-#### `simctl sync RUN`
+#### `simctl sync`
 Slurm から最新の job 状態を取得し manifest.toml に反映。
 
 ```bash
-simctl sync runs/test/R20260329-0001
+cd runs/test/R20260329-0001 && simctl sync
 ```
 
 #### `simctl list [PATH]`
@@ -749,14 +787,31 @@ simctl collect surveys/my_survey/
 
 ### 管理
 
-#### `simctl clone RUN --dest DIR`
+#### `simctl clone`
 run を複製 (パラメータ変更して再実行したいとき)。
 
 ```bash
-simctl clone runs/test/R20260329-0001 --dest runs/retry/
+cd runs/test/R20260329-0001 && simctl clone
 ```
 
-#### `simctl archive RUN`
+#### `simctl extend`
+スナップショットから継続 run を生成。
+
+```bash
+cd runs/test/R20260329-0001 && simctl extend
+simctl extend --run                     # 生成後に自動投入
+simctl extend --nstep 200000            # nstep 上書き
+```
+
+#### `simctl update [SIMS...]`
+シミュレータパッケージをアップグレード。
+
+```bash
+simctl update emses                     # EMSES のみ
+simctl update                           # 全シミュレータ
+```
+
+#### `simctl archive`
 run をアーカイブ状態に変更。
 
 ```bash
@@ -921,37 +976,78 @@ def _prompt_simulators() -> tuple[list[str], dict[str, dict[str, Any]]]:
     return selected, configs
 
 
+_SITE_PROFILES: dict[str, dict[str, Any]] = {
+    "cmaphor": {
+        "type": "srun",
+        "use_slurm_ntasks": True,
+        "resource_style": "rsc",
+        "modules": [
+            "intel/2023.2",
+            "intelmpi/2023.2",
+            "hdf5/1.12.2_intel-2023.2-impi",
+            "fftw/3.3.10_intel-2022.3-impi",
+        ],
+        "stdout": "stdout.%J.log",
+        "stderr": "stderr.%J.log",
+    },
+}
+
+
 def _prompt_launchers() -> dict[str, dict[str, Any]]:
     """Interactively prompt for launcher configuration.
 
     Returns:
         Launcher config dict for launchers.toml.
     """
-    typer.echo("\nAvailable launcher types:")
-    typer.echo("  1. srun (Slurm)")
-    typer.echo("  2. mpirun (OpenMPI)")
-    typer.echo("  3. mpiexec (MPICH)")
+    typer.echo("\nLauncher configuration:")
+    typer.echo("  Site profiles (preconfigured):")
+    site_names = list(_SITE_PROFILES.keys())
+    for i, sname in enumerate(site_names, start=1):
+        typer.echo(f"    {i}. {sname}")
+    offset = len(site_names)
+    typer.echo("  Launcher types:")
+    typer.echo(f"    {offset + 1}. srun (Slurm)")
+    typer.echo(f"    {offset + 2}. mpirun (OpenMPI)")
+    typer.echo(f"    {offset + 3}. mpiexec (MPICH)")
 
     selection = typer.prompt(
-        "\nSelect launcher type (number or name, Enter to skip)",
+        "\nSelect site profile or launcher type (number or name, Enter to skip)",
         default="",
     )
 
-    launcher_map = {"1": "srun", "2": "mpirun", "3": "mpiexec"}
-    launcher_type = launcher_map.get(selection.strip(), selection.strip())
-
-    if not launcher_type:
+    sel = selection.strip()
+    if not sel:
         return {}
+
+    # Check site profiles first
+    site_map = {str(i): name for i, name in enumerate(site_names, start=1)}
+    if sel in site_map:
+        profile_name = site_map[sel]
+        return {profile_name: dict(_SITE_PROFILES[profile_name])}
+    if sel in _SITE_PROFILES:
+        return {sel: dict(_SITE_PROFILES[sel])}
+
+    # Launcher types
+    launcher_map = {
+        str(offset + 1): "srun",
+        str(offset + 2): "mpirun",
+        str(offset + 3): "mpiexec",
+    }
+    launcher_type = launcher_map.get(sel, sel)
 
     if launcher_type not in ("srun", "mpirun", "mpiexec"):
-        typer.echo(f"  Unknown launcher '{launcher_type}', skipping")
+        typer.echo(f"  Unknown selection '{sel}', skipping")
         return {}
 
-    launcher_name = typer.prompt("  Launcher profile name", default="default")
+    launcher_name = typer.prompt("  Launcher profile name", default=launcher_type)
 
     config: dict[str, Any] = {"type": launcher_type}
 
     if launcher_type == "srun":
+        use_slurm = typer.confirm(
+            "  Use SLURM_NTASKS (rely on #SBATCH --ntasks)?", default=True
+        )
+        config["use_slurm_ntasks"] = use_slurm
         config["args"] = typer.prompt(
             "  Extra srun arguments (e.g. --mpi=pmix)", default=""
         )
@@ -959,6 +1055,13 @@ def _prompt_launchers() -> dict[str, dict[str, Any]]:
         config["args"] = typer.prompt(
             f"  Extra {launcher_type} arguments", default=""
         )
+
+    # Module loading
+    modules_str = typer.prompt(
+        "  Modules to load (space-separated, Enter to skip)", default=""
+    )
+    if modules_str.strip():
+        config["modules"] = modules_str.strip().split()
 
     # Clean empty args
     if not config.get("args"):
@@ -1007,8 +1110,13 @@ def _build_launchers_toml(launchers: dict[str, dict[str, Any]]) -> str:
         for name, cfg in launchers.items():
             lines.append(f"[launchers.{name}]")
             for key, value in cfg.items():
-                if isinstance(value, str):
+                if isinstance(value, list):
+                    items = ", ".join(f'"{v}"' for v in value)
+                    lines.append(f"{key} = [{items}]")
+                elif isinstance(value, str):
                     lines.append(f'{key} = "{value}"')
+                elif isinstance(value, bool):
+                    lines.append(f"{key} = {str(value).lower()}")
                 else:
                     lines.append(f"{key} = {value}")
             lines.append("")
@@ -1102,7 +1210,11 @@ def init(
         launcher_configs = _prompt_launchers()
         launcher_content = _build_launchers_toml(launcher_configs)
     else:
-        launcher_content = "[launchers]\n"
+        # Default to srun with use_slurm_ntasks
+        launcher_configs = {
+            "srun": {"type": "srun", "use_slurm_ntasks": True},
+        }
+        launcher_content = _build_launchers_toml(launcher_configs)
 
     launcher_schema = f"#:schema {_SCHEMA_BASE_URL}/launchers.json\n"
     launcher_content = launcher_schema + launcher_content

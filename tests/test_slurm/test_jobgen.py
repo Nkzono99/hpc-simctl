@@ -51,10 +51,10 @@ class TestGenerateJobScript:
 
         content = path.read_text()
         assert content.startswith("#!/bin/bash\n")
-        assert "#SBATCH --partition=debug" in content
+        assert "#SBATCH -p debug" in content
         assert "#SBATCH --nodes=1" in content
         assert "#SBATCH --ntasks=4" in content
-        assert "#SBATCH --time=00:10:00" in content
+        assert "#SBATCH -t 00:10:00" in content
         assert "exec srun ./solver input.toml" in content
 
     def test_job_name_from_run_id(
@@ -64,7 +64,7 @@ class TestGenerateJobScript:
             run_dir, job_config, "srun ./solver", run_id="R20260327-0001"
         )
         content = path.read_text()
-        assert "#SBATCH --job-name=R20260327-0001" in content
+        assert "#SBATCH -J R20260327-0001" in content
 
     def test_custom_job_name(
         self, run_dir: Path, job_config: dict[str, object]
@@ -72,14 +72,14 @@ class TestGenerateJobScript:
         job_config["job_name"] = "my-custom-name"
         path = generate_job_script(run_dir, job_config, "srun ./solver")
         content = path.read_text()
-        assert "#SBATCH --job-name=my-custom-name" in content
+        assert "#SBATCH -J my-custom-name" in content
 
     def test_default_job_name(
         self, run_dir: Path, job_config: dict[str, object]
     ) -> None:
         path = generate_job_script(run_dir, job_config, "srun ./solver")
         content = path.read_text()
-        assert "#SBATCH --job-name=simctl-job" in content
+        assert "#SBATCH -J simctl-job" in content
 
     def test_output_and_error_paths(
         self, run_dir: Path, job_config: dict[str, object]
@@ -140,21 +140,23 @@ class TestGenerateJobScript:
         path = generate_job_script(run_dir, job_config, "srun ./solver")
         assert path.stat().st_mode & 0o100  # owner execute bit
 
-    def test_missing_partition_raises(self, run_dir: Path) -> None:
-        with pytest.raises(JobScriptError, match="partition"):
+    def test_missing_walltime_raises(self, run_dir: Path) -> None:
+        with pytest.raises(JobScriptError, match="walltime"):
             generate_job_script(
                 run_dir,
-                {"nodes": 1, "ntasks": 4, "walltime": "00:10:00"},
+                {"partition": "debug", "ntasks": 4},
                 "srun ./solver",
             )
 
-    def test_missing_multiple_keys_raises(self, run_dir: Path) -> None:
-        with pytest.raises(JobScriptError, match=r"partition.*walltime"):
-            generate_job_script(
-                run_dir,
-                {"ntasks": 4},
-                "srun ./solver",
-            )
+    def test_no_partition_omits_directive(self, run_dir: Path) -> None:
+        """Partition is optional (can be set at submit time with -qn)."""
+        path = generate_job_script(
+            run_dir,
+            {"walltime": "01:00:00", "ntasks": 4},
+            "srun ./solver",
+        )
+        content = path.read_text()
+        assert "#SBATCH -p" not in content
 
     def test_creates_submit_dir(
         self, tmp_path: Path, job_config: dict[str, object]
@@ -205,9 +207,26 @@ class TestGenerateJobScript:
         config = {"partition": "debug", "walltime": "01:00:00"}
         path = generate_job_script(run_dir, config, "srun ./solver")
         content = path.read_text()
-        assert "--partition=debug" in content
+        assert "#SBATCH -p debug" in content
         assert "--nodes" not in content
         assert "--ntasks" not in content
+
+    def test_rsc_resource_style(self, run_dir: Path) -> None:
+        """resource_style='rsc' emits --rsc instead of --ntasks."""
+        config = {"partition": "gr10451a", "walltime": "120:00:00", "ntasks": 32}
+        path = generate_job_script(
+            run_dir,
+            config,
+            "srun ./mpiemses3D plasma.inp",
+            resource_style="rsc",
+            stdout_format="stdout.%J.log",
+            stderr_format="stderr.%J.log",
+        )
+        content = path.read_text()
+        assert "#SBATCH --rsc p=32:t=1:c=1" in content
+        assert "#SBATCH --ntasks" not in content
+        assert "#SBATCH -o stdout.%J.log" in content
+        assert "#SBATCH -e stderr.%J.log" in content
 
 
 # ---------------------------------------------------------------------------

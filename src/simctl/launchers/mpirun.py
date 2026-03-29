@@ -29,12 +29,14 @@ class MpirunLauncher(Launcher):
         use_slurm_ntasks: bool = False,
         extra_options: list[str] | None = None,
         np_flag: str = "-np",
+        site_config: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(
             name,
             command,
             use_slurm_ntasks=use_slurm_ntasks,
             extra_options=extra_options,
+            site_config=site_config,
         )
         self._np_flag = np_flag
 

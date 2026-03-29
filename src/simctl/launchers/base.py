@@ -32,11 +32,13 @@ class Launcher(ABC):
         *,
         use_slurm_ntasks: bool = False,
         extra_options: list[str] | None = None,
+        site_config: dict[str, Any] | None = None,
     ) -> None:
         self._name = name
         self._command = command
         self._use_slurm_ntasks = use_slurm_ntasks
         self._extra_options = extra_options or []
+        self._site_config = site_config or {}
 
     @property
     def name(self) -> str:
@@ -52,6 +54,37 @@ class Launcher(ABC):
     def use_slurm_ntasks(self) -> bool:
         """Whether this launcher relies on SLURM_NTASKS for task count."""
         return self._use_slurm_ntasks
+
+    @property
+    def modules(self) -> list[str]:
+        """Module names to load in job script."""
+        return list(self._site_config.get("modules", []))
+
+    @property
+    def resource_style(self) -> str:
+        """Resource specification style: "standard" or "rsc" (cmaphor)."""
+        return str(self._site_config.get("resource_style", "standard"))
+
+    @property
+    def stdout_format(self) -> str | None:
+        """Custom stdout file format (e.g. "stdout.%J.log")."""
+        return self._site_config.get("stdout")
+
+    @property
+    def stderr_format(self) -> str | None:
+        """Custom stderr file format (e.g. "stderr.%J.log")."""
+        return self._site_config.get("stderr")
+
+    @property
+    def extra_sbatch(self) -> list[str]:
+        """Additional raw #SBATCH directives."""
+        return list(self._site_config.get("extra_sbatch", []))
+
+    @property
+    def site_env(self) -> dict[str, str]:
+        """Site-specific environment variables."""
+        raw = self._site_config.get("env", {})
+        return {str(k): str(v) for k, v in raw.items()} if raw else {}
 
     @property
     @abstractmethod
@@ -134,16 +167,14 @@ class Launcher(ABC):
         Raises:
             LauncherConfigError: If kind is unknown or required fields missing.
         """
-        kind = config.get("kind")
+        # Accept "type" (config convention) or "kind" (legacy).
+        kind = config.get("type") or config.get("kind")
         if not kind:
             raise LauncherConfigError(
-                f"Launcher profile '{name}' is missing required field 'kind'."
+                f"Launcher profile '{name}' is missing required field 'type'."
             )
-        command = config.get("command")
-        if not command:
-            raise LauncherConfigError(
-                f"Launcher profile '{name}' is missing required field 'command'."
-            )
+        # Default command to the launcher type name (srun, mpirun, mpiexec).
+        command = config.get("command", kind)
 
         # Import concrete launchers here to avoid circular imports.
         from simctl.launchers.mpiexec import MpiexecLauncher
@@ -151,10 +182,29 @@ class Launcher(ABC):
         from simctl.launchers.srun import SrunLauncher
 
         use_slurm = bool(config.get("use_slurm_ntasks", False))
+        # Accept "extra_options" (list) or "args" (string, split by shell rules).
         extra_opts_raw = config.get("extra_options", [])
         extra_opts: list[str] = (
             list(extra_opts_raw) if isinstance(extra_opts_raw, list) else []
         )
+        args_str = config.get("args", "")
+        if args_str:
+            extra_opts.extend(shlex.split(str(args_str)))
+
+        # Site-specific config passed through for jobgen.
+        site_config = {
+            k: v
+            for k, v in config.items()
+            if k
+            in (
+                "modules",
+                "resource_style",
+                "stdout",
+                "stderr",
+                "extra_sbatch",
+                "env",
+            )
+        }
 
         if kind == "srun":
             return SrunLauncher(
@@ -162,6 +212,7 @@ class Launcher(ABC):
                 command=str(command),
                 use_slurm_ntasks=use_slurm,
                 extra_options=extra_opts,
+                site_config=site_config,
             )
         elif kind == "mpirun":
             np_flag = str(config.get("np_flag", "-np"))
@@ -171,6 +222,7 @@ class Launcher(ABC):
                 use_slurm_ntasks=use_slurm,
                 extra_options=extra_opts,
                 np_flag=np_flag,
+                site_config=site_config,
             )
         elif kind == "mpiexec":
             n_flag = str(config.get("n_flag", "-n"))
@@ -180,6 +232,7 @@ class Launcher(ABC):
                 use_slurm_ntasks=use_slurm,
                 extra_options=extra_opts,
                 n_flag=n_flag,
+                site_config=site_config,
             )
         else:
             raise LauncherConfigError(

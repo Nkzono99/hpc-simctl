@@ -9,17 +9,30 @@ environment variable set by Slurm and does not emit an explicit
 from __future__ import annotations
 
 import shlex
-from typing import Any
+from typing import Any  # noqa: F401
 
 from simctl.launchers.base import Launcher, LauncherConfigError
 
 
 class SrunLauncher(Launcher):
-    """Launcher using Slurm's ``srun`` command.
+    """Launcher using Slurm's ``srun`` command."""
 
-    Attributes:
-        kind: Always ``"srun"``.
-    """
+    def __init__(
+        self,
+        name: str,
+        command: str,
+        *,
+        use_slurm_ntasks: bool = False,
+        extra_options: list[str] | None = None,
+        site_config: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            name,
+            command,
+            use_slurm_ntasks=use_slurm_ntasks,
+            extra_options=extra_options,
+            site_config=site_config,
+        )
 
     @property
     def kind(self) -> str:

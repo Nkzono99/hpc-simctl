@@ -16,9 +16,52 @@
             "enum": ["srun", "mpirun", "mpiexec"],
             "description": "Launcher type"
           },
+          "command": {
+            "type": "string",
+            "description": "Launcher command (defaults to type name)"
+          },
+          "use_slurm_ntasks": {
+            "type": "boolean",
+            "description": "Rely on SLURM_NTASKS instead of explicit --ntasks",
+            "default": false
+          },
           "args": {
             "type": "string",
-            "description": "Extra launcher arguments"
+            "description": "Extra launcher arguments (space-separated)"
+          },
+          "extra_options": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Extra launcher options (list form)"
+          },
+          "resource_style": {
+            "type": "string",
+            "enum": ["standard", "rsc"],
+            "description": "SBATCH resource specification style. 'rsc' uses --rsc p=N:t=T:c=C (cmaphor)",
+            "default": "standard"
+          },
+          "modules": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "HPC modules to load in job script"
+          },
+          "stdout": {
+            "type": "string",
+            "description": "Custom stdout file format (e.g. stdout.%J.log)"
+          },
+          "stderr": {
+            "type": "string",
+            "description": "Custom stderr file format (e.g. stderr.%J.log)"
+          },
+          "extra_sbatch": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Additional raw #SBATCH directives"
+          },
+          "env": {
+            "type": "object",
+            "additionalProperties": { "type": "string" },
+            "description": "Site-specific environment variables"
           }
         }
       }

@@ -29,12 +29,14 @@ class MpiexecLauncher(Launcher):
         use_slurm_ntasks: bool = False,
         extra_options: list[str] | None = None,
         n_flag: str = "-n",
+        site_config: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(
             name,
             command,
             use_slurm_ntasks=use_slurm_ntasks,
             extra_options=extra_options,
+            site_config=site_config,
         )
         self._n_flag = n_flag
 

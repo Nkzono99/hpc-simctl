@@ -111,6 +111,7 @@ def sbatch_submit(
     job_script: Path,
     working_dir: Path,
     *,
+    extra_args: list[str] | None = None,
     runner: CommandRunner | None = None,
 ) -> str:
     """Submit a job script via ``sbatch``.
@@ -119,6 +120,8 @@ def sbatch_submit(
         job_script: Path to the job script file (e.g. ``submit/job.sh``).
         working_dir: Working directory for the sbatch process (typically
             the run directory's ``work/`` subdirectory).
+        extra_args: Additional sbatch arguments (e.g.
+            ``["--partition=gr10451a"]``).  These override script directives.
         runner: Optional callable that executes a command list and returns
             a ``CommandResult``.  Defaults to the real subprocess runner.
             Inject a mock here for testing.
@@ -136,7 +139,10 @@ def sbatch_submit(
         raise FileNotFoundError(f"Job script not found: {job_script}")
 
     run = runner or _default_runner
-    cmd = ["sbatch", f"--chdir={working_dir}", str(job_script)]
+    cmd = ["sbatch", f"--chdir={working_dir}"]
+    if extra_args:
+        cmd.extend(extra_args)
+    cmd.append(str(job_script))
     result = run(cmd)
 
     if result.returncode != 0:

@@ -30,7 +30,7 @@ hpc-simctl/
         main.py
         init.py         # simctl init / doctor
         create.py       # simctl create / sweep
-        submit.py       # simctl submit
+        submit.py       # simctl run (sbatch投入)
         status.py       # simctl status / sync
         list.py         # simctl list
         clone.py        # simctl clone
@@ -82,8 +82,8 @@ hpc-simctl/
 | `simctl doctor` | 環境検査 |
 | `simctl create CASE` | cwd にケースから run 生成 |
 | `simctl create survey` | cwd の survey.toml から全 run 一括生成 |
-| `simctl run` | cwd の run を sbatch で投入 |
-| `simctl run --all` | cwd 内の全 run 投入 |
+| `simctl run [-qn QUEUE]` | cwd の run を sbatch で投入 (`-qn` でパーティション指定) |
+| `simctl run --all [-qn QUEUE]` | cwd 内の全 run 投入 |
 | `simctl log` | 最新 job の stdout 表示 + 進捗% |
 | `simctl status` | run 状態確認 |
 | `simctl sync` | Slurm 状態を manifest に反映 |

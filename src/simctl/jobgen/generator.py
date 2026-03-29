@@ -26,6 +26,9 @@ def generate_job_script(
     modules: list[str] | None = None,
     setup_commands: list[str] | None = None,
     post_commands: list[str] | None = None,
+    resource_style: str = "standard",
+    stdout_format: str | None = None,
+    stderr_format: str | None = None,
 ) -> Path:
     """Generate a ``job.sh`` script for Slurm submission.
 
@@ -66,6 +69,9 @@ def generate_job_script(
         modules=modules or [],
         setup_commands=setup_commands or [],
         post_commands=post_commands or [],
+        resource_style=resource_style,
+        stdout_format=stdout_format,
+        stderr_format=stderr_format,
     )
 
     return write_job_script(run_dir, content)
@@ -97,7 +103,7 @@ def write_job_script(run_dir: Path, content: str) -> Path:
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-_REQUIRED_JOB_KEYS = ("partition", "walltime")
+_REQUIRED_JOB_KEYS = ("walltime",)
 
 
 def _validate_job_config(job_config: dict[str, Any]) -> None:
@@ -122,25 +128,49 @@ def _render_script(
     modules: list[str],
     setup_commands: list[str],
     post_commands: list[str],
+    resource_style: str = "standard",
+    stdout_format: str | None = None,
+    stderr_format: str | None = None,
 ) -> str:
     """Render the complete job script as a string."""
     lines: list[str] = ["#!/bin/bash"]
 
     # --- SBATCH directives ---
-    job_name = job_config.get("job_name", run_id or "simctl-job")
-    lines.append(f"#SBATCH --job-name={job_name}")
-    lines.append(f"#SBATCH --partition={job_config['partition']}")
+    partition = job_config.get("partition", "")
+    if partition:
+        lines.append(f"#SBATCH -p {partition}")
 
-    if "nodes" in job_config:
-        lines.append(f"#SBATCH --nodes={job_config['nodes']}")
-    if "ntasks" in job_config:
-        lines.append(f"#SBATCH --ntasks={job_config['ntasks']}")
+    if resource_style == "rsc":
+        # cmaphor-style: --rsc p=N:t=T:c=C
+        ntasks = job_config.get("ntasks", 1)
+        threads = job_config.get("threads_per_process", 1)
+        cores = job_config.get("cores_per_thread", 1)
+        lines.append(f"#SBATCH --rsc p={ntasks}:t={threads}:c={cores}")
+    else:
+        # Standard Slurm directives
+        if "nodes" in job_config:
+            lines.append(f"#SBATCH --nodes={job_config['nodes']}")
+        if "ntasks" in job_config:
+            lines.append(f"#SBATCH --ntasks={job_config['ntasks']}")
+        if "cpus_per_task" in job_config:
+            lines.append(f"#SBATCH --cpus-per-task={job_config['cpus_per_task']}")
 
-    lines.append(f"#SBATCH --time={job_config['walltime']}")
+    lines.append(f"#SBATCH -t {job_config['walltime']}")
 
+    # stdout / stderr
     work_dir = run_dir / "work"
-    lines.append(f"#SBATCH --output={work_dir / '%j.out'}")
-    lines.append(f"#SBATCH --error={work_dir / '%j.err'}")
+    if stdout_format:
+        lines.append(f"#SBATCH -o {stdout_format}")
+    else:
+        lines.append(f"#SBATCH --output={work_dir / '%j.out'}")
+    if stderr_format:
+        lines.append(f"#SBATCH -e {stderr_format}")
+    else:
+        lines.append(f"#SBATCH --error={work_dir / '%j.err'}")
+
+    job_name = job_config.get("job_name", run_id or "simctl-job")
+    if job_name:
+        lines.append(f"#SBATCH -J {job_name}")
 
     for directive in extra_sbatch:
         lines.append(f"#SBATCH {directive}")

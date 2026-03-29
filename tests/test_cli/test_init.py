@@ -56,10 +56,12 @@ class TestInit:
         assert "[simulators]" in content
 
     def test_init_launchers_content(self, tmp_path: Path) -> None:
-        """launchers.toml has empty [launchers] section."""
+        """launchers.toml has default srun launcher."""
         runner.invoke(app, ["init", "-y", "--path", str(tmp_path)])
         content = (tmp_path / "launchers.toml").read_text()
-        assert "[launchers]" in content
+        assert "[launchers.srun]" in content
+        assert 'type = "srun"' in content
+        assert "use_slurm_ntasks = true" in content
 
     def test_init_gitignore_content(self, tmp_path: Path) -> None:
         """.gitignore contains run output exclusion patterns."""
@@ -202,7 +204,7 @@ class TestInit:
 
     def test_init_default_is_interactive(self, tmp_path: Path) -> None:
         """Init without -y is interactive (prompts for project name)."""
-        user_input = "\n" * 10
+        user_input = "\n" * 20
         result = runner.invoke(
             app, ["init", "--path", str(tmp_path)], input=user_input
         )

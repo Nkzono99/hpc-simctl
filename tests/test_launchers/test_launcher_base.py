@@ -125,22 +125,23 @@ def test_from_config_mpiexec() -> None:
     assert launcher.n_flag == "--nproc"
 
 
-def test_from_config_missing_kind() -> None:
-    """from_config raises on missing kind."""
-    with pytest.raises(LauncherConfigError, match="missing required field 'kind'"):
+def test_from_config_missing_type() -> None:
+    """from_config raises on missing type."""
+    with pytest.raises(LauncherConfigError, match="missing required field 'type'"):
         Launcher.from_config("bad", {"command": "srun"})
 
 
-def test_from_config_missing_command() -> None:
-    """from_config raises on missing command."""
-    with pytest.raises(LauncherConfigError, match="missing required field 'command'"):
-        Launcher.from_config("bad", {"kind": "srun"})
+def test_from_config_defaults_command_to_type() -> None:
+    """from_config defaults command to type name."""
+    launcher = Launcher.from_config("test", {"type": "srun"})
+    assert launcher.command == "srun"
+    assert launcher.kind == "srun"
 
 
 def test_from_config_unknown_kind() -> None:
     """from_config raises on unknown kind."""
     with pytest.raises(LauncherConfigError, match="Unknown launcher kind"):
-        Launcher.from_config("bad", {"kind": "flux", "command": "flux"})
+        Launcher.from_config("bad", {"type": "flux"})
 
 
 # ---------------------------------------------------------------------------
