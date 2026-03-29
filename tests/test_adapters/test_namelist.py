@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from simctl.adapters.namelist import (
+from simctl.adapters._utils.namelist import (
     apply_overrides,
     find_current_group,
     format_value,

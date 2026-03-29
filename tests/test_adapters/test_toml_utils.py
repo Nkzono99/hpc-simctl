@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from simctl.adapters.toml_utils import apply_dotted_overrides, deep_merge
+from simctl.adapters._utils.toml_utils import apply_dotted_overrides, deep_merge
 
 
 class TestDeepMerge:

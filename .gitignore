@@ -222,3 +222,4 @@ runs/**/work/*.log
 # Analysis cache
 runs/**/analysis/cache/
 runs/**/analysis/.ipynb_checkpoints/
+simproject.toml

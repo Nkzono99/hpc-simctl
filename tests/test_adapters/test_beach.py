@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
-from simctl.adapters.beach import BeachAdapter
+from simctl.adapters.contrib.beach import BeachAdapter
 
 SAMPLE_BEACH_TOML = """\
 [sim]

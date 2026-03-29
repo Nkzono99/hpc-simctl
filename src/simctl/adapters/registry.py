@@ -124,18 +124,26 @@ class AdapterRegistry:
             adapter_name = sim_cfg.get("adapter", "")
             if not adapter_name or adapter_name in self._entries:
                 continue
-            module_path = f"simctl.adapters.{adapter_name}"
-            try:
-                importlib.import_module(module_path)
-                logger.debug(
-                    "Auto-imported adapter module '%s' for simulator '%s'",
-                    module_path,
-                    sim_name,
-                )
-            except ImportError:
+            # Try contrib/ first, then top-level adapters/
+            imported = False
+            for module_path in (
+                f"simctl.adapters.contrib.{adapter_name}",
+                f"simctl.adapters.{adapter_name}",
+            ):
+                try:
+                    importlib.import_module(module_path)
+                    logger.debug(
+                        "Auto-imported adapter module '%s' for simulator '%s'",
+                        module_path,
+                        sim_name,
+                    )
+                    imported = True
+                    break
+                except ImportError:
+                    continue
+            if not imported:
                 logger.warning(
-                    "Could not import adapter module '%s' for simulator '%s'",
-                    module_path,
+                    "Could not import adapter for simulator '%s'",
                     sim_name,
                 )
 

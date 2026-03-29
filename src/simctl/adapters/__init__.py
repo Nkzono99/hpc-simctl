@@ -7,8 +7,8 @@ Importing this package automatically registers the built-in adapters
 from __future__ import annotations
 
 from simctl.adapters.base import SimulatorAdapter
-from simctl.adapters.beach import BeachAdapter
-from simctl.adapters.emses import EmseAdapter
+from simctl.adapters.contrib.beach import BeachAdapter
+from simctl.adapters.contrib.emses import EmseAdapter
 from simctl.adapters.generic import GenericAdapter
 from simctl.adapters.registry import get, get_global_registry, list_adapters, register
 
