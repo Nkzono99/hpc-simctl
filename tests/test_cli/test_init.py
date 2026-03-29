@@ -26,6 +26,10 @@ class TestInit:
         assert (tmp_path / "runs").is_dir()
         assert (tmp_path / ".gitignore").exists()
         assert (tmp_path / ".git").is_dir()
+        assert (tmp_path / "CLAUDE.md").exists()
+        assert (tmp_path / "AGENTS.md").exists()
+        assert (tmp_path / "SKILLS.md").exists()
+        assert (tmp_path / ".vscode" / "settings.json").exists()
 
     def test_init_simproject_content(self, tmp_path: Path) -> None:
         """simproject.toml has correct project name derived from dir name."""
@@ -107,6 +111,45 @@ class TestInit:
         assert result.exit_code == 0
         assert "git init" in result.output
         assert "Skipped" in result.output
+
+    def test_init_claude_md_with_simulators(self, tmp_path: Path) -> None:
+        """CLAUDE.md includes simulator-specific guides when simulators given."""
+        runner.invoke(app, ["init", "emses", "beach", "--path", str(tmp_path)])
+        content = (tmp_path / "CLAUDE.md").read_text()
+        assert "EMSES" in content
+        assert "plasma.toml" in content
+        assert "BEACH" in content
+        assert "beach.toml" in content
+
+    def test_init_claude_md_without_simulators(self, tmp_path: Path) -> None:
+        """CLAUDE.md is generated without simulator sections when none given."""
+        runner.invoke(app, ["init", "--path", str(tmp_path)])
+        content = (tmp_path / "CLAUDE.md").read_text()
+        assert "simctl" in content
+        assert "シミュレータ固有知識" not in content
+
+    def test_init_agents_md(self, tmp_path: Path) -> None:
+        """AGENTS.md contains agent workflow guidelines."""
+        runner.invoke(app, ["init", "emses", "--path", str(tmp_path)])
+        content = (tmp_path / "AGENTS.md").read_text()
+        assert "エージェントの役割" in content
+        assert "emses" in content
+
+    def test_init_skills_md(self, tmp_path: Path) -> None:
+        """SKILLS.md contains skill definitions."""
+        runner.invoke(app, ["init", "--path", str(tmp_path)])
+        content = (tmp_path / "SKILLS.md").read_text()
+        assert "/setup-env" in content
+        assert "uv venv" in content
+        assert "/survey-design" in content
+        assert "/check-status" in content
+
+    def test_init_skills_md_with_packages(self, tmp_path: Path) -> None:
+        """SKILLS.md includes pip packages when simulators specified."""
+        runner.invoke(app, ["init", "emses", "--path", str(tmp_path)])
+        content = (tmp_path / "SKILLS.md").read_text()
+        assert "emout" in content
+        assert "h5py" in content
 
     def test_init_with_simulators(self, tmp_path: Path) -> None:
         """Init with simulator names generates default simulators.toml."""

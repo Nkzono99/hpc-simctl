@@ -36,6 +36,32 @@ class SimulatorAdapter(ABC):
             "executable": "",
         }
 
+    @classmethod
+    def pip_packages(cls) -> list[str]:
+        """Return pip packages to install for this simulator.
+
+        Override in subclasses to list Python packages needed for
+        analysis, post-processing, or utilities.
+
+        Returns:
+            List of pip package specifiers (e.g. ``["emout", "h5py"]``).
+        """
+        return []
+
+    @classmethod
+    def agent_guide(cls) -> str:
+        """Return AI agent guide for this simulator as markdown.
+
+        Override in subclasses to provide simulator-specific knowledge
+        including input/output formats, key parameters, typical
+        workflows, and documentation references.
+
+        Returns:
+            Markdown string for inclusion in CLAUDE.md / AGENTS.md.
+        """
+        name = getattr(cls, "adapter_name", cls.__name__)
+        return f"### {name}\n\nNo detailed guide available.\n"
+
     @property
     @abstractmethod
     def name(self) -> str:
