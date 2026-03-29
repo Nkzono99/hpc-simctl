@@ -137,8 +137,14 @@ class EmseAdapter(SimulatorAdapter):
 
     @classmethod
     def pip_packages(cls) -> list[str]:
-        """Return pip packages for EMSES analysis."""
-        return ["emout", "h5py", "matplotlib", "numpy"]
+        """Return pip packages for EMSES (simulator + analysis tools)."""
+        return [
+            "MPIEMSES3D @ git+https://github.com/CS12-Laboratory/MPIEMSES3D.git",
+            "emout",
+            "h5py",
+            "matplotlib",
+            "numpy",
+        ]
 
     @classmethod
     def agent_guide(cls) -> str:

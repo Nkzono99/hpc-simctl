@@ -115,8 +115,13 @@ class BeachAdapter(SimulatorAdapter):
 
     @classmethod
     def pip_packages(cls) -> list[str]:
-        """Return pip packages for BEACH analysis."""
-        return ["matplotlib", "numpy", "pandas"]
+        """Return pip packages for BEACH (simulator + analysis tools)."""
+        return [
+            "beach-bem",
+            "matplotlib",
+            "numpy",
+            "pandas",
+        ]
 
     @classmethod
     def agent_guide(cls) -> str:
