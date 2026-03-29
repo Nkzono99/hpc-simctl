@@ -131,7 +131,7 @@ class TestConfigAddLauncher:
 
 
 class TestInteractiveInit:
-    """Tests for 'simctl init --interactive'."""
+    """Tests for 'simctl init' (interactive by default)."""
 
     def test_interactive_init_select_simulators(self, tmp_path: Path) -> None:
         """Interactive init prompts for project name and simulators."""
@@ -144,7 +144,7 @@ class TestInteractiveInit:
         ])
         result = runner.invoke(
             app,
-            ["init", "--path", str(tmp_path), "--interactive"],
+            ["init", "--path", str(tmp_path)],
             input=user_input,
         )
         assert result.exit_code == 0
@@ -155,11 +155,10 @@ class TestInteractiveInit:
 
     def test_interactive_init_skip_all(self, tmp_path: Path) -> None:
         """Interactive init with all defaults skipped."""
-        # Provide extra empty lines to avoid Abort from exhausted input
         user_input = "\n" * 10
         result = runner.invoke(
             app,
-            ["init", "--path", str(tmp_path), "--interactive"],
+            ["init", "--path", str(tmp_path)],
             input=user_input,
         )
         assert result.exit_code == 0

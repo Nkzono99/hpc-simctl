@@ -1034,18 +1034,20 @@ def init(
         Optional[str],
         typer.Option("--name", "-n", help="Project name (defaults to directory name)."),
     ] = None,
-    interactive: Annotated[
+    yes: Annotated[
         bool,
-        typer.Option("--interactive", "-i", help="Use interactive prompts."),
+        typer.Option("--yes", "-y", help="Skip interactive prompts, use defaults."),
     ] = False,
 ) -> None:
     """Initialize a new simctl project (simproject.toml etc.).
 
-    Optionally specify simulator names to generate default simulators.toml
-    entries. Example: simctl init emses beach
+    By default, runs in interactive mode with guided prompts.
+    Use --yes / -y to skip prompts and use defaults.
 
-    Use --interactive / -i for guided setup with prompts.
+    Simulator names can also be passed directly:
+      simctl init emses beach
     """
+    interactive = not yes
     project_dir = (path or Path.cwd()).resolve()
 
     if not project_dir.exists():
