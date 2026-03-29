@@ -82,6 +82,27 @@ class SimulatorAdapter(ABC):
         return config
 
     @classmethod
+    def case_template(cls) -> dict[str, str]:
+        """Return template files for a new case.
+
+        Override in subclasses to provide simulator-specific templates.
+
+        Returns:
+            Dict mapping filename to content string.
+            Must include ``"case.toml"``.
+        """
+        name = getattr(cls, "adapter_name", "generic")
+        return {
+            "case.toml": (
+                f'[case]\nname = ""\nsimulator = "{name}"\n'
+                f'launcher = "default"\ndescription = ""\n\n'
+                f"[params]\n\n[job]\n"
+                f'partition = ""\nnodes = 1\nntasks = 1\n'
+                f'walltime = "01:00:00"\n'
+            ),
+        }
+
+    @classmethod
     def pip_packages(cls) -> list[str]:
         """Return pip packages to install for this simulator.
 

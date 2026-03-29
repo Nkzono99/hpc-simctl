@@ -1111,11 +1111,15 @@ def init(
     else:
         skipped.append(_LAUNCHERS_FILE)
 
-    # cases/ directory
+    # cases/ directory (with per-simulator subdirectories)
     if _mkdir_if_missing(project_dir / "cases"):
         created.append("cases/")
     else:
         skipped.append("cases/")
+    for sim in sim_names:
+        sim_cases_dir = project_dir / "cases" / sim
+        if _mkdir_if_missing(sim_cases_dir):
+            created.append(f"cases/{sim}/")
 
     # runs/ directory
     if _mkdir_if_missing(project_dir / "runs"):

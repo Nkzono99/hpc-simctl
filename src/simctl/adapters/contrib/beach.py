@@ -114,6 +114,41 @@ class BeachAdapter(SimulatorAdapter):
         return config
 
     @classmethod
+    def case_template(cls) -> dict[str, str]:
+        """Return template files for a new BEACH case."""
+        return {
+            "case.toml": (
+                '[case]\nname = ""\nsimulator = "beach"\n'
+                'launcher = "default"\ndescription = ""\n'
+                'copy_files = []\n\n'
+                "[params]\n"
+                '# "sim.dt" = 1.0e-6\n'
+                '# "sim.max_step" = 1000\n'
+                '# "environment.electron_density" = 1.0e12\n\n'
+                "[job]\n"
+                'partition = ""\nnodes = 1\nntasks = 1\n'
+                'walltime = "01:00:00"\n'
+            ),
+            "beach.toml": (
+                "# BEACH configuration\n"
+                "# See BEACH documentation for full parameter reference\n\n"
+                "[sim]\n"
+                "dt = 1.0e-6\n"
+                "max_step = 1000\n"
+                "batch_count = 100\n\n"
+                "[mesh]\n"
+                '# obj_path = "mesh.obj"\n\n'
+                "[environment]\n"
+                "electron_density = 1.0e12\n"
+                "electron_temperature = 1.0\n"
+                "ion_density = 1.0e12\n"
+                "ion_temperature = 1.0\n\n"
+                "[output]\n"
+                '# dir is set automatically by simctl\n'
+            ),
+        }
+
+    @classmethod
     def pip_packages(cls) -> list[str]:
         """Return pip packages for BEACH (simulator + analysis tools)."""
         return [

@@ -136,6 +136,40 @@ class EmseAdapter(SimulatorAdapter):
         return config
 
     @classmethod
+    def case_template(cls) -> dict[str, str]:
+        """Return template files for a new EMSES case."""
+        return {
+            "case.toml": (
+                '[case]\nname = ""\nsimulator = "emses"\n'
+                'launcher = "default"\ndescription = ""\n'
+                'copy_files = []\n\n'
+                "[params]\n"
+                '# "tmgrid.nx" = 64\n'
+                '# "tmgrid.ny" = 64\n'
+                '# "tmgrid.nz" = 64\n'
+                '# "tmgrid.dt" = 1.0\n'
+                '# "jobcon.nstep" = 10000\n\n'
+                "[job]\n"
+                'partition = ""\nnodes = 1\nntasks = 1\n'
+                'walltime = "01:00:00"\n'
+            ),
+            "plasma.toml": (
+                "# EMSES plasma configuration\n"
+                "# See EMSES documentation for full parameter reference\n\n"
+                "[jobcon]\n"
+                "nstep = 10000\n\n"
+                "[tmgrid]\n"
+                "nx = 64\nny = 64\nnz = 64\n"
+                "dt = 1.0\n\n"
+                "[[species]]\n"
+                "name = \"electron\"\n"
+                "# charge, mass, temperature, density, etc.\n\n"
+                "[emfield]\n"
+                "# External field configuration\n"
+            ),
+        }
+
+    @classmethod
     def pip_packages(cls) -> list[str]:
         """Return pip packages for EMSES (simulator + analysis tools)."""
         return [

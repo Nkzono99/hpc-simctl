@@ -14,6 +14,7 @@ from simctl.cli.init import doctor, init
 from simctl.cli.jobs import jobs
 from simctl.cli.list import list_runs
 from simctl.cli.log import log
+from simctl.cli.new import new
 from simctl.cli.manage import archive, purge_work
 from simctl.cli.status import status, sync
 from simctl.cli.submit import run_cmd
@@ -28,6 +29,7 @@ app = typer.Typer(
 app.command("init")(init)
 app.command("doctor")(doctor)
 app.add_typer(config_app, name="config")
+app.command("new")(new)
 app.command("create")(create)
 app.command("sweep")(sweep)
 app.command("run")(run_cmd)
