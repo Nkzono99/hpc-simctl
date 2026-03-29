@@ -1187,6 +1187,44 @@ def init(
         else:
             typer.echo(f"  Warning: git init failed: {result.stderr.strip()}")
 
+    # .venv + pip install
+    venv_dir = project_dir / ".venv"
+    if venv_dir.exists():
+        skipped.append(".venv")
+    else:
+        typer.echo("  Creating .venv ...")
+        venv_result = subprocess.run(
+            [sys.executable, "-m", "venv", str(venv_dir)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if venv_result.returncode == 0:
+            created.append(".venv")
+
+            # Install simulator-specific packages
+            pip_pkgs = _collect_pip_packages(sim_names) if sim_names else []
+            if pip_pkgs:
+                pip_exe = str(venv_dir / "bin" / "pip")
+                typer.echo(f"  Installing: {', '.join(pip_pkgs)} ...")
+                pip_result = subprocess.run(
+                    [pip_exe, "install", *pip_pkgs],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                if pip_result.returncode == 0:
+                    created.append(f"pip install ({len(pip_pkgs)} packages)")
+                else:
+                    typer.echo(
+                        f"  Warning: pip install failed:\n"
+                        f"    {pip_result.stderr.strip()[:300]}"
+                    )
+        else:
+            typer.echo(
+                f"  Warning: venv creation failed: {venv_result.stderr.strip()}"
+            )
+
     # Print results
     typer.echo(f"Initialized project '{project_name}' in {project_dir}")
     if created:
