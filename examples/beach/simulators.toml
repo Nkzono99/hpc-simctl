@@ -1,12 +1,5 @@
 [simulators.beach]
 adapter = "beach"
-resolver_mode = "local_source"
-
-# BEACH source repository path
-source_repo = "/home/b/b36291/large0/Github/BEACH"
-build_command = "make build-mpi"
+resolver_mode = "package"
 executable = "beach"
-
-# For package mode (if beach is installed globally):
-# resolver_mode = "package"
-# executable = "beach"
+# pip install beach-bem

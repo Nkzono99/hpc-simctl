@@ -1,12 +1,5 @@
 [simulators.emses]
 adapter = "emses"
-resolver_mode = "local_source"
-
-# MPIEMSES3D source repository
-source_repo = "/home/b/b36291/large0/Github/MPIEMSES3D"
-build_command = "make"
+resolver_mode = "package"
 executable = "mpiemses3D"
-
-# For local_executable mode (pre-compiled binary):
-# resolver_mode = "local_executable"
-# executable = "/path/to/mpiemses3D"
+# pip install git+https://github.com/CS12-Laboratory/MPIEMSES3D.git
