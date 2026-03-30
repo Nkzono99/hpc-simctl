@@ -22,19 +22,26 @@ memory: project
 Fortran namelist 形式。主要なパラメータ：
 
 ```fortran
-&emses
+&tmgrid
   nx = 256, ny = 256, nz = 512
-  nxs = 4, nys = 4, nzs = 8       ! 領域分割 (MPI プロセス数 = nxs * nys * nzs)
   dt = 1.0e-8
+/
+
+&jobcon
   nstep = 10000
-  ...
+/
+
+&mpi
+  nodes(1:3) = 4, 4, 8            ! 領域分割 (MPI プロセス数 = 4*4*8 = 128)
 /
 ```
 
-- `nxs`, `nys`, `nzs`: 各軸の領域分割数。総 MPI プロセス数 = nxs × nys × nzs
-- `nx`, `ny`, `nz`: 各軸のグリッド数
-- `dt`: 時間刻み
-- `nstep`: 総ステップ数
+主要な namelist グループ: `esorem`, `jobcon`, `digcon`, `plasma`, `tmgrid`, `system`, `mpi`, `intp`, `ptcond`, `gradema`, `dipole`, `emissn`, `inp`, `testch`, `jsrc`, `verbose`
+
+- `&tmgrid`: グリッド定義 (`nx`, `ny`, `nz`, `dt` 等)
+- `&mpi` / `nodes(1:3)`: 各軸の領域分割数。総 MPI プロセス数 = product(nodes)
+- `&jobcon` / `nstep`: 総ステップ数
+- `&plasma`: プラズマパラメータ (`wc`, `phiz` 等)
 
 ## HPC 環境
 
@@ -43,6 +50,7 @@ Fortran namelist 形式。主要なパラメータ：
 - 前処理: `preinp` コマンド (plasma.preinp がある場合)
 - 後処理: `mypython plot.py ./`, `mypython plot_hole.py ./`
 - sbatch ラッパー: `mysbatch job.sh` (plasma.inp から自動的にプロセス数を設定)
+- venv 自動検出: `resolve_runtime` が cwd から上位ディレクトリを辿って `.venv` を自動検出。`simulators.toml` の `venv_path` が未設定でも動作する
 
 ## 実行管理タスク
 
@@ -53,7 +61,7 @@ Fortran namelist 形式。主要なパラメータ：
 
 ### ジョブ投入
 - job.sh 生成（rsc モード、module load 付き）
-- プロセス数の自動計算 (nxs * nys * nzs)
+- プロセス数の自動計算: `&mpi` グループの `nodes(1:3)` から product(nodes) で算出
 - walltime の見積もり
 
 ### 状態監視

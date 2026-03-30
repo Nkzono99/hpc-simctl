@@ -69,6 +69,7 @@ beach beach.toml            # シミュレーション実行
 ## HPC 環境
 
 - Python venv の activate が必要: `source /path/to/venv/bin/activate`
+- venv 自動検出: `resolve_runtime` が cwd から上位ディレクトリを辿って `.venv` を自動検出。`simulators.toml` の `venv_path` が未設定でも動作する
 - module load は不要 (Python パッケージとして完結)
 - MPI 並列対応: `mpirun -np N beach beach.toml` or `srun beach beach.toml`
 

@@ -143,6 +143,12 @@ class BeachAdapter(SimulatorAdapter):
 
         runtime: dict[str, Any] = {"resolver_mode": resolver_mode}
         venv_path = simulator_config.get("venv_path", "")
+        if not venv_path:
+            from simctl.adapters.emses import find_venv
+
+            found = find_venv(Path.cwd())
+            if found:
+                venv_path = str(found)
         if venv_path:
             runtime["venv_path"] = venv_path
 

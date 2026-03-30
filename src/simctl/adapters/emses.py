@@ -35,9 +35,20 @@ STDOUT_FILE = "stdout.log"
 STDERR_FILE = "stderr.log"
 EXIT_CODE_FILE = "exit_code"
 
-DEFAULT_NAMELIST_GROUP = "emses"
+DEFAULT_NAMELIST_GROUP = "tmgrid"
 
 _RESOLVER_MODES = frozenset({"package", "local_source", "local_executable"})
+
+# Domain decomposition: &mpi group, nodes(1:3) = [nxdiv, nydiv, nzdiv]
+DOMAIN_DECOMP_GROUP = "mpi"
+DOMAIN_DECOMP_KEY = "nodes"
+
+# All known namelist groups in MPIEMSES3D
+NAMELIST_GROUPS = (
+    "esorem", "jobcon", "digcon", "plasma", "tmgrid", "system",
+    "mpi", "intp", "ptcond", "gradema", "dipole", "emissn",
+    "inp", "testch", "jsrc", "verbose",
+)
 
 # Patterns for log parsing
 _TIMESTEP_PATTERN = re.compile(r"istep\s*=\s*(\d+)", re.IGNORECASE)
@@ -170,9 +181,59 @@ def _format_namelist_value(value: Any) -> str:
         return str(value)
     if isinstance(value, float):
         return f"{value}"
+    if isinstance(value, (list, tuple)):
+        return ", ".join(_format_namelist_value(v) for v in value)
     if isinstance(value, str):
         return f"'{value}'"
     return str(value)
+
+
+def compute_mpi_processes(namelist_data: dict[str, dict[str, Any]]) -> int | None:
+    """Compute the required MPI process count from domain decomposition.
+
+    In MPIEMSES3D, the ``&mpi`` group's ``nodes(1:3)`` parameter
+    (stored as a list ``[nxdiv, nydiv, nzdiv]``) defines the domain
+    decomposition.  Total processes = product(nodes).
+
+    Args:
+        namelist_data: Parsed namelist groups from :func:`parse_namelist`.
+
+    Returns:
+        Total MPI process count, or ``None`` if nodes is not specified.
+    """
+    mpi_group = namelist_data.get(DOMAIN_DECOMP_GROUP, {})
+    nodes = mpi_group.get(DOMAIN_DECOMP_KEY)
+    if nodes is None:
+        return None
+    if isinstance(nodes, (list, tuple)):
+        result = 1
+        for n in nodes:
+            result *= int(n)
+        return result
+    return int(nodes)
+
+
+def find_venv(start: Path) -> Path | None:
+    """Find the nearest ``.venv`` directory by searching upward.
+
+    Starts from *start* and walks parent directories until a ``.venv``
+    directory containing ``bin/activate`` (or ``Scripts/activate``) is found.
+
+    Args:
+        start: Starting directory for the search.
+
+    Returns:
+        Path to the venv directory, or ``None`` if not found.
+    """
+    current = start.resolve()
+    for directory in [current, *current.parents]:
+        venv = directory / ".venv"
+        if venv.is_dir() and (
+            (venv / "bin" / "activate").exists()
+            or (venv / "Scripts" / "activate").exists()
+        ):
+            return venv
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -293,6 +354,14 @@ class Emses3DAdapter(SimulatorAdapter):
             raise ValueError(msg)
 
         runtime: dict[str, Any] = {"resolver_mode": resolver_mode}
+
+        venv_path = simulator_config.get("venv_path", "")
+        if not venv_path:
+            found = find_venv(Path.cwd())
+            if found:
+                venv_path = str(found)
+        if venv_path:
+            runtime["venv_path"] = venv_path
 
         if resolver_mode == "package":
             exe_name = simulator_config.get("executable", EXECUTABLE_NAME)
