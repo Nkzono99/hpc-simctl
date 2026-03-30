@@ -1173,6 +1173,66 @@ def doctor(
     else:
         typer.echo("[PASS] No runs/ directory (nothing to check)")
 
+    # Environment detection
+    typer.echo("\n--- Environment ---")
+    try:
+        from simctl.core.environment import (
+            detect_environment,
+            load_environment,
+            save_environment,
+        )
+
+        existing = load_environment(project_dir)
+        if existing:
+            typer.echo(
+                f"[PASS] environment.toml found "
+                f"(cluster: {existing.cluster_name})"
+            )
+            if existing.partitions:
+                for p in existing.partitions:
+                    default_mark = " (default)" if p.default else ""
+                    typer.echo(
+                        f"       partition: {p.name}{default_mark}"
+                    )
+        else:
+            typer.echo("[INFO] Detecting environment...")
+            env_info = detect_environment()
+            if env_info.partitions:
+                typer.echo(
+                    f"       Detected {len(env_info.partitions)} "
+                    f"Slurm partition(s)"
+                )
+            try:
+                env_path = save_environment(project_dir, env_info)
+                typer.echo(
+                    f"[PASS] Saved environment to "
+                    f"{env_path.relative_to(project_dir)}"
+                )
+            except RuntimeError:
+                typer.echo(
+                    "[WARN] Could not save environment.toml "
+                    "(tomli_w not installed)"
+                )
+    except Exception as e:
+        typer.echo(f"[WARN] Environment detection failed: {e}")
+
+    # Campaign check
+    campaign_file = project_dir / "campaign.toml"
+    if campaign_file.is_file():
+        try:
+            from simctl.core.campaign import load_campaign
+
+            campaign = load_campaign(project_dir)
+            if campaign:
+                typer.echo(
+                    f"[PASS] campaign.toml: {campaign.name}"
+                )
+        except SimctlError as e:
+            typer.echo(f"[FAIL] campaign.toml: {e}")
+            failures.append("campaign.toml")
+    else:
+        typer.echo("[INFO] No campaign.toml (optional)")
+
     # Final verdict
     if failures:
         typer.echo(f"\n{len(failures)} check(s) failed.")
