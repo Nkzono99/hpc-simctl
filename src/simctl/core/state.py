@@ -31,12 +31,35 @@ class RunState(str, Enum):
     PURGED = "purged"
 
 
-#: Valid state transitions: maps current state to allowed next states.
+#: Valid state transitions for internal lifecycle operations.
 #: Matches SPEC section 13.2 exactly.
 VALID_TRANSITIONS: dict[RunState, frozenset[RunState]] = {
     RunState.CREATED: frozenset({RunState.SUBMITTED, RunState.FAILED}),
     RunState.SUBMITTED: frozenset(
         {RunState.RUNNING, RunState.FAILED, RunState.CANCELLED}
+    ),
+    RunState.RUNNING: frozenset(
+        {RunState.COMPLETED, RunState.FAILED, RunState.CANCELLED}
+    ),
+    RunState.COMPLETED: frozenset({RunState.ARCHIVED}),
+    RunState.FAILED: frozenset(),
+    RunState.CANCELLED: frozenset(),
+    RunState.ARCHIVED: frozenset({RunState.PURGED}),
+    RunState.PURGED: frozenset(),
+}
+
+#: Reconciliation transitions: allowed when syncing with external state
+#: (Slurm).  These cover cases where intermediate states were not observed
+#: (e.g. submitted -> completed when the job ran between sync polls).
+RECONCILIATION_TRANSITIONS: dict[RunState, frozenset[RunState]] = {
+    RunState.CREATED: frozenset({RunState.SUBMITTED, RunState.FAILED}),
+    RunState.SUBMITTED: frozenset(
+        {
+            RunState.RUNNING,
+            RunState.COMPLETED,   # skipped running
+            RunState.FAILED,
+            RunState.CANCELLED,
+        }
     ),
     RunState.RUNNING: frozenset(
         {RunState.COMPLETED, RunState.FAILED, RunState.CANCELLED}
@@ -80,11 +103,31 @@ def transition_state(current: RunState, target: RunState) -> RunState:
     return target
 
 
+def validate_reconciliation(current: RunState, target: RunState) -> bool:
+    """Check whether a reconciliation transition is valid.
+
+    Reconciliation transitions are a superset of lifecycle transitions,
+    allowing state jumps that occur when intermediate states are not
+    observed (e.g. ``submitted -> completed`` during Slurm sync).
+
+    Args:
+        current: The current run state.
+        target: The observed external state.
+
+    Returns:
+        True if the reconciliation is allowed.
+    """
+    return target in RECONCILIATION_TRANSITIONS.get(current, frozenset())
+
+
 def update_state(
     run_dir: Path,
     new_state: RunState,
     *,
     timestamp: datetime | None = None,
+    reconcile: bool = False,
+    reason: str = "",
+    slurm_state: str = "",
 ) -> None:
     """Update the run state in both manifest.toml and status/state.json.
 
@@ -97,6 +140,11 @@ def update_state(
         new_state: The target state.
         timestamp: Optional timestamp for the state change. Defaults
             to the current UTC time.
+        reconcile: If True, use reconciliation rules (allows skipping
+            intermediate states during Slurm sync).
+        reason: Terminal reason for failed/cancelled states
+            (e.g. ``"timeout"``, ``"oom"``, ``"node_fail"``).
+        slurm_state: Raw Slurm state string for provenance.
 
     Raises:
         InvalidStateTransitionError: If the transition is not allowed.
@@ -115,16 +163,21 @@ def update_state(
     except ValueError:
         raise InvalidStateTransitionError(current_str, new_state.value) from None
 
-    # Validate and perform transition
-    transition_state(current, new_state)
+    # Validate transition
+    if reconcile:
+        if not validate_reconciliation(current, new_state):
+            raise InvalidStateTransitionError(current.value, new_state.value)
+    else:
+        transition_state(current, new_state)
 
-    # Update manifest.toml
-    update_manifest(
-        run_dir,
-        {
-            "run": {"status": new_state.value},
-        },
-    )
+    # Build manifest updates
+    run_updates: dict[str, Any] = {"status": new_state.value}
+    if reason:
+        run_updates["failure_reason"] = reason
+    if slurm_state:
+        run_updates["last_slurm_state"] = slurm_state
+
+    update_manifest(run_dir, {"run": run_updates})
 
     # Write status/state.json
     status_dir = run_dir / "status"
@@ -134,6 +187,10 @@ def update_state(
         "previous_state": current.value,
         "changed_at": timestamp.isoformat(),
     }
+    if reason:
+        state_json["reason"] = reason
+    if slurm_state:
+        state_json["slurm_state"] = slurm_state
     state_file = status_dir / "state.json"
     with open(state_file, "w") as f:
         json.dump(state_json, f, indent=2)

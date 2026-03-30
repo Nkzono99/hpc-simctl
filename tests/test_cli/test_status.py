@@ -11,6 +11,7 @@ from typer.testing import CliRunner
 
 from simctl.cli.main import app
 from simctl.core.state import RunState
+from simctl.slurm.query import JobStatus
 
 runner = CliRunner()
 
@@ -61,7 +62,7 @@ def test_status_shows_run_info(tmp_path: Path) -> None:
         patch("simctl.cli.status.Path.cwd", return_value=tmp_path),
         patch(
             "simctl.cli.status.query_job_status",
-            return_value=RunState.RUNNING,
+            return_value=JobStatus(run_state=RunState.RUNNING, slurm_state="RUNNING"),
         ),
     ):
         result = runner.invoke(app, ["status", str(run_dir)])
@@ -70,7 +71,7 @@ def test_status_shows_run_info(tmp_path: Path) -> None:
     assert "R20260327-0001" in result.output
     assert "submitted" in result.output
     assert "12345" in result.output
-    assert "running" in result.output
+    assert "RUNNING" in result.output
 
 
 def test_status_no_job_id(tmp_path: Path) -> None:
@@ -132,7 +133,7 @@ def test_sync_updates_state(tmp_path: Path) -> None:
         patch("simctl.cli.status.Path.cwd", return_value=tmp_path),
         patch(
             "simctl.cli.status.query_job_status",
-            return_value=RunState.RUNNING,
+            return_value=JobStatus(run_state=RunState.RUNNING, slurm_state="RUNNING"),
         ),
     ):
         result = runner.invoke(app, ["sync", str(run_dir)])
@@ -163,7 +164,7 @@ def test_sync_no_change(tmp_path: Path) -> None:
         patch("simctl.cli.status.Path.cwd", return_value=tmp_path),
         patch(
             "simctl.cli.status.query_job_status",
-            return_value=RunState.RUNNING,
+            return_value=JobStatus(run_state=RunState.RUNNING, slurm_state="RUNNING"),
         ),
     ):
         result = runner.invoke(app, ["sync", str(run_dir)])
@@ -216,7 +217,7 @@ def test_sync_completed(tmp_path: Path) -> None:
         patch("simctl.cli.status.Path.cwd", return_value=tmp_path),
         patch(
             "simctl.cli.status.query_job_status",
-            return_value=RunState.COMPLETED,
+            return_value=JobStatus(run_state=RunState.COMPLETED, slurm_state="COMPLETED"),
         ),
     ):
         result = runner.invoke(app, ["sync", str(run_dir)])

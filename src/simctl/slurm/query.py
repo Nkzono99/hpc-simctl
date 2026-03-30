@@ -7,6 +7,8 @@ simctl ``RunState`` values.  All subprocess calls go through an injectable
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from simctl.core.state import RunState
 from simctl.slurm.submit import (
     CommandResult,
@@ -42,8 +44,37 @@ _SLURM_STATE_MAP: dict[str, RunState] = {
 }
 
 
+#: Maps Slurm failure states to human-readable failure reasons.
+_FAILURE_REASON_MAP: dict[str, str] = {
+    "TIMEOUT": "timeout",
+    "OUT_OF_MEMORY": "oom",
+    "NODE_FAIL": "node_fail",
+    "PREEMPTED": "preempted",
+    "BOOT_FAIL": "boot_fail",
+    "DEADLINE": "deadline",
+    "FAILED": "exit_error",
+}
+
+
 class SlurmQueryError(RuntimeError):
     """Raised when a Slurm query command fails unexpectedly."""
+
+
+@dataclass(frozen=True)
+class JobStatus:
+    """Result of a Slurm job status query.
+
+    Attributes:
+        run_state: Mapped simctl RunState.
+        slurm_state: Raw Slurm state string.
+        failure_reason: Reason for failure (empty if not failed).
+        exit_code: Slurm exit code string (if available).
+    """
+
+    run_state: RunState
+    slurm_state: str
+    failure_reason: str = ""
+    exit_code: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -197,7 +228,7 @@ def query_job_status(
     job_id: str,
     *,
     runner: CommandRunner | None = None,
-) -> RunState:
+) -> JobStatus:
     """Determine the current simctl state of a Slurm job.
 
     Strategy: try ``squeue`` first (cheap, covers active jobs).  If the job
@@ -209,7 +240,8 @@ def query_job_status(
         runner: Optional command runner for testing.
 
     Returns:
-        The simctl ``RunState`` corresponding to the job's Slurm state.
+        A :class:`JobStatus` with the mapped state, raw Slurm state,
+        failure reason, and exit code.
 
     Raises:
         SlurmNotFoundError: If Slurm commands are not on PATH.
@@ -219,12 +251,23 @@ def query_job_status(
     # 1. Try squeue (active jobs)
     sq_state = squeue_status(job_id, runner=runner)
     if sq_state is not None:
-        return map_slurm_state(sq_state)
+        raw = sq_state.strip().split()[0].rstrip("+")
+        return JobStatus(
+            run_state=map_slurm_state(sq_state),
+            slurm_state=raw,
+        )
 
     # 2. Fall back to sacct (historical jobs)
     sa_info = sacct_status(job_id, runner=runner)
     if sa_info is not None:
-        return map_slurm_state(sa_info["state"])
+        raw = sa_info["state"].strip().split()[0].rstrip("+")
+        run_state = map_slurm_state(sa_info["state"])
+        return JobStatus(
+            run_state=run_state,
+            slurm_state=raw,
+            failure_reason=_FAILURE_REASON_MAP.get(raw, ""),
+            exit_code=sa_info.get("exit_code", ""),
+        )
 
     raise SlurmQueryError(
         f"Job {job_id} not found in squeue or sacct. "

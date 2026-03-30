@@ -193,22 +193,26 @@ def _generate_knowledge_md(
     return "\n".join(lines)
 
 
-def _get_project_simulators() -> tuple[Path, list[str]]:
-    """Find project root and return simulator names."""
+def _get_project_simulators() -> tuple[Path, dict[str, str]]:
+    """Find project root and return {sim_name: adapter_name} mapping."""
     cwd = Path.cwd().resolve()
     root = find_project_root(cwd)
     project = load_project(root)
-    return root, list(project.simulators.keys())
+    mapping: dict[str, str] = {}
+    for sim_name, sim_cfg in project.simulators.items():
+        adapter_name = sim_cfg.get("adapter", sim_name)
+        mapping[sim_name] = adapter_name
+    return root, mapping
 
 
-def _get_adapter_class(sim_name: str) -> type | None:
-    """Get adapter class for a simulator name."""
+def _get_adapter_class(adapter_name: str) -> type | None:
+    """Get adapter class by adapter name (not simulator entry name)."""
     import simctl.adapters  # noqa: F401
     from simctl.adapters.registry import get_global_registry
 
     registry = get_global_registry()
     try:
-        return registry.get(sim_name)
+        return registry.get(adapter_name)
     except KeyError:
         return None
 
@@ -239,8 +243,20 @@ def update_refs(
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=1) from None
 
-    target_sims = simulators if simulators else project_sims
-    if not target_sims:
+    # project_sims is {sim_name: adapter_name}
+    # If user passes simulator names, resolve to adapter names
+    if simulators:
+        target_mapping: dict[str, str] = {}
+        for s in simulators:
+            if s in project_sims:
+                target_mapping[s] = project_sims[s]
+            else:
+                # Maybe user passed adapter name directly
+                target_mapping[s] = s
+    else:
+        target_mapping = dict(project_sims)
+
+    if not target_mapping:
         typer.echo("No simulators found in project.")
         raise typer.Exit(code=1)
 
@@ -251,10 +267,13 @@ def update_refs(
     repos_to_update: dict[str, str] = {}  # dest_name -> sim_name (for display)
     sim_sources: dict[str, dict[str, list[str]]] = {}  # sim -> {repo -> patterns}
 
-    for sim_name in target_sims:
-        adapter_cls = _get_adapter_class(sim_name)
+    for sim_name, adapter_name in target_mapping.items():
+        adapter_cls = _get_adapter_class(adapter_name)
         if adapter_cls is None:
-            typer.echo(f"  Warning: no adapter found for '{sim_name}', skipping.")
+            typer.echo(
+                f"  Warning: no adapter '{adapter_name}' "
+                f"for '{sim_name}', skipping."
+            )
             continue
 
         # Get doc repos for this adapter
@@ -265,10 +284,10 @@ def update_refs(
             repos_to_update[dest] = sim_name
 
         if knowledge:
-            sim_sources[sim_name] = knowledge
+            sim_sources[adapter_name] = knowledge
         else:
             # Default: index docs/ and README from each doc repo
-            sim_sources[sim_name] = {
+            sim_sources[adapter_name] = {
                 dest: ["README.md", "docs/**/*.md"]
                 for _url, dest in doc_repos
             }

@@ -137,11 +137,32 @@ def _submit_single_run(
         typer.echo(f"Error: sbatch failed for {run_dir.name}: {e}")
         return None
 
-    # Record job_id and submitted_at in manifest
+    # Record job_id, submitted_at, and attempt history in manifest
     try:
         submitted_at = datetime.now(tz=timezone.utc).isoformat()
+
+        # Build new attempt record
+        attempt = {
+            "job_id": job_id,
+            "submitted_at": submitted_at,
+        }
+        # Append to attempts list (preserving existing history)
+        existing_attempts: list[dict[str, str]] = list(
+            manifest.job.get("attempts", [])
+        )
+        attempt_number = len(existing_attempts) + 1
+        attempt["attempt"] = str(attempt_number)
+        existing_attempts.append(attempt)
+
         update_manifest(
-            run_dir, {"job": {"job_id": job_id, "submitted_at": submitted_at}}
+            run_dir,
+            {
+                "job": {
+                    "job_id": job_id,
+                    "submitted_at": submitted_at,
+                    "attempts": existing_attempts,
+                },
+            },
         )
     except SimctlError as e:
         typer.echo(f"Error: Failed to update manifest: {e}")

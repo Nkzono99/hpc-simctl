@@ -93,13 +93,20 @@ def status(
     typer.echo(f"Path:   {run_dir}")
     typer.echo(f"State:  {current_status}")
 
+    # Show failure reason if recorded
+    failure_reason = manifest.run.get("failure_reason", "")
+    if failure_reason:
+        typer.echo(f"Reason: {failure_reason}")
+
     if job_id:
         typer.echo(f"Job ID: {job_id}")
 
         # Query Slurm for live status (best-effort)
         try:
-            slurm_state = query_job_status(job_id)
-            typer.echo(f"Slurm:  {slurm_state.value}")
+            job_status = query_job_status(job_id)
+            typer.echo(f"Slurm:  {job_status.slurm_state}")
+            if job_status.failure_reason:
+                typer.echo(f"Slurm reason: {job_status.failure_reason}")
         except SlurmNotFoundError:
             typer.echo("Slurm:  (Slurm commands not available)")
         except SlurmQueryError as e:
@@ -145,7 +152,7 @@ def sync(
 
     # Query Slurm
     try:
-        slurm_state = query_job_status(job_id)
+        job_status = query_job_status(job_id)
     except SlurmNotFoundError as e:
         typer.echo(f"Error: {e}")
         raise typer.Exit(code=1) from None
@@ -154,21 +161,31 @@ def sync(
         raise typer.Exit(code=1) from None
 
     # Check if state actually changed
-    if slurm_state.value == current_status:
+    if job_status.run_state.value == current_status:
         typer.echo(f"{run_id}: state unchanged ({current_status})")
         return
 
-    # Attempt state transition
+    # Attempt state transition using reconciliation rules
+    # (allows skipping intermediate states, e.g. submitted -> completed)
     try:
-        update_state(run_dir, slurm_state)
+        update_state(
+            run_dir,
+            job_status.run_state,
+            reconcile=True,
+            reason=job_status.failure_reason,
+            slurm_state=job_status.slurm_state,
+        )
     except InvalidStateTransitionError as e:
         typer.echo(
             f"Error: Cannot transition {run_id} from "
-            f"'{current_status}' to '{slurm_state.value}': {e}"
+            f"'{current_status}' to '{job_status.run_state.value}': {e}"
         )
         raise typer.Exit(code=1) from None
     except SimctlError as e:
         typer.echo(f"Error: Failed to update state: {e}")
         raise typer.Exit(code=1) from None
 
-    typer.echo(f"{run_id}: {current_status} -> {slurm_state.value}")
+    msg = f"{run_id}: {current_status} -> {job_status.run_state.value}"
+    if job_status.failure_reason:
+        msg += f" (reason: {job_status.failure_reason})"
+    typer.echo(msg)

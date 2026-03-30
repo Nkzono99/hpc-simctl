@@ -187,8 +187,9 @@ class TestQueryJobStatus:
                 return CommandResult(0, "RUNNING\n", "")
             return CommandResult(0, "", "")
 
-        state = query_job_status("12345", runner=runner)
-        assert state is RunState.RUNNING
+        result = query_job_status("12345", runner=runner)
+        assert result.run_state is RunState.RUNNING
+        assert result.slurm_state == "RUNNING"
         assert "sacct" not in call_log
 
     def test_completed_job_falls_to_sacct(self) -> None:
@@ -200,8 +201,9 @@ class TestQueryJobStatus:
             # sacct
             return CommandResult(0, "12345|COMPLETED|0:0\n", "")
 
-        state = query_job_status("12345", runner=runner)
-        assert state is RunState.COMPLETED
+        result = query_job_status("12345", runner=runner)
+        assert result.run_state is RunState.COMPLETED
+        assert result.slurm_state == "COMPLETED"
 
     def test_failed_job_from_sacct(self) -> None:
         def runner(cmd: list[str]) -> CommandResult:
@@ -209,8 +211,10 @@ class TestQueryJobStatus:
                 return CommandResult(0, "", "")
             return CommandResult(0, "12345|FAILED|1:0\n", "")
 
-        state = query_job_status("12345", runner=runner)
-        assert state is RunState.FAILED
+        result = query_job_status("12345", runner=runner)
+        assert result.run_state is RunState.FAILED
+        assert result.failure_reason == "exit_error"
+        assert result.exit_code == "1:0"
 
     def test_cancelled_from_sacct(self) -> None:
         def runner(cmd: list[str]) -> CommandResult:
@@ -218,8 +222,32 @@ class TestQueryJobStatus:
                 return CommandResult(0, "", "")
             return CommandResult(0, "12345|CANCELLED by 1000|0:0\n", "")
 
-        state = query_job_status("12345", runner=runner)
-        assert state is RunState.CANCELLED
+        result = query_job_status("12345", runner=runner)
+        assert result.run_state is RunState.CANCELLED
+
+    def test_timeout_records_reason(self) -> None:
+        """TIMEOUT should map to failed with reason='timeout'."""
+
+        def runner(cmd: list[str]) -> CommandResult:
+            if cmd[0] == "squeue":
+                return CommandResult(0, "", "")
+            return CommandResult(0, "12345|TIMEOUT|0:0\n", "")
+
+        result = query_job_status("12345", runner=runner)
+        assert result.run_state is RunState.FAILED
+        assert result.failure_reason == "timeout"
+
+    def test_oom_records_reason(self) -> None:
+        """OUT_OF_MEMORY should map to failed with reason='oom'."""
+
+        def runner(cmd: list[str]) -> CommandResult:
+            if cmd[0] == "squeue":
+                return CommandResult(0, "", "")
+            return CommandResult(0, "12345|OUT_OF_MEMORY|0:0\n", "")
+
+        result = query_job_status("12345", runner=runner)
+        assert result.run_state is RunState.FAILED
+        assert result.failure_reason == "oom"
 
     def test_job_purged_raises(self) -> None:
         """If neither squeue nor sacct finds the job, raise."""
