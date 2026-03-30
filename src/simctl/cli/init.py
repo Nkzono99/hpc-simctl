@@ -434,21 +434,19 @@ def _prompt_simulators() -> tuple[list[str], dict[str, dict[str, Any]]]:
     return selected, configs
 
 
-_SITE_PROFILES: dict[str, dict[str, Any]] = {
-    "cmaphor": {
-        "type": "srun",
-        "use_slurm_ntasks": True,
-        "resource_style": "rsc",
-        "modules": [
-            "intel/2023.2",
-            "intelmpi/2023.2",
-            "hdf5/1.12.2_intel-2023.2-impi",
-            "fftw/3.3.10_intel-2022.3-impi",
-        ],
-        "stdout": "stdout.%J.log",
-        "stderr": "stderr.%J.log",
-    },
-}
+def _load_site_profiles() -> dict[str, dict[str, Any]]:
+    """Load site profiles from bundled TOML files in simctl/sites/."""
+    sites_dir = Path(__file__).resolve().parent.parent / "sites"
+    profiles: dict[str, dict[str, Any]] = {}
+    if not sites_dir.is_dir():
+        return profiles
+    for toml_file in sorted(sites_dir.glob("*.toml")):
+        with open(toml_file, "rb") as f:
+            data = tomllib.load(f)
+        launcher = data.get("launcher", {})
+        if launcher:
+            profiles[toml_file.stem] = dict(launcher)
+    return profiles
 
 
 def _prompt_launchers() -> dict[str, dict[str, Any]]:
@@ -457,9 +455,11 @@ def _prompt_launchers() -> dict[str, dict[str, Any]]:
     Returns:
         Launcher config dict for launchers.toml.
     """
+    site_profiles = _load_site_profiles()
+
     typer.echo("\nLauncher configuration:")
     typer.echo("  Site profiles (preconfigured):")
-    site_names = list(_SITE_PROFILES.keys())
+    site_names = list(site_profiles.keys())
     for i, sname in enumerate(site_names, start=1):
         typer.echo(f"    {i}. {sname}")
     offset = len(site_names)
@@ -481,9 +481,9 @@ def _prompt_launchers() -> dict[str, dict[str, Any]]:
     site_map = {str(i): name for i, name in enumerate(site_names, start=1)}
     if sel in site_map:
         profile_name = site_map[sel]
-        return {profile_name: dict(_SITE_PROFILES[profile_name])}
-    if sel in _SITE_PROFILES:
-        return {sel: dict(_SITE_PROFILES[sel])}
+        return {profile_name: dict(site_profiles[profile_name])}
+    if sel in site_profiles:
+        return {sel: dict(site_profiles[sel])}
 
     # Launcher types
     launcher_map = {
