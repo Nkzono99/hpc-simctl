@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.resources
+from dataclasses import dataclass, field
 import logging
 import shutil
 import subprocess
@@ -434,10 +435,25 @@ def _prompt_simulators() -> tuple[list[str], dict[str, dict[str, Any]]]:
     return selected, configs
 
 
-def _load_site_profiles() -> dict[str, dict[str, Any]]:
+@dataclass
+class SiteProfile:
+    """A site profile loaded from sites/*.toml.
+
+    Attributes:
+        name: Site name (file stem, e.g. "cmaphor").
+        launcher: Launcher configuration dict for launchers.toml.
+        simulators: Per-simulator overrides (e.g. extra modules).
+    """
+
+    name: str
+    launcher: dict[str, Any]
+    simulators: dict[str, dict[str, Any]]
+
+
+def _load_site_profiles() -> dict[str, SiteProfile]:
     """Load site profiles from bundled TOML files in simctl/sites/."""
     sites_dir = Path(__file__).resolve().parent.parent / "sites"
-    profiles: dict[str, dict[str, Any]] = {}
+    profiles: dict[str, SiteProfile] = {}
     if not sites_dir.is_dir():
         return profiles
     for toml_file in sorted(sites_dir.glob("*.toml")):
@@ -445,15 +461,22 @@ def _load_site_profiles() -> dict[str, dict[str, Any]]:
             data = tomllib.load(f)
         launcher = data.get("launcher", {})
         if launcher:
-            profiles[toml_file.stem] = dict(launcher)
+            simulators = {
+                str(k): dict(v) for k, v in data.get("simulator", {}).items()
+            }
+            profiles[toml_file.stem] = SiteProfile(
+                name=toml_file.stem,
+                launcher=dict(launcher),
+                simulators=simulators,
+            )
     return profiles
 
 
-def _prompt_launchers() -> dict[str, dict[str, Any]]:
+def _prompt_launchers() -> tuple[dict[str, dict[str, Any]], SiteProfile | None]:
     """Interactively prompt for launcher configuration.
 
     Returns:
-        Launcher config dict for launchers.toml.
+        Tuple of (launcher config dict, selected SiteProfile or None).
     """
     site_profiles = _load_site_profiles()
 
@@ -475,15 +498,17 @@ def _prompt_launchers() -> dict[str, dict[str, Any]]:
 
     sel = selection.strip()
     if not sel:
-        return {}
+        return {}, None
 
     # Check site profiles first
     site_map = {str(i): name for i, name in enumerate(site_names, start=1)}
     if sel in site_map:
         profile_name = site_map[sel]
-        return {profile_name: dict(site_profiles[profile_name])}
+        profile = site_profiles[profile_name]
+        return {profile_name: dict(profile.launcher)}, profile
     if sel in site_profiles:
-        return {sel: dict(site_profiles[sel])}
+        profile = site_profiles[sel]
+        return {sel: dict(profile.launcher)}, profile
 
     # Launcher types
     launcher_map = {
@@ -495,7 +520,7 @@ def _prompt_launchers() -> dict[str, dict[str, Any]]:
 
     if launcher_type not in ("srun", "mpirun", "mpiexec"):
         typer.echo(f"  Unknown selection '{sel}', skipping")
-        return {}
+        return {}, None
 
     launcher_name = typer.prompt("  Launcher profile name", default=launcher_type)
 
@@ -523,7 +548,7 @@ def _prompt_launchers() -> dict[str, dict[str, Any]]:
     if not config.get("args"):
         config.pop("args", None)
 
-    return {launcher_name: config}
+    return {launcher_name: config}, None
 
 
 def _build_simulators_toml_from_configs(
@@ -825,11 +850,11 @@ def init(
         skipped.append(_SIMULATORS_FILE)
 
     # launchers.toml
+    site_profile: SiteProfile | None = None
     if interactive:
-        launcher_configs = _prompt_launchers()
+        launcher_configs, site_profile = _prompt_launchers()
         launcher_content = _build_launchers_toml(launcher_configs)
     else:
-        # Default to srun with use_slurm_ntasks
         launcher_configs = {
             "srun": {"type": "srun", "use_slurm_ntasks": True},
         }
@@ -841,6 +866,25 @@ def init(
         created.append(_LAUNCHERS_FILE)
     else:
         skipped.append(_LAUNCHERS_FILE)
+
+    # Apply site profile's per-simulator modules to simulators.toml
+    if site_profile and site_profile.simulators:
+        sim_file = project_dir / _SIMULATORS_FILE
+        if sim_file.exists():
+            with open(sim_file, "rb") as f:
+                existing = tomllib.load(f)
+            sims = existing.get("simulators", {})
+            updated = False
+            for sim_name, site_sim_cfg in site_profile.simulators.items():
+                if sim_name in sims:
+                    site_modules = site_sim_cfg.get("modules", [])
+                    if site_modules:
+                        sims[sim_name]["modules"] = site_modules
+                        updated = True
+            if updated and tomli_w is not None:
+                existing["simulators"] = sims
+                with open(sim_file, "wb") as f:
+                    tomli_w.dump(existing, f)
 
     # campaign.toml
     campaign_content = _build_campaign_toml(project_name, sim_names)

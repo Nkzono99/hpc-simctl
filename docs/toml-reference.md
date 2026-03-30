@@ -49,7 +49,7 @@ executable = "beach"
 | `executable` | string | No | Executable name or path |
 | `source_repo` | string | No | Source repository path (`local_source` mode only) |
 | `build_command` | string | No | Build command (`local_source` mode only) |
-| `modules` | string[] | No | HPC modules to load (`module load ...`) |
+| `modules` | string[] | No | Simulator-specific HPC modules (e.g. hdf5, fftw). Site-common modules (intel, intelmpi) are defined in `launchers.toml`. Both are merged in job.sh. |
 
 ### resolver_mode
 
