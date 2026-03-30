@@ -388,11 +388,26 @@ def _generate_run(
         ntasks,
     )
     job_config = _build_job_config(case_data.job)
+
+    # Build setup commands: venv activation + launcher setup
+    setup_cmds: list[str] = []
+    venv_activate = project.root_dir / ".venv" / "bin" / "activate"
+    if venv_activate.exists():
+        setup_cmds.append(f"source {venv_activate}")
+    setup_cmds.extend(launcher.setup_commands)
+
     generate_job_script(
         run_info.run_dir,
         job_config,
         exec_line,
         run_id=run_info.run_id,
+        resource_style=launcher.resource_style,
+        modules=launcher.modules,
+        extra_sbatch=launcher.extra_sbatch,
+        extra_env=launcher.site_env,
+        setup_commands=setup_cmds,
+        stdout_format=launcher.stdout_format,
+        stderr_format=launcher.stderr_format,
     )
 
     # 6. Build and write manifest

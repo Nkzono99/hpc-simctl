@@ -87,6 +87,11 @@ class Launcher(ABC):
         return {str(k): str(v) for k, v in raw.items()} if raw else {}
 
     @property
+    def setup_commands(self) -> list[str]:
+        """Shell commands to run before the main execution in job.sh."""
+        return list(self._site_config.get("setup_commands", []))
+
+    @property
     @abstractmethod
     def kind(self) -> str:
         """Return the launcher kind identifier (e.g. 'srun', 'mpirun')."""

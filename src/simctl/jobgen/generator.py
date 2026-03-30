@@ -204,9 +204,7 @@ def _render_script(
 
     # --- Module loads ---
     if modules:
-        for mod in modules:
-            lines.append(f"module load {mod}")
-        lines.append("module list")
+        lines.append(f"module load {' '.join(modules)}")
         lines.append("")
 
     # --- Environment variables ---
@@ -216,7 +214,11 @@ def _render_script(
         lines.append("")
 
     # --- Change to work directory ---
+    # Use absolute path so the script works regardless of sbatch cwd
     lines.append(f"cd {work_dir}")
+    lines.append("")
+
+    lines.append("date")
     lines.append("")
 
     # --- Setup commands (before main execution) ---
@@ -226,15 +228,15 @@ def _render_script(
         lines.append("")
 
     # --- Main execution ---
-    if post_commands:
-        # Cannot use exec if there are post-commands to run
-        lines.append(exec_line)
-    else:
-        lines.append(f"exec {exec_line}")
+    lines.append(exec_line)
+    lines.append("")
+
+    lines.append("date")
     lines.append("")
 
     # --- Post commands (after main execution) ---
     if post_commands:
+        lines.append("# Postprocessing")
         for cmd in post_commands:
             lines.append(cmd)
         lines.append("")

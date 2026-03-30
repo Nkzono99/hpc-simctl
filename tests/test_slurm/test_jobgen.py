@@ -67,7 +67,7 @@ class TestGenerateJobScript:
         assert "#SBATCH --nodes=1" in content
         assert "#SBATCH --ntasks=4" in content
         assert "#SBATCH -t 00:10:00" in content
-        assert "exec srun ./solver input.toml" in content
+        assert "srun ./solver input.toml" in content
 
     def test_job_name_from_run_id(
         self, run_dir: Path, job_config: dict[str, object]
@@ -125,9 +125,7 @@ class TestGenerateJobScript:
             modules=["gcc/12.0", "openmpi/4.1"],
         )
         content = path.read_text()
-        assert "module load gcc/12.0" in content
-        assert "module load openmpi/4.1" in content
-        assert "module list" in content
+        assert "module load gcc/12.0 openmpi/4.1" in content
 
     def test_extra_env_vars(
         self, run_dir: Path, job_config: dict[str, object]
@@ -314,9 +312,7 @@ class TestRscModeJobScript:
             resource_style="rsc",
         )
         content = path.read_text()
-        assert "module load intel/2023.2" in content
-        assert "module load intelmpi/2023.2" in content
-        assert "module list" in content
+        assert "module load intel/2023.2 intelmpi/2023.2" in content
 
 
 # ---------------------------------------------------------------------------
@@ -371,8 +367,7 @@ class TestPrePostCommands:
         }
         path = generate_job_script(run_dir, config, "srun ./solver")
         content = path.read_text()
-        assert "module load intel/2023.2" in content
-        assert "module load hdf5/1.12" in content
+        assert "module load intel/2023.2 hdf5/1.12" in content
 
     def test_pre_commands_from_job_config(self, run_dir: Path) -> None:
         config: dict[str, object] = {
@@ -426,7 +421,7 @@ class TestPrePostCommands:
         assert "#SBATCH -t 120:00:00" in content
         # Modules
         assert "module load intel/2023.2" in content
-        assert "module list" in content
+        assert "module load" in content
         # Pre-commands (merged from job_config into setup_commands)
         assert "preinp" in content
         assert "EMSES_DEBUG=no" in content

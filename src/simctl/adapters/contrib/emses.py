@@ -695,8 +695,9 @@ srun mpiemses3D plasma.toml
             Command as a list of strings.
         """
         executable = runtime_info.get("executable", "mpiemses3D")
-        plasma_toml = run_dir / INPUT_DIR / "plasma.toml"
-        return [executable, str(plasma_toml)]
+        # Path relative to work/ (sbatch --chdir=work)
+        plasma_toml = f"../{INPUT_DIR}/plasma.toml"
+        return [executable, plasma_toml]
 
     def detect_outputs(self, run_dir: Path) -> dict[str, Any]:
         """Detect EMSES output files in ``work/``.
