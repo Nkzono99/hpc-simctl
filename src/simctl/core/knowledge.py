@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import shutil
 import sys
 from dataclasses import dataclass, field
@@ -305,6 +306,7 @@ def sync_insights(
 # ---------- Structured Facts ----------
 
 _FACTS_FILE = "facts.toml"
+_FACT_ID_RE = re.compile(r"f(\d+)")
 
 
 @dataclass
@@ -491,6 +493,21 @@ def save_fact(project_root: Path, fact: Fact) -> None:
 
     with open(facts_file, "wb") as f:
         tomli_w.dump({"facts": existing}, f)
+
+
+def next_fact_id(project_root: Path) -> str:
+    """Return the next sequential fact ID.
+
+    Fact IDs follow the ``fNNN`` convention used throughout the docs.
+    Non-matching IDs are ignored when computing the next value.
+    """
+    max_num = 0
+    for fact in load_facts(project_root):
+        match = _FACT_ID_RE.fullmatch(fact.id)
+        if match is None:
+            continue
+        max_num = max(max_num, int(match.group(1)))
+    return f"f{max_num + 1:03d}"
 
 
 def query_facts(

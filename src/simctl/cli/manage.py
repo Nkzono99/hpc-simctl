@@ -51,6 +51,7 @@ def _resolve_run_or_cwd(run: str | None) -> Path:
 
 def archive(
     run: str = typer.Argument(None, help="Run directory or run_id (defaults to cwd)."),
+    yes: bool = typer.Option(False, "--yes", help="Skip confirmation prompt."),
 ) -> None:
     """Archive a completed run."""
     run_dir = _resolve_run_or_cwd(run)
@@ -69,13 +70,20 @@ def archive(
         )
         raise typer.Exit(code=1)
 
+    run_id = manifest.run.get("id", "???")
+    if not yes and not typer.confirm(
+        f"Archive run {run_id}? This changes the lifecycle state.",
+        default=False,
+    ):
+        typer.echo("Cancelled.")
+        raise typer.Exit()
+
     try:
         update_state(run_dir, RunState.ARCHIVED)
     except InvalidStateTransitionError as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=1) from None
 
-    run_id = manifest.run.get("id", "???")
     typer.echo(f"Archived run {run_id}.")
     typer.echo(f"  Path: {run_dir}")
 
@@ -84,6 +92,7 @@ def purge_work(
     run: str = typer.Argument(
         None, help="Run directory or run_id (defaults to cwd)."
     ),
+    yes: bool = typer.Option(False, "--yes", help="Skip confirmation prompt."),
 ) -> None:
     """Remove unnecessary files from a run's work/ directory."""
     run_dir = _resolve_run_or_cwd(run)
@@ -111,6 +120,20 @@ def purge_work(
         target_dir = work_dir / dirname
         if target_dir.is_dir():
             total_freed += _get_dir_size(target_dir)
+
+    run_id = manifest.run.get("id", "???")
+    if not yes and not typer.confirm(
+        "Purge work files for "
+        f"{run_id}? This will remove outputs/restart/tmp "
+        f"(about {_format_size(total_freed)}).",
+        default=False,
+    ):
+        typer.echo("Cancelled.")
+        raise typer.Exit()
+
+    for dirname in targets:
+        target_dir = work_dir / dirname
+        if target_dir.is_dir():
             shutil.rmtree(target_dir)
 
     try:
@@ -119,7 +142,6 @@ def purge_work(
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=1) from None
 
-    run_id = manifest.run.get("id", "???")
     typer.echo(f"Purged work files for run {run_id}.")
     typer.echo(f"  Freed: {_format_size(total_freed)}")
     typer.echo(f"  Path: {run_dir}")

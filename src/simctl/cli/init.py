@@ -255,8 +255,12 @@ def _build_simulator_guides(simulator_names: list[str]) -> str:
     return "\n".join(parts)
 
 
-def _build_claude_md(project_name: str, simulator_names: list[str]) -> str:
-    """Build CLAUDE.md content."""
+def _build_agent_md(
+    doc_name: str,
+    project_name: str,
+    simulator_names: list[str],
+) -> str:
+    """Build shared agent instructions for CLAUDE.md / AGENTS.md."""
     sim_section = ""
     if simulator_names:
         guides = _build_simulator_guides(simulator_names)
@@ -287,74 +291,111 @@ def _build_claude_md(project_name: str, simulator_names: list[str]) -> str:
     pip_line = " ".join(pip_pkgs) if pip_pkgs else "<必要なパッケージ>"
 
     return f"""\
-# CLAUDE.md — {project_name}
+# {doc_name} — {project_name}
 
 このプロジェクトは simctl (HPC シミュレーション管理 CLI) で管理されています。
-AI エージェントがシミュレーションの準備・投入・監視・解析を自律的に行います。
+人がベース入力ファイルと計算資源方針を与え、AI エージェントが
+campaign 設計、case / survey 編集、run 生成、投入、監視、解析、
+知見整理を半自動で進めることを想定しています。
 
-## プロジェクト構成
+## 運用モード
 
+- 人が主に決めるもの: ベース入力ファイル、計算資源の上限、研究目的、公開してよい知見
+- Agent が進めてよいもの:
+  `campaign.toml` / `case.toml` / `survey.toml` の編集、run 生成、
+  個別 run の投入、状態同期、ログ確認、要約・集計、知見整理
+- 確認が必要なもの:
+  初回の大規模 survey、`simctl run --all`、資源増加を伴う retry、
+  `archive` / `purge-work`、実行バイナリやモジュール設定の変更
+- destructive / 高コスト操作には、実行前に理由と想定影響を短く残す
+
+## 最初にやること
+
+1. `simctl context --json` で project / campaign / runs / recent_failures を把握する
+2. `campaign.toml`、関連する `cases/*/case.toml`、
+   `runs/**/survey.toml`、`.simctl/facts.toml`、
+   必要なら最近の log を読む
+3. action の前に plan を JSON で明示する
+
+```json
+{{
+  "goal": "map stability boundary for dt and nx",
+  "edits": [
+    "campaign.toml",
+    "cases/plasma/case.toml",
+    "runs/plasma/stability/survey.toml"
+  ],
+  "commands": [
+    "simctl sweep runs/plasma/stability",
+    "simctl run --all runs/plasma/stability"
+  ],
+  "checkpoints": [
+    "Confirm survey size and queue before bulk submit",
+    "Review failed logs before retry"
+  ]
+}}
 ```
-{project_name}/
-  simproject.toml      # プロジェクト設定
-  simulators.toml      # シミュレータ定義 (adapter, executable, modules)
-  launchers.toml       # MPI ランチャー設定
-  cases/               # ケーステンプレート (入力ファイル + case.toml)
-  runs/                # 実行ディレクトリ (自動生成)
-    <survey_or_group>/
-      Rxxxx/           # 各 run ディレクトリ
-        manifest.toml  # run のメタデータ・状態 (正本)
-        input/         # 入力ファイル
-        work/          # 実行出力 (大容量)
-        analysis/      # 解析結果
-  refs/                # シミュレータの参照リポジトリ (Git 管理外)
-```
 
-## simctl コマンド一覧
+plan にない高コスト操作をいきなり実行しないこと。
 
-| コマンド | 用途 |
-|---------|------|
-| `simctl init [SIMS...] -p PATH` | プロジェクト初期化 |
-| `simctl doctor` | 環境・設定検査 |
-| `simctl config show` | 設定表示 |
-| `simctl config add-simulator` | シミュレータ追加 (対話型) |
-| `simctl config add-launcher` | ランチャー追加 (対話型) |
-| `simctl new CASENAME` | ケーステンプレート新規作成 |
-| `simctl create CASE` | cwd にケースから run 生成 |
-| `simctl sweep DIR` | survey.toml から全 run 一括生成 |
-| `simctl run [-qn QUEUE]` | cwd の run を sbatch で投入 |
-| `simctl run --all [-qn QUEUE]` | cwd 内の全 run 一括投入 |
-| `simctl log [-f] [-e]` | 最新 job の stdout 表示 + 進捗% |
-| `simctl status` | run 状態確認 |
-| `simctl sync` | Slurm 状態を manifest に反映 |
-| `simctl jobs [--all]` | 実行中ジョブ一覧 |
-| `simctl history [-n N]` | 投入履歴表示 |
-| `simctl list [PATH]` | run 一覧表示 |
-| `simctl clone` | run 複製 |
-| `simctl extend [--run] [--nstep N]` | スナップショットから継続 run 生成 |
-| `simctl summarize` | 解析 summary 生成 |
-| `simctl collect DIR` | survey 結果集計 |
-| `simctl archive` | run アーカイブ |
-| `simctl purge-work` | work/ 不要ファイル削除 |
-| `simctl update [SIMS...]` | シミュレータパッケージ更新 |
+## 編集優先順位
 
-## 状態遷移
+1. `campaign.toml` で研究意図、変数、観測量を整理する
+2. `cases/*/case.toml` で共通パラメータ、job 設定、分類を管理する
+3. `runs/**/survey.toml` で掃引軸を定義する
+4. `runs/**/input/*` の直接編集は、adapter で表現できない差分か、
+   log を見たうえでの緊急修正に限る
 
-```
-created → submitted → running → completed
-created/submitted/running → failed
-submitted/running → cancelled
-completed → archived → purged
-```
+- `runs/**/input/*` を直接直したら、同じ修正を上流の `case.toml` やテンプレートへ戻す
+- `manifest.toml` は正本だが手動編集しない
+- `work/` と `.simctl/knowledge/` の自動生成物は手で整形しない
+
+## 推奨ワークフロー
+
+- Design: `campaign.toml`, `case.toml`, `survey.toml`
+  Commands: `simctl context --json`, `simctl config show`,
+  `simctl knowledge list`, `simctl knowledge facts`
+- Create: `cases/`, `runs/**/survey.toml`
+  Commands: `simctl new`, `simctl create`, `simctl sweep`
+- Submit: `runs/**/R*/`
+  Commands: `simctl run`, `simctl run --all`
+- Monitor: `manifest.toml`, `work/*.out`, `work/*.err`
+  Commands: `simctl status`, `simctl sync`, `simctl log`,
+  `simctl jobs`, `simctl history`, `simctl list`
+- Analyze: `analysis/`, survey directory
+  Commands: `simctl summarize`, `simctl collect`
+- Learn: `.simctl/insights/`, `.simctl/facts.toml`
+  Commands: `simctl knowledge save`, `simctl knowledge add-fact`,
+  `simctl knowledge sync`
+
+## 失敗時の扱い
+
+- `submitted` / `running` が長く止まって見えるときは、
+  まず `simctl sync` で状態を合わせる
+- `timeout` / `oom` / `preempted` は retry 候補だが、job 条件の変更理由を plan に書く
+- `exit_error` は必ず `simctl log -e` や `work/*.err` を確認してから再試行する
+- 同じ run の試行回数が 3 回前後に達したら、自動 retry を止めて原因を要約する
+- action registry を使う agent では `retry_run` は再投入そのものではなく、
+  `failed -> created` の再準備とみなす
+
+## 知見の記録
+
+- 人向けの考察や途中メモは `simctl knowledge save` で `.simctl/insights/` に保存する
+- 機械可読な安定知見は `simctl knowledge add-fact` で `.simctl/facts.toml` に追加する
+- `high` confidence は、複数 run の再現か deterministic な確認がある場合だけ使う
+- 既存 fact を修正するときは上書きせず、
+  新しい fact を追加して `--supersedes fNNN` を使う
 
 ## 重要なファイル
 
 - **`manifest.toml`** — run の正本。状態・パラメータ・provenance をすべて記録
+- **`campaign.toml`** — 研究意図、仮説、変数、観測量
 - **`simproject.toml`** — プロジェクト名・説明
 - **`simulators.toml`** — シミュレータの adapter / executable / modules 定義
 - **`launchers.toml`** — MPI ランチャーの設定
 - **`case.toml`** — ケーステンプレートの定義
 - **`survey.toml`** — パラメータサーベイの定義 (直積展開)
+- **`docs/simctl-guide.md`** — コマンドと運用フローの補足
 {sim_section}{refs_section}
 ## 環境構築
 
@@ -385,6 +426,16 @@ simctl doctor
 - `.simctl/knowledge/` にナレッジインデックスがある。ドキュメントの所在はここで把握する
 - シミュレータ更新時は `simctl update-refs` でリファレンスとナレッジを最新化する
 """
+
+
+def _build_claude_md(project_name: str, simulator_names: list[str]) -> str:
+    """Build CLAUDE.md content."""
+    return _build_agent_md("CLAUDE.md", project_name, simulator_names)
+
+
+def _build_agents_md(project_name: str, simulator_names: list[str]) -> str:
+    """Build AGENTS.md content."""
+    return _build_agent_md("AGENTS.md", project_name, simulator_names)
 
 
 def _build_skills_md(project_name: str, simulator_names: list[str]) -> str:
@@ -971,13 +1022,12 @@ def init(
     else:
         skipped.append(_CLAUDE_MD)
 
-    # AGENTS.md — symlink to CLAUDE.md
-    agents_path = project_dir / _AGENTS_MD
-    if agents_path.exists() or agents_path.is_symlink():
-        skipped.append(_AGENTS_MD)
+    # AGENTS.md
+    agents_content = _build_agents_md(project_name, sim_names)
+    if _write_if_missing(project_dir / _AGENTS_MD, agents_content):
+        created.append(_AGENTS_MD)
     else:
-        agents_path.symlink_to(_CLAUDE_MD)
-        created.append(f"{_AGENTS_MD} -> {_CLAUDE_MD}")
+        skipped.append(_AGENTS_MD)
 
     # SKILLS.md
     skills_content = _build_skills_md(project_name, sim_names)

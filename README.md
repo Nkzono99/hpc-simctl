@@ -56,7 +56,8 @@ my-simulation-project/
   launchers.toml       # Launcher Profile 定義
   campaign.toml        # 研究意図 (仮説・変数・観測量)
   .gitignore           # 大容量出力の除外設定
-  CLAUDE.md            # AI エージェント向けプロジェクト指示
+  CLAUDE.md            # Claude 向け AI エージェント指示
+  AGENTS.md            # Codex / 汎用 Agent 向け AI エージェント指示
   cases/               # Case 定義の格納場所
   runs/                # run の格納場所
   refs/                # シミュレータリファレンスリポジトリ
@@ -270,6 +271,7 @@ hpc-simctl/
   pyproject.toml
   SPEC.md                  # 詳細仕様書
   CLAUDE.md                # 開発ガイド
+  AGENTS.md                # Agent 運用ガイド
   src/
     simctl/
       cli/                 # CLI エントリポイント (typer)

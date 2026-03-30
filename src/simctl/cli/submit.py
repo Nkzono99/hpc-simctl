@@ -17,6 +17,7 @@ from simctl.core.exceptions import (
     SimctlError,
 )
 from simctl.core.manifest import read_manifest, update_manifest
+from simctl.core.retry import get_attempt_count
 from simctl.core.state import RunState, update_state
 from simctl.slurm.submit import SlurmNotFoundError, SlurmSubmitError, sbatch_submit
 
@@ -150,7 +151,7 @@ def _submit_single_run(
         existing_attempts: list[dict[str, str]] = list(
             manifest.job.get("attempts", [])
         )
-        attempt_number = len(existing_attempts) + 1
+        attempt_number = get_attempt_count(manifest.job) + 1
         attempt["attempt"] = str(attempt_number)
         existing_attempts.append(attempt)
 
@@ -160,6 +161,7 @@ def _submit_single_run(
                 "job": {
                     "job_id": job_id,
                     "submitted_at": submitted_at,
+                    "attempt": attempt_number,
                     "attempts": existing_attempts,
                 },
             },

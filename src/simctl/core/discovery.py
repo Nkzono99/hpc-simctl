@@ -6,6 +6,7 @@ and verifies run_id uniqueness within a project.
 
 from __future__ import annotations
 
+import os
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -39,8 +40,12 @@ def discover_runs(runs_dir: Path) -> list[Path]:
         return []
 
     run_dirs: list[Path] = []
-    for manifest_path in runs_dir.rglob(_MANIFEST_FILE):
-        run_dirs.append(manifest_path.parent.resolve())
+    for dirpath, _dirnames, filenames in os.walk(
+        runs_dir,
+        onerror=lambda _err: None,
+    ):
+        if _MANIFEST_FILE in filenames:
+            run_dirs.append(Path(dirpath).resolve())
 
     return sorted(run_dirs)
 
@@ -138,15 +143,18 @@ def resolve_run(identifier: str, runs_dir: Path) -> Path:
         RunNotFoundError: If the run cannot be found.
     """
     # Check if identifier is a path
-    id_path = Path(identifier)
-    if id_path.is_absolute():
+    try:
+        id_path = Path(identifier)
+        if id_path.is_absolute():
+            if (id_path / _MANIFEST_FILE).exists():
+                return id_path.resolve()
+            raise RunNotFoundError(f"No manifest.toml found at path: {identifier}")
+
+        # Check as relative path from cwd
         if (id_path / _MANIFEST_FILE).exists():
             return id_path.resolve()
-        raise RunNotFoundError(f"No manifest.toml found at path: {identifier}")
-
-    # Check as relative path from cwd
-    if (id_path / _MANIFEST_FILE).exists():
-        return id_path.resolve()
+    except OSError as e:
+        raise RunNotFoundError(f"Invalid run path {identifier!r}: {e}") from None
 
     # Search by run_id
     run_dirs = discover_runs(runs_dir)

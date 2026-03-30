@@ -146,19 +146,19 @@ ACTION_SPECS: dict[str, ActionSpec] = {
         name="collect_survey",
         description="Aggregate results across all runs in a survey.",
         required_params=("survey_dir",),
-        preconditions=("survey directory contains completed runs",),
+        preconditions=("survey directory contains at least one completed run",),
     ),
     "retry_run": ActionSpec(
         name="retry_run",
-        description="Resubmit a failed run, optionally adjusting parameters.",
+        description="Prepare a failed run for resubmission.",
         required_params=("run_dir",),
-        optional_params=("adjustments",),
+        optional_params=("adjustments", "reviewed_log"),
         preconditions=("run state == failed",),
-        state_change="failed -> submitted (new attempt)",
+        state_change="failed -> created",
     ),
     "archive_run": ActionSpec(
         name="archive_run",
-        description="Archive a completed run (compress work directory).",
+        description="Mark a completed run as archived.",
         required_params=("run_dir",),
         preconditions=("run state == completed",),
         state_change="completed -> archived",
@@ -167,7 +167,7 @@ ACTION_SPECS: dict[str, ActionSpec] = {
     "add_fact": ActionSpec(
         name="add_fact",
         description="Record a structured knowledge fact.",
-        required_params=("claim",),
+        required_params=("project_root", "claim"),
         optional_params=(
             "fact_type",
             "simulator",
@@ -179,6 +179,7 @@ ACTION_SPECS: dict[str, ActionSpec] = {
             "evidence_kind",
             "evidence_ref",
             "tags",
+            "supersedes",
         ),
         preconditions=("project loaded",),
     ),
@@ -302,6 +303,7 @@ def submit_run(
 ) -> ActionResult:
     """Submit a run to Slurm via sbatch."""
     from simctl.core.manifest import read_manifest, update_manifest
+    from simctl.core.retry import get_attempt_count
     from simctl.slurm.submit import SlurmSubmitError, sbatch_submit
 
     state_str, err = _require_state(run_dir, RunState.CREATED)
@@ -327,7 +329,15 @@ def submit_run(
     # Update manifest
     now = datetime.now(tz=timezone.utc).isoformat(timespec="seconds")
     manifest = read_manifest(run_dir)
-    attempt = manifest.job.get("attempt", 0) + 1
+    attempt = get_attempt_count(manifest.job) + 1
+    existing_attempts: list[dict[str, str]] = list(manifest.job.get("attempts", []))
+    existing_attempts.append(
+        {
+            "job_id": job_id,
+            "submitted_at": now,
+            "attempt": str(attempt),
+        }
+    )
     update_manifest(
         run_dir,
         {
@@ -336,6 +346,7 @@ def submit_run(
                 "job_id": job_id,
                 "submitted_at": now,
                 "attempt": attempt,
+                "attempts": existing_attempts,
                 "queue": queue_name or manifest.job.get("queue", ""),
             },
         },
@@ -514,6 +525,12 @@ def collect_survey(survey_dir: Path) -> ActionResult:
         except SimctlError:
             continue
 
+    if summary.get(RunState.COMPLETED.value, 0) == 0:
+        return _precondition_fail(
+            "collect_survey",
+            f"No completed runs found under {survey_dir}",
+        )
+
     return ActionResult(
         action="collect_survey",
         status=ActionStatus.SUCCESS,
@@ -530,16 +547,30 @@ def retry_run(
     run_dir: Path,
     *,
     adjustments: dict[str, Any] | None = None,
+    reviewed_log: bool = False,
 ) -> ActionResult:
     """Resubmit a failed run as a new attempt."""
     from simctl.core.manifest import read_manifest, update_manifest
+    from simctl.core.retry import get_attempt_count
 
     state_str, err = _require_state(run_dir, RunState.FAILED)
     if err:
         return _precondition_fail("retry_run", err)
 
     manifest = read_manifest(run_dir)
-    attempt = manifest.job.get("attempt", 0)
+    attempt = get_attempt_count(manifest.job)
+    failure_reason = manifest.run.get("failure_reason", "")
+
+    if attempt >= 3:
+        return _precondition_fail(
+            "retry_run",
+            "Max attempts (3) reached. Manual inspection required.",
+        )
+    if failure_reason == "exit_error" and not reviewed_log:
+        return _precondition_fail(
+            "retry_run",
+            "failure_reason 'exit_error' requires log review before retrying",
+        )
 
     # Reset state to created for resubmission
     update_manifest(
@@ -550,6 +581,8 @@ def retry_run(
                 "failure_reason": "",
             },
             "job": {
+                "job_id": "",
+                "submitted_at": "",
                 "attempt": attempt,
                 "retry_adjustments": adjustments or {},
             },
@@ -606,17 +639,15 @@ def add_fact(
     evidence_kind: str = "",
     evidence_ref: str = "",
     tags: list[str] | None = None,
+    supersedes: str = "",
 ) -> ActionResult:
     """Record a structured knowledge fact.
 
     This delegates to the knowledge module's save_fact function.
     """
-    from simctl.core.knowledge import Fact, load_facts, save_fact
+    from simctl.core.knowledge import Fact, next_fact_id, save_fact
 
-    # Auto-generate ID
-    existing = load_facts(project_root)
-    next_num = len(existing) + 1
-    fact_id = f"f{next_num:03d}"
+    fact_id = next_fact_id(project_root)
 
     fact = Fact(
         id=fact_id,
@@ -628,9 +659,11 @@ def add_fact(
         param_name=param_name,
         confidence=confidence,
         source_run=source_run,
+        source_project=project_root.name,
         evidence_kind=evidence_kind,
         evidence_ref=evidence_ref,
         tags=tags or [],
+        supersedes=supersedes,
     )
     try:
         save_fact(project_root, fact)

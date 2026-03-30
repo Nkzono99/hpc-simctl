@@ -9,12 +9,14 @@ import typer
 
 from simctl.core.exceptions import SimctlError
 from simctl.core.knowledge import (
+    FACT_TYPES,
     INSIGHT_TYPES,
     Fact,
     Insight,
     get_insights_dir,
     list_insights,
     load_links,
+    next_fact_id,
     query_facts,
     save_fact,
     sync_insights,
@@ -274,16 +276,68 @@ def add_fact(
         str,
         typer.Argument(help="The knowledge claim (one sentence)."),
     ],
+    fact_type: Annotated[
+        str,
+        typer.Option(
+            "--type", "-t",
+            help="Fact type: observation, constraint, dependency, policy, hypothesis.",
+        ),
+    ] = "observation",
+    simulator: Annotated[
+        str,
+        typer.Option(
+            "--simulator", "-s",
+            help="Simulator this fact applies to.",
+        ),
+    ] = "",
     scope: Annotated[
         str,
         typer.Option(
             "--scope",
-            help="What this applies to (e.g. simulator name).",
+            help="Deprecated alias for --scope-text.",
+        ),
+    ] = "",
+    scope_case: Annotated[
+        str,
+        typer.Option(
+            "--scope-case",
+            help="Case or case pattern this fact applies to.",
+        ),
+    ] = "",
+    scope_text: Annotated[
+        str,
+        typer.Option(
+            "--scope-text",
+            help="Free-text scope description.",
+        ),
+    ] = "",
+    param_name: Annotated[
+        str,
+        typer.Option(
+            "--param-name",
+            help="Parameter name this fact is about.",
         ),
     ] = "",
     evidence: Annotated[
         str,
-        typer.Option("--evidence", help="How this was established."),
+        typer.Option(
+            "--evidence",
+            help="Deprecated alias for --evidence-kind.",
+        ),
+    ] = "",
+    evidence_kind: Annotated[
+        str,
+        typer.Option(
+            "--evidence-kind",
+            help="Evidence kind, e.g. run_observation or calculation.",
+        ),
+    ] = "",
+    evidence_ref: Annotated[
+        str,
+        typer.Option(
+            "--evidence-ref",
+            help="Reference to evidence source, e.g. run:R20260330-0001.",
+        ),
     ] = "",
     confidence: Annotated[
         str,
@@ -300,6 +354,13 @@ def add_fact(
         Optional[str],
         typer.Option("--tags", help="Comma-separated tags."),
     ] = None,
+    supersedes: Annotated[
+        str,
+        typer.Option(
+            "--supersedes",
+            help="ID of an older fact this one replaces.",
+        ),
+    ] = "",
 ) -> None:
     """Add a structured fact to .simctl/facts.toml.
 
@@ -309,7 +370,9 @@ def add_fact(
 
     Examples:
       simctl knowledge add-fact "CFL limit: dt must be < 1.0 for emses" \\
-        --scope emses --confidence high --evidence "R20260330-0001 diverged"
+        --type constraint --simulator emses --param-name tmgrid.dt \\
+        --scope-text "baseline scan" --confidence high \\
+        --evidence-kind run_observation --evidence-ref run:R20260330-0001
     """
     if confidence not in ("high", "medium", "low"):
         typer.echo(
@@ -318,32 +381,47 @@ def add_fact(
             err=True,
         )
         raise typer.Exit(code=1)
+    if fact_type not in FACT_TYPES:
+        typer.echo(
+            f"Invalid type '{fact_type}'. "
+            f"Must be one of: {', '.join(sorted(FACT_TYPES))}.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
 
     root = _find_root()
+    existing_facts = list(query_facts(root, exclude_superseded=False))
+    if supersedes and all(f.id != supersedes for f in existing_facts):
+        typer.echo(f"Error: superseded fact not found: {supersedes}", err=True)
+        raise typer.Exit(code=1)
+
     tag_list = (
         [t.strip() for t in tags.split(",") if t.strip()]
         if tags
         else []
     )
 
-    import hashlib
     from datetime import datetime, timezone
 
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    fact_id = hashlib.sha256(
-        f"{claim}{scope}{now}".encode()
-    ).hexdigest()[:12]
+    fact_id = next_fact_id(root)
 
     fact = Fact(
         id=fact_id,
         claim=claim,
-        scope=scope,
-        evidence=evidence,
+        fact_type=fact_type,
+        simulator=simulator,
+        scope_case=scope_case,
+        scope_text=scope_text or scope,
+        param_name=param_name,
         confidence=confidence,
         source_run=source_run,
         source_project=root.name,
+        evidence_kind=evidence_kind or evidence,
+        evidence_ref=evidence_ref,
         created_at=now,
         tags=tag_list,
+        supersedes=supersedes,
     )
 
     try:

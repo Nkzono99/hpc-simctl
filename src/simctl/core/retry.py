@@ -141,6 +141,30 @@ def suggest_retry(
     return list(suggestions)
 
 
+def get_attempt_count(job_data: dict[str, Any]) -> int:
+    """Return the observed retry count from manifest ``job`` data.
+
+    Newer manifests track a detailed ``attempts`` list while older ones may
+    only store a scalar ``attempt`` field.  This helper normalizes both.
+    """
+    attempts = job_data.get("attempts", [])
+    if isinstance(attempts, list) and attempts:
+        return len(attempts)
+
+    raw_attempt = job_data.get("attempt", 0)
+    if isinstance(raw_attempt, int):
+        return raw_attempt
+    if isinstance(raw_attempt, str):
+        try:
+            return int(raw_attempt)
+        except ValueError:
+            pass
+
+    if job_data.get("job_id") or job_data.get("submitted_at"):
+        return 1
+    return 0
+
+
 def suggest_retry_for_run(run_dir: Path) -> list[RetrySuggestion]:
     """Read manifest and suggest retry actions for a failed run.
 
@@ -162,6 +186,6 @@ def suggest_retry_for_run(run_dir: Path) -> list[RetrySuggestion]:
         return []
 
     reason = manifest.run.get("failure_reason", "")
-    attempt = manifest.job.get("attempt", 1)
+    attempt = get_attempt_count(manifest.job)
 
     return suggest_retry(reason, attempt=attempt)

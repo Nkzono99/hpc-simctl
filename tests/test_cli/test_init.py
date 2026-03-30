@@ -35,7 +35,7 @@ class TestInit:
         """simproject.toml has correct project name derived from dir name."""
         result = runner.invoke(app, ["init", "-y", "--path", str(tmp_path)])
         assert result.exit_code == 0
-        content = (tmp_path / "simproject.toml").read_text()
+        content = (tmp_path / "simproject.toml").read_text(encoding="utf-8")
         assert "[project]" in content
         assert f'name = "{tmp_path.name}"' in content
 
@@ -45,20 +45,20 @@ class TestInit:
             app, ["init", "-y", "--path", str(tmp_path), "--name", "my-project"]
         )
         assert result.exit_code == 0
-        content = (tmp_path / "simproject.toml").read_text()
+        content = (tmp_path / "simproject.toml").read_text(encoding="utf-8")
         assert 'name = "my-project"' in content
         assert "my-project" in result.output
 
     def test_init_simulators_content(self, tmp_path: Path) -> None:
         """simulators.toml has empty [simulators] section."""
         runner.invoke(app, ["init", "-y", "--path", str(tmp_path)])
-        content = (tmp_path / "simulators.toml").read_text()
+        content = (tmp_path / "simulators.toml").read_text(encoding="utf-8")
         assert "[simulators]" in content
 
     def test_init_launchers_content(self, tmp_path: Path) -> None:
         """launchers.toml has default srun launcher."""
         runner.invoke(app, ["init", "-y", "--path", str(tmp_path)])
-        content = (tmp_path / "launchers.toml").read_text()
+        content = (tmp_path / "launchers.toml").read_text(encoding="utf-8")
         assert "[launchers.srun]" in content
         assert 'type = "srun"' in content
         assert "use_slurm_ntasks = true" in content
@@ -66,7 +66,7 @@ class TestInit:
     def test_init_gitignore_content(self, tmp_path: Path) -> None:
         """.gitignore contains run output exclusion patterns."""
         runner.invoke(app, ["init", "-y", "--path", str(tmp_path)])
-        content = (tmp_path / ".gitignore").read_text()
+        content = (tmp_path / ".gitignore").read_text(encoding="utf-8")
         assert "runs/**/work/outputs/" in content
         assert "runs/**/work/restart/" in content
         assert "runs/**/work/tmp/" in content
@@ -76,7 +76,7 @@ class TestInit:
         (tmp_path / "simproject.toml").write_text('[project]\nname = "original"\n')
         result = runner.invoke(app, ["init", "-y", "--path", str(tmp_path)])
         assert result.exit_code == 0
-        content = (tmp_path / "simproject.toml").read_text()
+        content = (tmp_path / "simproject.toml").read_text(encoding="utf-8")
         assert 'name = "original"' in content
         assert "Skipped" in result.output
 
@@ -119,32 +119,37 @@ class TestInit:
     def test_init_claude_md_with_simulators(self, tmp_path: Path) -> None:
         """CLAUDE.md includes simulator-specific guides when simulators given."""
         runner.invoke(app, ["init", "emses", "beach", "-y", "--path", str(tmp_path)])
-        content = (tmp_path / "CLAUDE.md").read_text()
+        content = (tmp_path / "CLAUDE.md").read_text(encoding="utf-8")
         assert "EMSES" in content
         assert "plasma.toml" in content
         assert "BEACH" in content
         assert "beach.toml" in content
+        assert "simctl context --json" in content
+        assert "campaign.toml" in content
 
     def test_init_claude_md_without_simulators(self, tmp_path: Path) -> None:
         """CLAUDE.md is generated without simulator sections when none given."""
         runner.invoke(app, ["init", "-y", "--path", str(tmp_path)])
-        content = (tmp_path / "CLAUDE.md").read_text()
+        content = (tmp_path / "CLAUDE.md").read_text(encoding="utf-8")
         assert "simctl" in content
         assert "シミュレータ固有知識" not in content
 
     def test_init_agents_md(self, tmp_path: Path) -> None:
-        """AGENTS.md is a symlink to CLAUDE.md."""
+        """AGENTS.md is generated as a standalone instruction file."""
         runner.invoke(app, ["init", "emses", "-y", "--path", str(tmp_path)])
         agents_path = tmp_path / "AGENTS.md"
-        assert agents_path.is_symlink()
-        assert agents_path.resolve() == (tmp_path / "CLAUDE.md").resolve()
-        content = agents_path.read_text()
+        assert agents_path.exists()
+        assert not agents_path.is_symlink()
+        content = agents_path.read_text(encoding="utf-8")
         assert "simctl" in content
+        assert "simctl context --json" in content
+        assert "plan を JSON で明示" in content
+        assert "simctl run --all" in content
 
     def test_init_skills_md(self, tmp_path: Path) -> None:
         """SKILLS.md contains skill definitions."""
         runner.invoke(app, ["init", "-y", "--path", str(tmp_path)])
-        content = (tmp_path / "SKILLS.md").read_text()
+        content = (tmp_path / "SKILLS.md").read_text(encoding="utf-8")
         assert "/setup-env" in content
         assert "uv venv" in content
         assert "/survey-design" in content
@@ -153,7 +158,7 @@ class TestInit:
     def test_init_skills_md_with_packages(self, tmp_path: Path) -> None:
         """SKILLS.md includes pip packages when simulators specified."""
         runner.invoke(app, ["init", "emses", "-y", "--path", str(tmp_path)])
-        content = (tmp_path / "SKILLS.md").read_text()
+        content = (tmp_path / "SKILLS.md").read_text(encoding="utf-8")
         assert "emout" in content
         assert "h5py" in content
 
@@ -163,7 +168,7 @@ class TestInit:
             app, ["init", "emses", "beach", "-y", "--path", str(tmp_path)]
         )
         assert result.exit_code == 0
-        content = (tmp_path / "simulators.toml").read_text()
+        content = (tmp_path / "simulators.toml").read_text(encoding="utf-8")
         assert "[simulators.emses]" in content
         assert 'adapter = "emses"' in content
         assert 'executable = "mpiemses3D"' in content
@@ -184,7 +189,7 @@ class TestInit:
             app, ["init", "emses", "-y", "--path", str(tmp_path)]
         )
         assert result.exit_code == 0
-        content = (tmp_path / "simulators.toml").read_text()
+        content = (tmp_path / "simulators.toml").read_text(encoding="utf-8")
         assert "[simulators.emses]" in content
         assert "beach" not in content
 
@@ -192,7 +197,7 @@ class TestInit:
         """Generated TOMLs include #:schema comments."""
         runner.invoke(app, ["init", "-y", "--path", str(tmp_path)])
         for filename in ("simproject.toml", "simulators.toml", "launchers.toml"):
-            content = (tmp_path / filename).read_text()
+            content = (tmp_path / filename).read_text(encoding="utf-8")
             assert "#:schema" in content
 
     def test_init_generates_usage_guide(self, tmp_path: Path) -> None:
@@ -200,7 +205,7 @@ class TestInit:
         runner.invoke(app, ["init", "-y", "--path", str(tmp_path)])
         guide = tmp_path / "docs" / "simctl-guide.md"
         assert guide.exists()
-        content = guide.read_text()
+        content = guide.read_text(encoding="utf-8")
         assert "simctl" in content
         assert "survey.toml" in content
 

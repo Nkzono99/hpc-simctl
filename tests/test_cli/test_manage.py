@@ -41,7 +41,7 @@ class TestArchive:
     def test_archive_completed_run(self, tmp_path: Path) -> None:
         run_dir = _create_run(tmp_path, "R20260327-0001", status="completed")
 
-        result = runner.invoke(app, ["archive", str(run_dir)])
+        result = runner.invoke(app, ["archive", "--yes", str(run_dir)])
         assert result.exit_code == 0
         assert "Archived run R20260327-0001" in result.output
 
@@ -56,12 +56,24 @@ class TestArchive:
 
         run_dir = _create_run(tmp_path, "R20260327-0001", status="completed")
 
-        result = runner.invoke(app, ["archive", str(run_dir)])
+        result = runner.invoke(app, ["archive", "--yes", str(run_dir)])
         assert result.exit_code == 0
 
         with open(run_dir / "manifest.toml", "rb") as f:
             data = tomllib.load(f)
         assert data["run"]["status"] == "archived"
+
+    def test_archive_cancelled_without_confirmation(self, tmp_path: Path) -> None:
+        run_dir = _create_run(tmp_path, "R20260327-0001", status="completed")
+
+        result = runner.invoke(app, ["archive", str(run_dir)], input="n\n")
+        assert result.exit_code == 0
+        assert "Cancelled." in result.output
+
+        from simctl.core.manifest import read_manifest
+
+        manifest = read_manifest(run_dir)
+        assert manifest.run["status"] == "completed"
 
     def test_archive_rejects_non_completed(self, tmp_path: Path) -> None:
         run_dir = _create_run(tmp_path, "R20260327-0001", status="created")
@@ -92,7 +104,7 @@ class TestPurgeWork:
             d.mkdir()
             (d / "data.bin").write_bytes(b"x" * 1024)
 
-        result = runner.invoke(app, ["purge-work", str(run_dir)])
+        result = runner.invoke(app, ["purge-work", "--yes", str(run_dir)])
         assert result.exit_code == 0
         assert "Purged work files" in result.output
         assert "Freed" in result.output
@@ -114,12 +126,29 @@ class TestPurgeWork:
 
         run_dir = _create_run(tmp_path, "R20260327-0001", status="archived")
 
-        result = runner.invoke(app, ["purge-work", str(run_dir)])
+        result = runner.invoke(app, ["purge-work", "--yes", str(run_dir)])
         assert result.exit_code == 0
 
         with open(run_dir / "manifest.toml", "rb") as f:
             data = tomllib.load(f)
         assert data["run"]["status"] == "purged"
+
+    def test_purge_cancelled_without_confirmation(self, tmp_path: Path) -> None:
+        run_dir = _create_run(tmp_path, "R20260327-0001", status="archived")
+
+        work_outputs = run_dir / "work" / "outputs"
+        work_outputs.mkdir()
+        (work_outputs / "data.bin").write_bytes(b"x" * 1024)
+
+        result = runner.invoke(app, ["purge-work", str(run_dir)], input="n\n")
+        assert result.exit_code == 0
+        assert "Cancelled." in result.output
+        assert work_outputs.exists()
+
+        from simctl.core.manifest import read_manifest
+
+        manifest = read_manifest(run_dir)
+        assert manifest.run["status"] == "archived"
 
     def test_purge_rejects_non_archived(self, tmp_path: Path) -> None:
         run_dir = _create_run(tmp_path, "R20260327-0001", status="completed")
@@ -137,6 +166,6 @@ class TestPurgeWork:
         """Purge succeeds even if work subdirectories don't exist."""
         run_dir = _create_run(tmp_path, "R20260327-0001", status="archived")
 
-        result = runner.invoke(app, ["purge-work", str(run_dir)])
+        result = runner.invoke(app, ["purge-work", "--yes", str(run_dir)])
         assert result.exit_code == 0
         assert "Freed: 0.0 B" in result.output
