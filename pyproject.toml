@@ -24,7 +24,6 @@ packages = ["src/simctl"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "README.md" = "simctl/_data/README.md"
-"docs" = "simctl/_data/docs"
 
 [dependency-groups]
 dev = [

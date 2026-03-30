@@ -39,10 +39,14 @@ _VSCODE_DIR = ".vscode"
 _VSCODE_SETTINGS = "settings.json"
 
 _SCHEMA_BASE_URL = "https://raw.githubusercontent.com/Nkzono99/hpc-simctl/main/schemas"
+_DEFAULT_SIMCTL_REPO = "https://github.com/Nkzono99/hpc-simctl.git"
 
 _GITIGNORE_CONTENT = """\
 # Python venv
 .venv/
+
+# simctl tool (cloned by simctl init)
+tools/
 
 # Reference repos (cloned by simctl init)
 refs/
@@ -287,10 +291,6 @@ def _build_agent_md(
 {refs_lines}
 """
 
-    # Build pip packages info for env section
-    pip_pkgs = _collect_pip_packages(simulator_names) if simulator_names else []
-    pip_line = " ".join(pip_pkgs) if pip_pkgs else "<必要なパッケージ>"
-
     return f"""\
 # {doc_name} — {project_name}
 
@@ -396,22 +396,20 @@ plan にない高コスト操作をいきなり実行しないこと。
 - **`launchers.toml`** — MPI ランチャーの設定
 - **`case.toml`** — ケーステンプレートの定義
 - **`survey.toml`** — パラメータサーベイの定義 (直積展開)
-- **`docs/simctl-guide.md`** — コマンドと運用フローの補足
+- **`tools/hpc-simctl/`** — simctl 本体のソースコード・ドキュメント (Git 管理外)
+  - `docs/` — アーキテクチャ、TOML リファレンス等
+  - `SPEC.md` — 仕様書
 {sim_section}{refs_section}
 ## 環境構築
 
-プロジェクトルートに `.venv` を作って Python 環境を管理する。
-詳細な手順は `SKILLS.md` の `/setup-env` を参照。
+`simctl init` がプロジェクトルートに `.venv` と `tools/hpc-simctl/` を自動構築する。
+手動セットアップが必要な場合は `SKILLS.md` の `/setup-env` を参照。
 
 ```bash
-# uv のインストール (未インストールの場合)
-curl -LsSf https://astral.sh/uv/install.sh | sh
+# ブートストラップ (simctl 未インストールでも実行可能)
+uvx --from git+https://github.com/Nkzono99/hpc-simctl.git simctl init
 
-# .venv 作成 + パッケージインストール
-uv venv
-uv pip install hpc-simctl {pip_line}
-
-# 確認
+# activate して利用開始
 source .venv/bin/activate
 simctl doctor
 ```
@@ -422,8 +420,10 @@ simctl doctor
 - `manifest.toml` が正本。手動編集は避け、simctl コマンド経由で更新する
 - `work/` の大容量ファイルは Git 管理外 (.gitignore 済み)
 - `.venv/` はプロジェクトルートに配置。Git 管理外
+- `tools/hpc-simctl/` はプロジェクトルートに配置。Git 管理外
 - パラメータ変更は case.toml / survey.toml で管理し、新しい run を生成する
 - `refs/` 以下はシミュレータの参考資料。パラメータの意味を調べる際に参照する
+- simctl のドキュメント・仕様書は `tools/hpc-simctl/` を参照する
 - `.simctl/knowledge/` にナレッジインデックスがある。ドキュメントの所在はここで把握する
 - シミュレータ更新時は `simctl update-refs` でリファレンスとナレッジを最新化する
 """
@@ -459,30 +459,29 @@ AI エージェントが実行できるスキル (定型タスク) の一覧。
 
 プロジェクトの Python 環境をセットアップする。
 
-**前提**: プロジェクトルートで実行すること。
+**前提**: プロジェクトルートで実行すること。uv がインストール済みであること。
 
 **手順**:
 
 ```bash
-# 1. uv のインストール (未インストールの場合)
-curl -LsSf https://astral.sh/uv/install.sh | sh
+# 方法 1: ブートストラップ (新規プロジェクト)
+uvx --from git+https://github.com/Nkzono99/hpc-simctl.git simctl init
+source .venv/bin/activate
 
-# 2. .venv の作成
-uv venv
-
-# 3. パッケージのインストール
-uv pip install hpc-simctl
+# 方法 2: 手動セットアップ (既存プロジェクト)
+uv venv .venv
+mkdir -p tools && git clone https://github.com/Nkzono99/hpc-simctl.git tools/hpc-simctl
+uv pip install -e ./tools/hpc-simctl
 {pip_install_line}
-
-# 4. 確認
 source .venv/bin/activate
 simctl doctor
 ```
 
 **注意事項**:
-- `.venv/` は `.gitignore` に追加済み
+- `.venv/` と `tools/` は `.gitignore` に追加済み
 - HPC ノードでは login ノードで環境構築し、compute ノードでは同じ .venv を使う
 - `module load` が必要なモジュールは `simulators.toml` の `modules` に定義済み
+- simctl 更新: `cd tools/hpc-simctl && git pull`
 
 ## /survey-design
 
@@ -919,6 +918,125 @@ def _venv_pip_executable(venv_dir: Path) -> Path:
     return venv_dir / "bin" / "pip"
 
 
+def _find_uv() -> str:
+    """Find the uv executable, falling back to 'uv'."""
+    uv_path = shutil.which("uv")
+    return uv_path if uv_path else "uv"
+
+
+def _bootstrap_environment(
+    project_dir: Path,
+    sim_names: list[str],
+    simctl_repo: str,
+    created: list[str],
+    skipped: list[str],
+) -> None:
+    """Bootstrap .venv, clone hpc-simctl into tools/, and editable-install.
+
+    Args:
+        project_dir: Project root directory.
+        sim_names: List of simulator names for pip packages.
+        simctl_repo: Git URL for hpc-simctl repository.
+        created: Mutable list to append created items.
+        skipped: Mutable list to append skipped items.
+    """
+    uv = _find_uv()
+    venv_dir = project_dir / ".venv"
+    tools_dir = project_dir / "tools"
+    simctl_dir = tools_dir / "hpc-simctl"
+
+    # 1. Create .venv via uv
+    if venv_dir.exists():
+        skipped.append(".venv")
+    else:
+        typer.echo("  Creating .venv ...")
+        venv_result = subprocess.run(
+            [uv, "venv", str(venv_dir)],
+            cwd=str(project_dir),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if venv_result.returncode == 0:
+            created.append(".venv")
+        else:
+            typer.echo(
+                f"  Warning: uv venv failed: {venv_result.stderr.strip()}"
+            )
+            return
+
+    # 2. Clone hpc-simctl into tools/
+    if simctl_dir.exists():
+        skipped.append("tools/hpc-simctl")
+    else:
+        typer.echo("  Cloning hpc-simctl into tools/ ...")
+        tools_dir.mkdir(exist_ok=True)
+        clone_result = subprocess.run(
+            ["git", "clone", simctl_repo, str(simctl_dir)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if clone_result.returncode == 0:
+            created.append("tools/hpc-simctl")
+        else:
+            typer.echo(
+                f"  Warning: git clone failed: "
+                f"{clone_result.stderr.strip()[:300]}"
+            )
+            return
+
+    # 3. Editable install simctl into .venv
+    typer.echo("  Installing hpc-simctl (editable) ...")
+    install_result = subprocess.run(
+        [uv, "pip", "install", "-e", str(simctl_dir),
+         "--python", str(venv_dir / ("Scripts/python.exe"
+                                     if sys.platform == "win32"
+                                     else "bin/python"))],
+        cwd=str(project_dir),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if install_result.returncode == 0:
+        created.append("uv pip install -e tools/hpc-simctl")
+    else:
+        typer.echo(
+            f"  Warning: editable install failed:\n"
+            f"    {install_result.stderr.strip()[:300]}"
+        )
+
+    # 4. Install simulator-specific packages
+    pip_pkgs = _collect_pip_packages(sim_names) if sim_names else []
+    if pip_pkgs:
+        typer.echo(f"  Installing: {', '.join(pip_pkgs)} ...")
+        pkg_result = subprocess.run(
+            [uv, "pip", "install", *pip_pkgs,
+             "--python", str(venv_dir / ("Scripts/python.exe"
+                                         if sys.platform == "win32"
+                                         else "bin/python"))],
+            cwd=str(project_dir),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if pkg_result.returncode == 0:
+            created.append(f"pip install ({len(pip_pkgs)} packages)")
+        else:
+            typer.echo(
+                f"  Warning: pip install failed:\n"
+                f"    {pkg_result.stderr.strip()[:300]}"
+            )
+
+    # 5. Activation hint
+    if sys.platform == "win32":
+        activate_cmd = r".venv\Scripts\activate"
+    else:
+        activate_cmd = "source .venv/bin/activate"
+    typer.echo(f"\n  Next: {activate_cmd}")
+    typer.echo("  Then: simctl doctor")
+
+
 def init(
     simulators: Annotated[
         Optional[list[str]],
@@ -936,6 +1054,13 @@ def init(
         bool,
         typer.Option("--yes", "-y", help="Skip interactive prompts, use defaults."),
     ] = False,
+    simctl_repo: Annotated[
+        str,
+        typer.Option(
+            "--simctl-repo",
+            help="Git URL for hpc-simctl repository.",
+        ),
+    ] = _DEFAULT_SIMCTL_REPO,
 ) -> None:
     """Initialize a new simctl project (simproject.toml etc.).
 
@@ -944,6 +1069,9 @@ def init(
 
     Simulator names can also be passed directly:
       simctl init emses beach
+
+    Bootstrap usage (no prior install needed):
+      uvx --from git+https://github.com/Nkzono99/hpc-simctl.git simctl init
     """
     interactive = not yes
     project_dir = (path or Path.cwd()).resolve()
@@ -1040,11 +1168,6 @@ def init(
         created.extend(refs_created)
         skipped.extend(refs_skipped)
 
-    # docs/ — copy bundled README.md and docs/*.md
-    docs_created, docs_skipped = _copy_docs(project_dir)
-    created.extend(docs_created)
-    skipped.extend(docs_skipped)
-
     # .gitignore
     if _write_if_missing(project_dir / ".gitignore", _GITIGNORE_CONTENT):
         created.append(".gitignore")
@@ -1098,41 +1221,8 @@ def init(
         else:
             typer.echo(f"  Warning: git init failed: {result.stderr.strip()}")
 
-    # .venv + pip install
-    venv_dir = project_dir / ".venv"
-    if venv_dir.exists():
-        skipped.append(".venv")
-    else:
-        typer.echo("  Creating .venv ...")
-        venv_result = subprocess.run(
-            [sys.executable, "-m", "venv", str(venv_dir)],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if venv_result.returncode == 0:
-            created.append(".venv")
-
-            # Install simulator-specific packages
-            pip_pkgs = _collect_pip_packages(sim_names) if sim_names else []
-            if pip_pkgs:
-                pip_exe = str(_venv_pip_executable(venv_dir))
-                typer.echo(f"  Installing: {', '.join(pip_pkgs)} ...")
-                pip_result = subprocess.run(
-                    [pip_exe, "install", *pip_pkgs],
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                )
-                if pip_result.returncode == 0:
-                    created.append(f"pip install ({len(pip_pkgs)} packages)")
-                else:
-                    typer.echo(
-                        f"  Warning: pip install failed:\n"
-                        f"    {pip_result.stderr.strip()[:300]}"
-                    )
-        else:
-            typer.echo(f"  Warning: venv creation failed: {venv_result.stderr.strip()}")
+    # Bootstrap: .venv + tools/hpc-simctl + editable install
+    _bootstrap_environment(project_dir, sim_names, simctl_repo, created, skipped)
 
     # Print results
     typer.echo(f"Initialized project '{project_name}' in {project_dir}")

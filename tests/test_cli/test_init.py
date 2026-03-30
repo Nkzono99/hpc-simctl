@@ -5,11 +5,21 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 from typer.testing import CliRunner
 
 from simctl.cli.main import app
 
 runner = CliRunner()
+
+
+@pytest.fixture(autouse=True)
+def _mock_bootstrap(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Skip the bootstrap step (uv/git clone) in all init tests."""
+    monkeypatch.setattr(
+        "simctl.cli.init._bootstrap_environment",
+        lambda *_args, **_kwargs: None,
+    )
 
 
 class TestInit:
@@ -212,14 +222,13 @@ class TestInit:
             content = (tmp_path / filename).read_text(encoding="utf-8")
             assert "#:schema" in content
 
-    def test_init_generates_usage_guide(self, tmp_path: Path) -> None:
-        """Init generates docs/simctl-guide.md."""
+    def test_init_references_tools_dir(self, tmp_path: Path) -> None:
+        """CLAUDE.md references tools/hpc-simctl/ for docs."""
         runner.invoke(app, ["init", "-y", "--path", str(tmp_path)])
-        guide = tmp_path / "docs" / "simctl-guide.md"
-        assert guide.exists()
-        content = guide.read_text(encoding="utf-8")
-        assert "simctl" in content
-        assert "survey.toml" in content
+        content = (tmp_path / "CLAUDE.md").read_text(encoding="utf-8")
+        assert "tools/hpc-simctl/" in content
+        # docs/ directory should NOT be generated
+        assert not (tmp_path / "docs").exists()
 
     def test_init_default_is_interactive(self, tmp_path: Path) -> None:
         """Init without -y is interactive (prompts for project name)."""

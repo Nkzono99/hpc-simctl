@@ -6,19 +6,29 @@
 
 - Python 3.10 以上
 - Slurm 環境 (`sbatch`, `squeue`, `sacct` が利用可能)
-- uv (推奨) または pip
+- uv ([astral.sh/uv](https://astral.sh/uv))
 
 ## インストール
 
-```bash
-# uv を使う場合（推奨）
-git clone https://github.com/Nkzono99/hpc-simctl.git
-cd hpc-simctl
-uv sync --dev
+simctl はプロジェクトごとにブートストラップインストールされます。
+事前のグローバルインストールは不要です。
 
-# pip を使う場合
-pip install -e .
+```bash
+# プロジェクトディレクトリを作成して初期化 (uv だけあれば OK)
+mkdir my-hpc-project
+cd my-hpc-project
+uvx --from git+https://github.com/Nkzono99/hpc-simctl.git simctl init
+
+# activate して利用開始
+source .venv/bin/activate
 ```
+
+`simctl init` が以下を自動的に行います:
+
+1. `.venv/` を作成 (uv venv)
+2. `tools/hpc-simctl/` に simctl リポジトリを clone
+3. simctl を `.venv` に editable install (`uv pip install -e`)
+4. シミュレータ固有パッケージをインストール
 
 インストール確認:
 
@@ -56,9 +66,9 @@ Commands:
 まず、シミュレーション管理用のプロジェクトディレクトリを作成します。
 
 ```bash
-mkdir my-hpc-project
 cd my-hpc-project
-simctl init
+source .venv/bin/activate
+simctl doctor
 ```
 
 出力例:
@@ -72,6 +82,9 @@ Initialized project 'my-hpc-project' in /home/user/my-hpc-project
     cases/
     runs/
     .gitignore
+    .venv
+    tools/hpc-simctl
+    uv pip install -e tools/hpc-simctl
 ```
 
 ### 生成されるファイル

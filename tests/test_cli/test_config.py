@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from simctl.cli.main import app
@@ -132,6 +133,14 @@ class TestConfigAddLauncher:
 
 class TestInteractiveInit:
     """Tests for 'simctl init' (interactive by default)."""
+
+    @pytest.fixture(autouse=True)
+    def _mock_bootstrap(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Skip the bootstrap step (uv/git clone) in interactive init tests."""
+        monkeypatch.setattr(
+            "simctl.cli.init._bootstrap_environment",
+            lambda *_args, **_kwargs: None,
+        )
 
     def test_interactive_init_select_simulators(self, tmp_path: Path) -> None:
         """Interactive init prompts for project name and simulators."""
