@@ -11,6 +11,8 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
 
+from simctl.core.validation import ValidationIssue
+
 
 class SimulatorAdapter(ABC):
     """Abstract base class for simulator-specific adapters.
@@ -126,6 +128,57 @@ class SimulatorAdapter(ABC):
             List of ``(clone_url, dest_dir_name)`` tuples.
             ``dest_dir_name`` is the directory name under the project's
             ``refs/`` directory.
+        """
+        return []
+
+    @classmethod
+    def knowledge_sources(cls) -> dict[str, list[str]]:
+        """Return glob patterns for knowledge-relevant files per doc repo.
+
+        Override in subclasses to specify which files in each reference
+        repository (under ``refs/``) should be indexed into the
+        ``.simctl/knowledge/`` directory.
+
+        Returns:
+            Dictionary mapping ``dest_dir_name`` (from :meth:`doc_repos`)
+            to a list of glob patterns relative to the repo root.
+        """
+        return {}
+
+    @classmethod
+    def parameter_schema(cls) -> dict[str, dict[str, Any]]:
+        """Return machine-readable parameter metadata.
+
+        Override in subclasses to provide parameter definitions including
+        type, unit, valid range, constraints, derivation formulas, and
+        interdependencies.
+
+        Returns:
+            Dict mapping dot-notation parameter paths to metadata dicts.
+            Each metadata dict may contain keys: ``type``, ``unit``,
+            ``description``, ``range`` (``[min, max]``, ``None`` =
+            unbounded), ``default``, ``constraints`` (list of
+            constraint names), ``derived_from`` (formula string),
+            ``interdependencies`` (list of related parameter paths).
+        """
+        return {}
+
+    def validate_params(
+        self,
+        case_data: dict[str, Any],
+    ) -> list[ValidationIssue]:
+        """Validate parameters against physics constraints.
+
+        Called before run creation to catch configuration errors early.
+        Override in subclasses to implement simulator-specific checks.
+
+        Args:
+            case_data: Case data dict with ``"case"`` and ``"params"``
+                sections (same structure as :meth:`render_inputs`).
+
+        Returns:
+            List of :class:`ValidationIssue` instances.
+            Empty list means no issues found.
         """
         return []
 

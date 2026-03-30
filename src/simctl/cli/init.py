@@ -46,6 +46,9 @@ _GITIGNORE_CONTENT = """\
 # Reference repos (cloned by simctl init)
 refs/
 
+# Auto-generated knowledge indexes
+.simctl/
+
 # heavy run outputs
 runs/**/work/outputs/
 runs/**/work/restart/
@@ -379,6 +382,8 @@ simctl doctor
 - `.venv/` はプロジェクトルートに配置。Git 管理外
 - パラメータ変更は case.toml / survey.toml で管理し、新しい run を生成する
 - `refs/` 以下はシミュレータの参考資料。パラメータの意味を調べる際に参照する
+- `.simctl/knowledge/` にナレッジインデックスがある。ドキュメントの所在はここで把握する
+- シミュレータ更新時は `simctl update-refs` でリファレンスとナレッジを最新化する
 """
 
 
@@ -504,6 +509,69 @@ run やサーベイの状態を確認・同期する。
 2. completed な run を `simctl archive` でアーカイブ
 3. 必要に応じて `simctl purge-work` で大容量ファイルを削除
 4. 整理結果を報告
+
+## /update-refs
+
+リファレンスリポジトリを更新し、ナレッジインデックスを再生成する。
+
+**前提**: プロジェクトルートで実行すること。ネットワーク接続が必要。
+
+**手順**:
+1. `simctl update-refs` を実行
+2. `refs/` 以下の全リポジトリが `git fetch --depth 1` + `git reset` で最新化される
+3. 変更があったリポジトリを検出 (コミットハッシュ比較)
+4. `.simctl/knowledge/{{simulator}}.md` にナレッジインデックスを再生成
+5. 更新サマリーを確認
+
+**ナレッジインデックスの使い方**:
+- `.simctl/knowledge/{{simulator}}.md` にドキュメントの所在一覧がある
+- パラメータの意味・制約・物理的安定性条件は `refs/` 内のドキュメントを直接読む
+- 前回更新からの変更差分は Change Log セクションに記録される
+
+**注意事項**:
+- `refs/` のリポジトリは shallow clone なので通常の `git pull` は使わない
+- `.simctl/knowledge/` は自動生成ファイル。手動編集しないこと
+- シミュレータのバージョンアップ時は必ずこのコマンドを実行すること
+
+## /learn
+
+実験結果や経験から知見を `.simctl/insights/` に保存する。
+
+**手順**:
+1. 完了した run の結果 (`simctl summarize`, ログ, 出力) を読む
+2. 新たに分かったこと・期待と異なる結果を特定する
+3. 知見の種類を判断する:
+   - `constraint`: 安定性・制約の発見 (例: CFL 条件違反で不安定)
+   - `result`: 実験結果のサマリー (例: サーベイ全体の傾向)
+   - `analysis`: 物理的考察・解釈 (例: 加熱メカニズムの推定)
+   - `dependency`: パラメータ依存性 (例: 密度と帯電量の関係)
+4. `simctl knowledge save <name> -t <type> -s <simulator> -m "<内容>"` で保存
+5. 必要に応じてタグを付与 (`--tags "stability,cfl,grid"`)
+
+**例**:
+```bash
+simctl knowledge save mag_scan_summary -t result -s emses \\
+  -m "磁場角度 0-90 度のサーベイ。45度で最もイオン加速が効率的。"
+```
+
+## /recall
+
+現在のタスクに関連する知見を検索・提示する。
+
+**手順**:
+1. 現在の campaign.toml / case.toml からシミュレータとパラメータを読む
+2. `simctl knowledge list -s <simulator>` で関連 insights を検索
+3. リンク先プロジェクトの知見も `simctl knowledge sync` でインポート
+4. 関連する知見をサマリーとして提示し、パラメータ設定に反映する
+
+## /sync-knowledge
+
+リンク先プロジェクトから知見をインポートする。
+
+**手順**:
+1. `.simctl/links.toml` を確認
+2. `simctl knowledge sync` で全リンク先から新しい insights をインポート
+3. インポート結果を報告
 """
 
 
