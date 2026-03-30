@@ -233,12 +233,14 @@ def _clone_doc_repos(
             ["git", "clone", "--depth", "1", url, str(dest_path)],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             check=False,
         )
         if result.returncode == 0:
             created.append(rel)
         else:
-            logger.warning("git clone %s failed: %s", url, result.stderr.strip())
+            logger.warning("git clone %s failed: %s", url, (result.stderr or "").strip())
 
     return created, skipped
 
@@ -955,13 +957,15 @@ def _bootstrap_environment(
             cwd=str(project_dir),
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             check=False,
         )
         if venv_result.returncode == 0:
             created.append(".venv")
         else:
             typer.echo(
-                f"  Warning: uv venv failed: {venv_result.stderr.strip()}"
+                f"  Warning: uv venv failed: {(venv_result.stderr or '').strip()}"
             )
             return
 
@@ -975,6 +979,8 @@ def _bootstrap_environment(
             ["git", "clone", simctl_repo, str(simctl_dir)],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             check=False,
         )
         if clone_result.returncode == 0:
@@ -982,7 +988,7 @@ def _bootstrap_environment(
         else:
             typer.echo(
                 f"  Warning: git clone failed: "
-                f"{clone_result.stderr.strip()[:300]}"
+                f"{(clone_result.stderr or '').strip()[:300]}"
             )
             return
 
@@ -996,6 +1002,8 @@ def _bootstrap_environment(
         cwd=str(project_dir),
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         check=False,
     )
     if install_result.returncode == 0:
@@ -1003,7 +1011,7 @@ def _bootstrap_environment(
     else:
         typer.echo(
             f"  Warning: editable install failed:\n"
-            f"    {install_result.stderr.strip()[:300]}"
+            f"    {(install_result.stderr or '').strip()[:300]}"
         )
 
     # 4. Install simulator-specific packages
@@ -1018,6 +1026,8 @@ def _bootstrap_environment(
             cwd=str(project_dir),
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             check=False,
         )
         if pkg_result.returncode == 0:
@@ -1025,7 +1035,7 @@ def _bootstrap_environment(
         else:
             typer.echo(
                 f"  Warning: pip install failed:\n"
-                f"    {pkg_result.stderr.strip()[:300]}"
+                f"    {(pkg_result.stderr or '').strip()[:300]}"
             )
 
     # 5. Activation hint
@@ -1214,12 +1224,14 @@ def init(
             cwd=project_dir,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             check=False,
         )
         if result.returncode == 0:
             created.append("git init")
         else:
-            typer.echo(f"  Warning: git init failed: {result.stderr.strip()}")
+            typer.echo(f"  Warning: git init failed: {(result.stderr or '').strip()}")
 
     # Bootstrap: .venv + tools/hpc-simctl + editable install
     _bootstrap_environment(project_dir, sim_names, simctl_repo, created, skipped)
