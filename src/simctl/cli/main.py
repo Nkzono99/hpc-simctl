@@ -7,6 +7,7 @@ import typer
 from simctl.cli.analyze import collect, summarize
 from simctl.cli.clone import clone
 from simctl.cli.config import config_app
+from simctl.cli.context import context
 from simctl.cli.create import create, sweep
 from simctl.cli.extend import extend
 from simctl.cli.history import history
@@ -32,6 +33,7 @@ app.command("init")(init)
 app.command("doctor")(doctor)
 app.add_typer(config_app, name="config")
 app.add_typer(knowledge_app, name="knowledge")
+app.command("context")(context)
 app.command("new")(new)
 app.command("create")(create)
 app.command("sweep")(sweep)

@@ -28,12 +28,25 @@ _KNOWLEDGE_DIR = "knowledge"
 _LINKS_FILE = "links.toml"
 
 # Valid insight types
-INSIGHT_TYPES = frozenset({
-    "constraint",   # Stability/constraint findings
-    "result",       # Experiment result summaries
-    "analysis",     # Physical interpretation / discussion
-    "dependency",   # Parameter dependency trends
-})
+INSIGHT_TYPES = frozenset(
+    {
+        "constraint",  # Stability/constraint findings
+        "result",  # Experiment result summaries
+        "analysis",  # Physical interpretation / discussion
+        "dependency",  # Parameter dependency trends
+    }
+)
+
+# Valid fact types
+FACT_TYPES = frozenset(
+    {
+        "observation",  # Directly observed from run output
+        "constraint",  # Stability / CFL / resolution constraint
+        "dependency",  # Parameter dependency relationship
+        "policy",  # Operational rule (e.g. "always use dt < X")
+        "hypothesis",  # Unverified conjecture
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -133,9 +146,7 @@ def parse_insight(path: Path) -> Insight | None:
         # Handle list values: [a, b, c]
         if value.startswith("[") and value.endswith("]"):
             value = [
-                v.strip().strip("\"'")
-                for v in value[1:-1].split(",")
-                if v.strip()
+                v.strip().strip("\"'") for v in value[1:-1].split(",") if v.strip()
             ]
         meta[key] = value
 
@@ -163,9 +174,7 @@ def write_insight(insights_dir: Path, insight: Insight) -> Path:
         Path to the written file.
     """
     tags_str = ", ".join(insight.tags) if insight.tags else ""
-    created = insight.created or datetime.now(
-        timezone.utc
-    ).strftime("%Y-%m-%d")
+    created = insight.created or datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     frontmatter = [
         "---",
@@ -303,31 +312,75 @@ class Fact:
     programmatic consumption by AI agents and validation tools.
 
     Attributes:
-        id: Unique fact identifier.
+        id: Unique fact identifier (e.g. ``"f001"``).
         claim: The knowledge claim (one sentence).
-        scope: What this fact applies to (e.g. simulator name,
-            parameter range).
-        evidence: How this fact was established.
+        fact_type: One of :data:`FACT_TYPES`
+            (``"observation"``, ``"constraint"``, ``"dependency"``,
+            ``"policy"``, ``"hypothesis"``).
+        simulator: Simulator this fact applies to (empty = general).
+        scope_case: Case pattern this applies to (e.g. ``"mag_scan"``).
+        scope_text: Free-text scope description for humans.
+        param_name: Parameter name this fact is about (dot-notation).
         confidence: ``"high"``, ``"medium"``, or ``"low"``.
         source_run: Run ID that produced this evidence (if any).
         source_project: Project where the fact was established.
+        evidence_kind: Type of evidence (``"run_observation"``,
+            ``"calculation"``, ``"literature"``, ``"heuristic"``).
+        evidence_ref: Reference to evidence source
+            (e.g. ``"run:R20260330-0004"``).
         created_at: ISO-format timestamp.
         tags: Searchable tags.
+        supersedes: ID of the fact this one replaces (if any).
     """
 
     id: str
     claim: str
-    scope: str = ""
-    evidence: str = ""
+    fact_type: str = "observation"
+    simulator: str = ""
+    scope_case: str = ""
+    scope_text: str = ""
+    param_name: str = ""
     confidence: str = "medium"
     source_run: str = ""
     source_project: str = ""
+    evidence_kind: str = ""
+    evidence_ref: str = ""
     created_at: str = ""
     tags: list[str] = field(default_factory=list)
+    supersedes: str = ""
+
+    # Kept for backward compatibility with old facts.toml files
+    # that use "scope" and "evidence" as flat strings.
+    @property
+    def scope(self) -> str:
+        """Backward-compatible scope string."""
+        parts = []
+        if self.simulator:
+            parts.append(self.simulator)
+        if self.scope_case:
+            parts.append(self.scope_case)
+        if self.scope_text:
+            parts.append(self.scope_text)
+        return ", ".join(parts) if parts else ""
+
+    @property
+    def evidence(self) -> str:
+        """Backward-compatible evidence string."""
+        parts = []
+        if self.evidence_kind:
+            parts.append(self.evidence_kind)
+        if self.evidence_ref:
+            parts.append(self.evidence_ref)
+        return ": ".join(parts) if parts else ""
 
 
 def load_facts(project_root: Path) -> list[Fact]:
-    """Load structured facts from .simctl/facts.toml."""
+    """Load structured facts from .simctl/facts.toml.
+
+    Handles both the new structured schema (with ``fact_type``,
+    ``simulator``, ``scope_case``, etc.) and the legacy flat schema
+    (with ``scope`` and ``evidence`` as plain strings).
+    """
     facts_file = project_root / _SIMCTL_DIR / _FACTS_FILE
     if not facts_file.is_file():
         return []
@@ -336,25 +389,55 @@ def load_facts(project_root: Path) -> list[Fact]:
         raw = tomllib.load(f)
 
     facts: list[Fact] = []
-    for fact_data in raw.get("facts", []):
-        if not isinstance(fact_data, dict):
+    for d in raw.get("facts", []):
+        if not isinstance(d, dict):
             continue
-        facts.append(Fact(
-            id=fact_data.get("id", ""),
-            claim=fact_data.get("claim", ""),
-            scope=fact_data.get("scope", ""),
-            evidence=fact_data.get("evidence", ""),
-            confidence=fact_data.get("confidence", "medium"),
-            source_run=fact_data.get("source_run", ""),
-            source_project=fact_data.get("source_project", ""),
-            created_at=fact_data.get("created_at", ""),
-            tags=list(fact_data.get("tags", [])),
-        ))
+
+        # Migrate legacy "scope" string -> scope_text
+        scope_case = d.get("scope_case", "")
+        scope_text = d.get("scope_text", "")
+        if not scope_case and not scope_text:
+            legacy_scope = d.get("scope", "")
+            if legacy_scope:
+                scope_text = legacy_scope
+
+        # Migrate legacy "evidence" string -> evidence_kind
+        evidence_kind = d.get("evidence_kind", "")
+        evidence_ref = d.get("evidence_ref", "")
+        if not evidence_kind and not evidence_ref:
+            legacy_evidence = d.get("evidence", "")
+            if legacy_evidence:
+                evidence_kind = legacy_evidence
+
+        facts.append(
+            Fact(
+                id=d.get("id", ""),
+                claim=d.get("claim", ""),
+                fact_type=d.get("fact_type", "observation"),
+                simulator=d.get("simulator", ""),
+                scope_case=scope_case,
+                scope_text=scope_text,
+                param_name=d.get("param_name", ""),
+                confidence=d.get("confidence", "medium"),
+                source_run=d.get("source_run", ""),
+                source_project=d.get("source_project", ""),
+                evidence_kind=evidence_kind,
+                evidence_ref=evidence_ref,
+                created_at=d.get("created_at", ""),
+                tags=list(d.get("tags", [])),
+                supersedes=d.get("supersedes", ""),
+            )
+        )
     return facts
 
 
 def save_fact(project_root: Path, fact: Fact) -> None:
-    """Append a structured fact to .simctl/facts.toml."""
+    """Append a structured fact to .simctl/facts.toml.
+
+    Uses the new structured schema.  Facts are append-only by convention;
+    to supersede an existing fact, create a new one with ``supersedes``
+    set to the old fact's ID.
+    """
     if tomli_w is None:
         msg = "tomli_w is required to write facts.toml"
         raise RuntimeError(msg)
@@ -370,25 +453,36 @@ def save_fact(project_root: Path, fact: Fact) -> None:
             raw = tomllib.load(f)
         existing = list(raw.get("facts", []))
 
-    # Build new entry
+    # Build new entry (structured schema)
     entry: dict[str, Any] = {
         "id": fact.id,
         "claim": fact.claim,
+        "fact_type": fact.fact_type,
     }
-    if fact.scope:
-        entry["scope"] = fact.scope
-    if fact.evidence:
-        entry["evidence"] = fact.evidence
+    if fact.simulator:
+        entry["simulator"] = fact.simulator
+    if fact.scope_case:
+        entry["scope_case"] = fact.scope_case
+    if fact.scope_text:
+        entry["scope_text"] = fact.scope_text
+    if fact.param_name:
+        entry["param_name"] = fact.param_name
     entry["confidence"] = fact.confidence
     if fact.source_run:
         entry["source_run"] = fact.source_run
     if fact.source_project:
         entry["source_project"] = fact.source_project
-    entry["created_at"] = fact.created_at or datetime.now(
-        timezone.utc
-    ).isoformat(timespec="seconds")
+    if fact.evidence_kind:
+        entry["evidence_kind"] = fact.evidence_kind
+    if fact.evidence_ref:
+        entry["evidence_ref"] = fact.evidence_ref
+    entry["created_at"] = fact.created_at or datetime.now(timezone.utc).isoformat(
+        timespec="seconds"
+    )
     if fact.tags:
         entry["tags"] = fact.tags
+    if fact.supersedes:
+        entry["supersedes"] = fact.supersedes
 
     existing.append(entry)
 
@@ -402,19 +496,51 @@ def query_facts(
     scope: str = "",
     tag: str = "",
     min_confidence: str = "",
+    simulator: str = "",
+    fact_type: str = "",
+    param_name: str = "",
+    exclude_superseded: bool = True,
 ) -> list[Fact]:
-    """Query facts with optional filters."""
+    """Query facts with optional filters.
+
+    Args:
+        project_root: Project root directory.
+        scope: Free-text scope substring match (searches scope property).
+        tag: Must appear in tags list.
+        min_confidence: Minimum confidence level.
+        simulator: Must match simulator field exactly.
+        fact_type: Must match fact_type field exactly.
+        param_name: Must match param_name field exactly.
+        exclude_superseded: If True, exclude facts that have been
+            superseded by newer facts.
+    """
     confidence_order = {"high": 3, "medium": 2, "low": 1}
     min_level = confidence_order.get(min_confidence, 0)
 
     facts = load_facts(project_root)
+
+    # Build set of superseded IDs
+    superseded_ids: set[str] = set()
+    if exclude_superseded:
+        for f in facts:
+            if f.supersedes:
+                superseded_ids.add(f.supersedes)
+
     results: list[Fact] = []
     for f in facts:
+        if exclude_superseded and f.id in superseded_ids:
+            continue
         if scope and scope not in f.scope:
             continue
         if tag and tag not in f.tags:
             continue
         if min_level and confidence_order.get(f.confidence, 0) < min_level:
+            continue
+        if simulator and f.simulator != simulator:
+            continue
+        if fact_type and f.fact_type != fact_type:
+            continue
+        if param_name and f.param_name != param_name:
             continue
         results.append(f)
     return results
