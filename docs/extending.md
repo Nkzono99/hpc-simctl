@@ -778,3 +778,70 @@ walltime = "12:00:00"
 run の正本情報。simctl が自動生成・更新します。手動編集は通常不要です。
 
 全セクションのリファレンスは [SPEC.md](../SPEC.md) のセクション 12 を参照してください。
+
+---
+
+## AI エージェント対応メソッド
+
+Adapter に以下のオプションメソッドを実装すると、AI エージェントの精度が向上します。
+
+### parameter_schema()
+
+パラメータの機械可読メタデータを返す:
+
+```python
+@classmethod
+def parameter_schema(cls) -> dict[str, dict[str, Any]]:
+    return {
+        "sim.dt": {
+            "type": "float",
+            "unit": "s",
+            "description": "Time step",
+            "range": [0.0, None],
+            "constraints": ["cfl_condition"],
+            "derived_from": "Must satisfy dt < dx / c",
+            "interdependencies": ["grid.dx"],
+        },
+    }
+```
+
+### validate_params()
+
+run 生成前に物理的整合性をチェックする:
+
+```python
+def validate_params(
+    self, case_data: dict[str, Any]
+) -> list[ValidationIssue]:
+    issues = []
+    config = self._resolve_config(case_data)
+    dt = config.get("sim", {}).get("dt", 0)
+    if dt > 1.0:
+        issues.append(ValidationIssue(
+            severity="error",
+            message="dt too large",
+            parameter="sim.dt",
+            constraint_name="cfl_condition",
+        ))
+    return issues
+```
+
+### knowledge_sources()
+
+`refs/` 内でインデックス対象とするファイルパターンを返す:
+
+```python
+@classmethod
+def knowledge_sources(cls) -> dict[str, list[str]]:
+    return {
+        "MySimulator": [
+            "README.md",
+            "docs/**/*.md",
+            "schemas/*.json",
+        ],
+    }
+```
+
+### campaign.toml との連携
+
+`campaign.toml` の `[variables]` セクションと `parameter_schema()` を組み合わせることで、AI エージェントはパラメータの妥当性を自動検証し、survey.toml を自動生成できます。

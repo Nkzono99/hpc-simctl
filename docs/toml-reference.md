@@ -375,4 +375,111 @@ All TOML files support schema validation via `#:schema` comments:
 ...
 ```
 
-Schema files: `schemas/simproject.json`, `schemas/simulators.json`, `schemas/launchers.json`, `schemas/case.json`, `schemas/survey.json`, `schemas/manifest.json`
+Schema files: `schemas/simproject.json`, `schemas/simulators.json`, `schemas/launchers.json`, `schemas/case.json`, `schemas/survey.json`, `schemas/manifest.json`, `schemas/campaign.json`
+
+---
+
+## campaign.toml
+
+プロジェクトルートに配置する研究意図の記述ファイル。AI エージェントに「何を調べたいか」を伝える。
+
+### [campaign]
+
+| フィールド | 型 | 必須 | 説明 |
+|-----------|-----|------|------|
+| `name` | string | Yes | キャンペーン名 |
+| `description` | string | No | 研究の動機・背景 |
+| `hypothesis` | string | No | 検証する仮説 |
+| `simulator` | string | No | 使用するシミュレータ名 |
+
+### [variables]
+
+パラメータ名 (dot 記法) をキーとし、変数定義を値とする。
+
+| フィールド | 型 | 必須 | 説明 |
+|-----------|-----|------|------|
+| `role` | string | Yes | `independent` / `dependent` / `fixed` / `controlled` |
+| `range` | [number, number] | No | 独立変数の [min, max] |
+| `values` | array | No | 明示的な値のリスト |
+| `unit` | string | No | 物理単位 |
+| `reason` | string | No | この値に設定した理由 |
+
+### [observables]
+
+観測量名をキーとし、出力定義を値とする。
+
+| フィールド | 型 | 必須 | 説明 |
+|-----------|-----|------|------|
+| `source` | string | No | 出力ファイルのパスまたは glob |
+| `column` | int/string | No | 出力ファイル内のカラム |
+| `description` | string | No | 観測量の説明 |
+| `unit` | string | No | 物理単位 |
+
+### 例
+
+```toml
+[campaign]
+name = "magnetic-angle-dependence"
+hypothesis = "磁力線入射角 45 度付近でイオンフラックスが最大になる"
+simulator = "emses"
+
+[variables]
+"plasma.wc" = { role = "independent", range = [0.0, 0.5], unit = "omega_pe" }
+"tmgrid.dt" = { role = "fixed", values = [1.0], reason = "CFL 条件" }
+
+[observables]
+ion_flux = { source = "work/influx", column = 1, description = "イオンフラックス" }
+```
+
+---
+
+## .simctl/environment.toml
+
+`simctl doctor` で自動生成される実行環境記述ファイル。
+
+### [cluster]
+
+| フィールド | 型 | 説明 |
+|-----------|-----|------|
+| `name` | string | クラスタ名 |
+| `scheduler` | string | ジョブスケジューラ (`slurm`) |
+| `scratch_path` | string | スクラッチパステンプレート |
+
+### [cluster.partitions.{name}]
+
+| フィールド | 型 | 説明 |
+|-----------|-----|------|
+| `max_nodes` | int | 最大ノード数 |
+| `max_walltime` | string | 最大実行時間 |
+| `gpu` | bool | GPU 利用可否 |
+| `default` | bool | デフォルトパーティションか |
+
+### [cluster.constraints]
+
+任意のキー・値ペアでクラスタ制約を記述 (例: `max_jobs_per_user = 100`)。
+
+### [modules]
+
+名前付きモジュールセット。値はモジュール名のリスト。
+
+---
+
+## .simctl/links.toml
+
+他プロジェクトや共有知識ストアへの参照を定義。
+
+### [projects]
+
+キーがリンク名、値が相対/絶対パス。
+
+### [shared]
+
+キーがリソース名、値がパス (`~` 展開対応)。
+
+```toml
+[projects]
+surface-charging = "../surface-charging"
+
+[shared]
+knowledge = "~/.simctl/knowledge"
+```

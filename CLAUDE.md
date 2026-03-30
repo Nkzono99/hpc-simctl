@@ -99,6 +99,12 @@ hpc-simctl/
 | `simctl config show` | 設定表示 |
 | `simctl config add-simulator` | シミュレータ追加 (対話型) |
 | `simctl config add-launcher` | ランチャー追加 (対話型) |
+| `simctl update-refs` | refs/ リポジトリ更新 + ナレッジインデックス再生成 |
+| `simctl knowledge save` | 知見を .simctl/insights/ に保存 |
+| `simctl knowledge list` | 知見一覧表示 |
+| `simctl knowledge show` | 知見の詳細表示 |
+| `simctl knowledge sync` | リンク先から知見をインポート |
+| `simctl knowledge links` | プロジェクトリンク一覧 |
 
 全コマンドは引数省略時にカレントディレクトリをデフォルトとする。
 
@@ -174,6 +180,23 @@ completed → archived → purged
 新しい Simulator Adapter を追加する場合:
 1. `src/simctl/adapters/base.py` の `SimulatorAdapter` を継承
 2. 全抽象メソッドを実装: render_inputs, resolve_runtime, build_program_command, detect_outputs, detect_status, summarize, collect_provenance
-3. `adapters/registry.py` に登録
-4. `simulators.toml` に設定エントリを追加
-5. テストを `tests/test_adapters/` に追加
+3. オプションメソッドの実装: parameter_schema, validate_params, knowledge_sources, agent_guide, case_template, doc_repos, pip_packages
+4. `adapters/registry.py` に登録
+5. `simulators.toml` に設定エントリを追加
+6. テストを `tests/test_adapters/` に追加
+
+## 知識層 (Knowledge Layer)
+
+AI エージェントがシミュレーションを自律的に行うための知識管理。
+詳細は `docs/knowledge-layer.md` を参照。
+
+- **シミュレータ知識**: `refs/` + `.simctl/knowledge/` (update-refs で更新)
+- **実行環境**: `.simctl/environment.toml` (doctor で自動検出)
+- **研究意図**: `campaign.toml` (ユーザーが記述)
+- **実験知見**: `.simctl/insights/` (knowledge save/sync で管理)
+- **プロジェクト間リンク**: `.simctl/links.toml`
+
+主要コマンド:
+- `simctl update-refs` — refs/ リポジトリ更新 + ナレッジインデックス再生成
+- `simctl knowledge save/list/show/sync/links` — 知見の管理
+- `simctl doctor` — 環境検出・保存
