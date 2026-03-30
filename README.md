@@ -61,8 +61,9 @@ my-simulation-project/
   runs/                # run の格納場所
   refs/                # シミュレータリファレンスリポジトリ
   .simctl/             # 知識層 (ナレッジ・環境・知見)
-    knowledge/         # シミュレータ知識インデックス
-    insights/          # 実験から得た知見
+    knowledge/         # シミュレータ知識インデックス (自動生成)
+    insights/          # 実験知見 (人間向け Markdown)
+    facts.toml         # 構造化された知識 (AI 向け machine-readable claims)
     environment.toml   # 実行環境記述 (自動検出)
     links.toml         # 他プロジェクトへの参照
 ```
@@ -253,6 +254,12 @@ simctl list runs/cavity/scan
 | `simctl knowledge show NAME` | 知見の詳細表示 |
 | `simctl knowledge sync` | リンク先プロジェクトから知見をインポート |
 | `simctl knowledge links` | プロジェクトリンク一覧 |
+| `simctl knowledge add-fact CLAIM` | 構造化された知識を facts.toml に追加 |
+| `simctl knowledge facts` | 構造化知識の一覧表示 |
+
+知識管理は二層構造:
+- **insights** (Markdown) — 人間が読む実験知見・考察
+- **facts** (TOML) — AI が使う構造化された claims (scope, evidence, confidence 付き)
 
 全コマンドは引数省略時にカレントディレクトリをデフォルトとする。
 

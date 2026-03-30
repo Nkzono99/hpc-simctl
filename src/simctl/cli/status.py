@@ -14,7 +14,7 @@ from simctl.core.exceptions import (
     RunNotFoundError,
     SimctlError,
 )
-from simctl.core.manifest import read_manifest
+from simctl.core.manifest import read_manifest, update_manifest
 from simctl.core.state import update_state
 from simctl.slurm.query import SlurmQueryError, query_job_status
 from simctl.slurm.submit import SlurmNotFoundError
@@ -184,6 +184,33 @@ def sync(
     except SimctlError as e:
         typer.echo(f"Error: Failed to update state: {e}")
         raise typer.Exit(code=1) from None
+
+    # Update current attempt with terminal info (if terminal state)
+    terminal_states = {"completed", "failed", "cancelled"}
+    if job_status.run_state.value in terminal_states:
+        from datetime import datetime, timezone
+
+        attempts = list(manifest.job.get("attempts", []))
+        if attempts:
+            # Find the attempt matching current job_id
+            for att in reversed(attempts):
+                if att.get("job_id") == job_id:
+                    att["terminal_state"] = job_status.run_state.value
+                    att["slurm_state"] = job_status.slurm_state
+                    att["finished_at"] = datetime.now(
+                        tz=timezone.utc
+                    ).isoformat()
+                    if job_status.failure_reason:
+                        att["failure_reason"] = job_status.failure_reason
+                    if job_status.exit_code:
+                        att["exit_code"] = job_status.exit_code
+                    break
+            import contextlib
+
+            with contextlib.suppress(SimctlError):
+                update_manifest(
+                    run_dir, {"job": {"attempts": attempts}}
+                )
 
     msg = f"{run_id}: {current_status} -> {job_status.run_state.value}"
     if job_status.failure_reason:

@@ -964,8 +964,7 @@ def init(
     else:
         skipped.append(".gitignore")
 
-    # CLAUDE.md
-    sim_names = simulators or []
+    # CLAUDE.md (use sim_names from earlier — may come from args or interactive)
     claude_content = _build_claude_md(project_name, sim_names)
     if _write_if_missing(project_dir / _CLAUDE_MD, claude_content):
         created.append(_CLAUDE_MD)
@@ -1227,7 +1226,7 @@ def doctor(
                 typer.echo(
                     f"[PASS] campaign.toml: {campaign.name}"
                 )
-        except SimctlError as e:
+        except Exception as e:
             typer.echo(f"[FAIL] campaign.toml: {e}")
             failures.append("campaign.toml")
     else:

@@ -140,9 +140,11 @@ def read_manifest(run_dir: Path) -> ManifestData:
 
 
 def write_manifest(run_dir: Path, data: ManifestData) -> None:
-    """Write manifest data to manifest.toml.
+    """Write manifest data to manifest.toml atomically.
 
-    Creates or overwrites the manifest file.
+    Uses write-to-temp + rename to avoid partial writes if the process
+    is interrupted.  On POSIX systems ``os.replace`` is atomic within
+    the same filesystem.
 
     Args:
         run_dir: Path to the run directory.
@@ -151,12 +153,27 @@ def write_manifest(run_dir: Path, data: ManifestData) -> None:
     Raises:
         ManifestError: If the file cannot be written.
     """
+    import os
+    import tempfile
+
     manifest_path = run_dir / _MANIFEST_FILE
 
     try:
         run_dir.mkdir(parents=True, exist_ok=True)
-        with open(manifest_path, "wb") as f:
-            tomli_w.dump(data.to_dict(), f)
+        # Write to a temp file in the same directory, then atomic rename
+        fd, tmp_path = tempfile.mkstemp(
+            dir=str(run_dir), suffix=".tmp", prefix=".manifest_"
+        )
+        try:
+            with os.fdopen(fd, "wb") as f:
+                tomli_w.dump(data.to_dict(), f)
+            os.replace(tmp_path, str(manifest_path))
+        except BaseException:
+            import contextlib
+
+            with contextlib.suppress(OSError):
+                os.unlink(tmp_path)
+            raise
     except OSError as e:
         raise ManifestError(f"Failed to write {manifest_path}: {e}") from e
 
