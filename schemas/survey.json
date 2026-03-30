@@ -1,42 +1,86 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "survey.toml",
-  "description": "Parameter survey definition for simctl (Cartesian product expansion)",
+  "description": "Parameter survey definition for simctl (Cartesian product expansion). See SPEC section 11 and docs/toml-reference.md.",
   "type": "object",
   "required": ["survey"],
   "properties": {
     "survey": {
       "type": "object",
-      "required": ["case"],
+      "required": ["base_case", "simulator"],
       "properties": {
-        "case": {
+        "id": {
           "type": "string",
-          "description": "Path to the case.toml to use as template"
+          "description": "Survey identifier (e.g. 'S20260327-cavity-u-a')"
         },
-        "description": {
+        "name": {
           "type": "string",
-          "description": "Survey description"
+          "description": "Human-readable survey name"
+        },
+        "base_case": {
+          "type": "string",
+          "description": "Name of the base case to derive runs from (must match a cases/<name>/case.toml)"
+        },
+        "simulator": {
+          "type": "string",
+          "description": "Simulator name (must match simulators.toml)"
+        },
+        "launcher": {
+          "type": "string",
+          "description": "Launcher profile name (must match launchers.toml)"
         }
       }
     },
-    "params": {
+    "classification": {
       "type": "object",
-      "description": "Parameter axes for Cartesian product. Each key is a dot-notation parameter, value is an array of values.",
+      "description": "Optional metadata for organizing runs",
+      "properties": {
+        "model": {
+          "type": "string",
+          "description": "Physical model category (e.g. 'sheath', 'wave')"
+        },
+        "submodel": {
+          "type": "string",
+          "description": "Subcategory (e.g. 'flat_surface', 'periodic')"
+        },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Free-form tags for filtering"
+        }
+      }
+    },
+    "axes": {
+      "type": "object",
+      "description": "Parameter axes for Cartesian product expansion. Each key is a dot-notation parameter path, value is an array of values to sweep.",
       "additionalProperties": {
         "type": "array",
+        "minItems": 1,
         "description": "Array of values for this parameter axis"
       }
     },
-    "slurm": {
+    "naming": {
       "type": "object",
-      "description": "Slurm job parameters (shared across all runs)",
+      "description": "Naming configuration for generated runs",
       "properties": {
-        "partition": { "type": "string" },
-        "nodes": { "type": "integer" },
-        "ntasks": { "type": "integer" },
-        "cpus_per_task": { "type": "integer" },
-        "time": { "type": "string" },
-        "job_name_prefix": { "type": "string" }
+        "display_name": {
+          "type": "string",
+          "description": "Template for run display names. Use {key} placeholders where key is the leaf name after the last dot."
+        }
+      }
+    },
+    "job": {
+      "type": "object",
+      "description": "Slurm job parameters shared across all generated runs",
+      "properties": {
+        "partition": { "type": "string", "description": "Partition/queue name" },
+        "nodes": { "type": "integer", "description": "Number of nodes" },
+        "ntasks": { "type": "integer", "description": "Number of MPI tasks" },
+        "cpus_per_task": { "type": "integer", "description": "CPUs per task" },
+        "walltime": { "type": "string", "description": "Wall time limit (HH:MM:SS)" },
+        "job_name": { "type": "string", "description": "Job name prefix" },
+        "threads_per_process": { "type": "integer", "description": "Threads per process (for rsc style)" },
+        "cores_per_thread": { "type": "integer", "description": "Cores per thread (for rsc style)" }
       }
     }
   }
