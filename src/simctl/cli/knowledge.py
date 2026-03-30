@@ -10,10 +10,13 @@ import typer
 from simctl.core.exceptions import SimctlError
 from simctl.core.knowledge import (
     INSIGHT_TYPES,
+    Fact,
     Insight,
     get_insights_dir,
     list_insights,
     load_links,
+    query_facts,
+    save_fact,
     sync_insights,
     write_insight,
 )
@@ -263,3 +266,132 @@ def links_cmd() -> None:
             f"  [{link.link_type}] {link.name}: "
             f"{link.path} ({status})"
         )
+
+
+@knowledge_app.command("add-fact")
+def add_fact(
+    claim: Annotated[
+        str,
+        typer.Argument(help="The knowledge claim (one sentence)."),
+    ],
+    scope: Annotated[
+        str,
+        typer.Option(
+            "--scope",
+            help="What this applies to (e.g. simulator name).",
+        ),
+    ] = "",
+    evidence: Annotated[
+        str,
+        typer.Option("--evidence", help="How this was established."),
+    ] = "",
+    confidence: Annotated[
+        str,
+        typer.Option(
+            "--confidence", "-c",
+            help="Confidence level: high, medium, low.",
+        ),
+    ] = "medium",
+    source_run: Annotated[
+        str,
+        typer.Option("--run", help="Source run ID."),
+    ] = "",
+    tags: Annotated[
+        Optional[str],
+        typer.Option("--tags", help="Comma-separated tags."),
+    ] = None,
+) -> None:
+    """Add a structured fact to .simctl/facts.toml.
+
+    Facts are machine-readable knowledge claims with provenance.
+    Unlike insights (free-form markdown), facts are designed for
+    programmatic use by AI agents.
+
+    Examples:
+      simctl knowledge add-fact "CFL limit: dt must be < 1.0 for emses" \\
+        --scope emses --confidence high --evidence "R20260330-0001 diverged"
+    """
+    if confidence not in ("high", "medium", "low"):
+        typer.echo(
+            f"Invalid confidence '{confidence}'. "
+            f"Must be: high, medium, low.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    root = _find_root()
+    tag_list = (
+        [t.strip() for t in tags.split(",") if t.strip()]
+        if tags
+        else []
+    )
+
+    import hashlib
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    fact_id = hashlib.sha256(
+        f"{claim}{scope}{now}".encode()
+    ).hexdigest()[:12]
+
+    fact = Fact(
+        id=fact_id,
+        claim=claim,
+        scope=scope,
+        evidence=evidence,
+        confidence=confidence,
+        source_run=source_run,
+        source_project=root.name,
+        created_at=now,
+        tags=tag_list,
+    )
+
+    try:
+        save_fact(root, fact)
+    except RuntimeError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1) from None
+
+    typer.echo(f"Saved fact [{fact_id}]: {claim}")
+
+
+@knowledge_app.command("facts")
+def facts_cmd(
+    scope: Annotated[
+        Optional[str],
+        typer.Option("--scope", help="Filter by scope."),
+    ] = None,
+    tag: Annotated[
+        Optional[str],
+        typer.Option("--tag", help="Filter by tag."),
+    ] = None,
+    confidence: Annotated[
+        Optional[str],
+        typer.Option(
+            "--confidence", "-c",
+            help="Minimum confidence: high, medium, low.",
+        ),
+    ] = None,
+) -> None:
+    """List structured facts from .simctl/facts.toml.
+
+    Examples:
+      simctl knowledge facts
+      simctl knowledge facts --scope emses --confidence high
+    """
+    root = _find_root()
+    facts = query_facts(
+        root,
+        scope=scope or "",
+        tag=tag or "",
+        min_confidence=confidence or "",
+    )
+
+    if not facts:
+        typer.echo("No facts found.")
+        return
+
+    for f in facts:
+        conf_badge = f"[{f.confidence}]"
+        scope_str = f" ({f.scope})" if f.scope else ""
+        typer.echo(f"  {f.id} {conf_badge}{scope_str}: {f.claim}")

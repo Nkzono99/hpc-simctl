@@ -288,3 +288,133 @@ def sync_insights(
             imported += 1
 
     return imported, skipped
+
+
+# ---------- Structured Facts ----------
+
+_FACTS_FILE = "facts.toml"
+
+
+@dataclass
+class Fact:
+    """A structured, machine-readable knowledge claim.
+
+    Unlike Insight (free-form markdown), a Fact is designed for
+    programmatic consumption by AI agents and validation tools.
+
+    Attributes:
+        id: Unique fact identifier.
+        claim: The knowledge claim (one sentence).
+        scope: What this fact applies to (e.g. simulator name,
+            parameter range).
+        evidence: How this fact was established.
+        confidence: ``"high"``, ``"medium"``, or ``"low"``.
+        source_run: Run ID that produced this evidence (if any).
+        source_project: Project where the fact was established.
+        created_at: ISO-format timestamp.
+        tags: Searchable tags.
+    """
+
+    id: str
+    claim: str
+    scope: str = ""
+    evidence: str = ""
+    confidence: str = "medium"
+    source_run: str = ""
+    source_project: str = ""
+    created_at: str = ""
+    tags: list[str] = field(default_factory=list)
+
+
+def load_facts(project_root: Path) -> list[Fact]:
+    """Load structured facts from .simctl/facts.toml."""
+    facts_file = project_root / _SIMCTL_DIR / _FACTS_FILE
+    if not facts_file.is_file():
+        return []
+
+    with open(facts_file, "rb") as f:
+        raw = tomllib.load(f)
+
+    facts: list[Fact] = []
+    for fact_data in raw.get("facts", []):
+        if not isinstance(fact_data, dict):
+            continue
+        facts.append(Fact(
+            id=fact_data.get("id", ""),
+            claim=fact_data.get("claim", ""),
+            scope=fact_data.get("scope", ""),
+            evidence=fact_data.get("evidence", ""),
+            confidence=fact_data.get("confidence", "medium"),
+            source_run=fact_data.get("source_run", ""),
+            source_project=fact_data.get("source_project", ""),
+            created_at=fact_data.get("created_at", ""),
+            tags=list(fact_data.get("tags", [])),
+        ))
+    return facts
+
+
+def save_fact(project_root: Path, fact: Fact) -> None:
+    """Append a structured fact to .simctl/facts.toml."""
+    if tomli_w is None:
+        msg = "tomli_w is required to write facts.toml"
+        raise RuntimeError(msg)
+
+    simctl_dir = project_root / _SIMCTL_DIR
+    simctl_dir.mkdir(exist_ok=True)
+    facts_file = simctl_dir / _FACTS_FILE
+
+    # Load existing
+    existing: list[dict[str, Any]] = []
+    if facts_file.is_file():
+        with open(facts_file, "rb") as f:
+            raw = tomllib.load(f)
+        existing = list(raw.get("facts", []))
+
+    # Build new entry
+    entry: dict[str, Any] = {
+        "id": fact.id,
+        "claim": fact.claim,
+    }
+    if fact.scope:
+        entry["scope"] = fact.scope
+    if fact.evidence:
+        entry["evidence"] = fact.evidence
+    entry["confidence"] = fact.confidence
+    if fact.source_run:
+        entry["source_run"] = fact.source_run
+    if fact.source_project:
+        entry["source_project"] = fact.source_project
+    entry["created_at"] = fact.created_at or datetime.now(
+        timezone.utc
+    ).isoformat(timespec="seconds")
+    if fact.tags:
+        entry["tags"] = fact.tags
+
+    existing.append(entry)
+
+    with open(facts_file, "wb") as f:
+        tomli_w.dump({"facts": existing}, f)
+
+
+def query_facts(
+    project_root: Path,
+    *,
+    scope: str = "",
+    tag: str = "",
+    min_confidence: str = "",
+) -> list[Fact]:
+    """Query facts with optional filters."""
+    confidence_order = {"high": 3, "medium": 2, "low": 1}
+    min_level = confidence_order.get(min_confidence, 0)
+
+    facts = load_facts(project_root)
+    results: list[Fact] = []
+    for f in facts:
+        if scope and scope not in f.scope:
+            continue
+        if tag and tag not in f.tags:
+            continue
+        if min_level and confidence_order.get(f.confidence, 0) < min_level:
+            continue
+        results.append(f)
+    return results

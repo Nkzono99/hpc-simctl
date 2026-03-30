@@ -155,6 +155,16 @@ def _parse_job(data: dict[str, Any]) -> JobData:
     )
 
 
+def _is_valid_walltime(walltime: str) -> bool:
+    """Check if a walltime string has valid HH:MM:SS or D-HH:MM:SS format."""
+    import re
+
+    # D-HH:MM:SS or HH:MM:SS or H:MM:SS or MM:SS
+    return bool(re.match(
+        r"^(\d+-)?(\d{1,3}:)?\d{1,2}:\d{2}$", walltime
+    ))
+
+
 def load_case(case_dir: Path) -> CaseData:
     """Load and validate a case.toml file.
 
@@ -207,6 +217,25 @@ def load_case(case_dir: Path) -> CaseData:
     classification = _parse_classification(raw.get("classification", {}))
     job = _parse_job(raw.get("job", {}))
     params = dict(raw.get("params", {}))
+
+    # Validate walltime format
+    if job.walltime and not _is_valid_walltime(job.walltime):
+        raise CaseConfigError(
+            f"Invalid walltime format '{job.walltime}' in {case_file}. "
+            f"Expected HH:MM:SS or D-HH:MM:SS."
+        )
+
+    # Warn about unknown top-level keys
+    known_sections = {
+        "case", "classification", "job", "params", "slurm",
+    }
+    for key in raw:
+        if key not in known_sections:
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "Unknown section [%s] in %s", key, case_file
+            )
 
     return CaseData(
         name=name,

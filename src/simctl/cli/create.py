@@ -451,6 +451,24 @@ def _create_single(case_name: str, target_dir: Path) -> None:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1) from exc
 
+    # Validate cross-references
+    if case_data.simulator not in project.simulators:
+        typer.echo(
+            f"Error: simulator '{case_data.simulator}' in case.toml "
+            f"not found in simulators.toml. "
+            f"Available: {', '.join(project.simulators) or '(none)'}",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+    if case_data.launcher not in project.launchers:
+        typer.echo(
+            f"Error: launcher '{case_data.launcher}' in case.toml "
+            f"not found in launchers.toml. "
+            f"Available: {', '.join(project.launchers) or '(none)'}",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
     # Get adapter and launcher
     adapter = _get_adapter_instance(project, case_data.simulator)
     launcher = _get_launcher(project, case_data.launcher)
