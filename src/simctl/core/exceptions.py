@@ -69,3 +69,20 @@ class RunNotFoundError(SimctlError):
 
 class ProvenanceError(SimctlError):
     """Raised when provenance information cannot be collected."""
+
+
+class ParameterValidationError(SimctlError):
+    """Raised when parameter validation finds errors.
+
+    Attributes:
+        issues: List of ValidationIssue instances.
+    """
+
+    def __init__(self, issues: list[object]) -> None:
+        self.issues = issues
+        error_count = sum(
+            1 for i in issues if getattr(i, "severity", "") == "error"
+        )
+        super().__init__(
+            f"Parameter validation failed with {error_count} error(s)"
+        )

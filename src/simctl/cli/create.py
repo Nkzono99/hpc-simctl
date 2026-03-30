@@ -13,7 +13,7 @@ from simctl.adapters.base import SimulatorAdapter
 from simctl.adapters.registry import load_from_config
 from simctl.core.case import CaseData, load_case, resolve_case
 from simctl.core.discovery import collect_existing_run_ids
-from simctl.core.exceptions import SimctlError
+from simctl.core.exceptions import ParameterValidationError, SimctlError
 from simctl.core.manifest import ManifestData, write_manifest
 from simctl.core.project import ProjectConfig, find_project_root, load_project
 from simctl.core.run import RunInfo, create_run
@@ -324,7 +324,20 @@ def _generate_run(
     Raises:
         SimctlError: On any domain error during generation.
     """
-    # 1. Create run directory
+    # 1. Validate parameters (before creating directories)
+    validation_data = {"case": case_data.raw.get("case", {}), "params": params}
+    issues = adapter.validate_params(validation_data)
+    if issues:
+        warnings = [i for i in issues if i.severity == "warning"]
+        errors = [i for i in issues if i.severity == "error"]
+        for w in warnings:
+            typer.echo(f"  Warning: {w.message}", err=True)
+        if errors:
+            for e in errors:
+                typer.echo(f"  Error: {e.message}", err=True)
+            raise ParameterValidationError(issues)
+
+    # 2. Create run directory
     run_info = create_run(
         parent_dir,
         existing_ids,
@@ -332,13 +345,13 @@ def _generate_run(
         params=params,
     )
 
-    # 2. Render input files via adapter
+    # 3. Render input files via adapter
     adapter.render_inputs(
-        {"case": case_data.raw.get("case", {}), "params": params},
+        validation_data,
         run_info.run_dir,
     )
 
-    # 2b. Copy extra files from case copy_files list
+    # 3b. Copy extra files from case copy_files list
     if case_data.copy_files:
         input_dir = run_info.run_dir / "input"
         input_dir.mkdir(parents=True, exist_ok=True)
@@ -358,13 +371,13 @@ def _generate_run(
                     "copy_files: not found, skipping: %s", src
                 )
 
-    # 3. Resolve runtime and build execution command
+    # 4. Resolve runtime and build execution command
     sim_config = _get_simulator_config(project, case_data.simulator)
     resolver_mode = sim_config.get("resolver_mode", "package")
     runtime_info = adapter.resolve_runtime(sim_config, resolver_mode)
     program_cmd = adapter.build_program_command(runtime_info, run_info.run_dir)
 
-    # 4. Build launcher exec line and generate job.sh
+    # 5. Build launcher exec line and generate job.sh
     ntasks = case_data.job.processes if case_data.job.rsc else case_data.job.ntasks
     exec_line = launcher.build_exec_line(
         program_cmd,
@@ -378,7 +391,7 @@ def _generate_run(
         run_id=run_info.run_id,
     )
 
-    # 5. Build and write manifest
+    # 6. Build and write manifest
     manifest = _build_manifest(
         run_info,
         case_data,
@@ -390,7 +403,7 @@ def _generate_run(
     )
     write_manifest(run_info.run_dir, manifest)
 
-    # 6. Track the new ID so subsequent runs in the same sweep won't collide
+    # 7. Track the new ID so subsequent runs in the same sweep won't collide
     existing_ids.add(run_info.run_id)
 
     return run_info
