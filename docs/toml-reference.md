@@ -123,7 +123,9 @@ modules = ["openmpi/4.1"]
 
 ## case.toml
 
-Case template definition. Located in `cases/<simulator>/<case_name>/case.toml`.
+Case template definition. Located in `cases/<case_name>/case.toml`.
+
+`simctl create` / `simctl sweep` 実行時、case ディレクトリ内の全ファイル (`case.toml` を除く) がディレクトリ構造ごと run の `input/` に自動コピーされる。その後 adapter がパラメータ適用済みファイルで上書きする。
 
 ```toml
 [case]
@@ -161,7 +163,6 @@ walltime = "120:00:00"
 | `simulator` | string | Yes | Simulator name (must match `simulators.toml`) |
 | `launcher` | string | No | Launcher profile name (must match `launchers.toml`) |
 | `description` | string | No | Human-readable description |
-| `copy_files` | string[] | No | Extra files/dirs to copy into `input/`. Paths relative to case.toml directory. |
 
 ### `[classification]`
 

@@ -289,6 +289,27 @@ def _build_manifest(
     )
 
 
+_CASE_META_FILES = {"case.toml"}
+
+
+def _copy_case_files(case_dir: Path, input_dir: Path) -> None:
+    """Copy all files from the case directory into input/, preserving structure.
+
+    Skips case metadata files (case.toml).  Directory structure under
+    ``case_dir`` is replicated under ``input_dir``.
+    """
+    input_dir.mkdir(parents=True, exist_ok=True)
+    for src in case_dir.rglob("*"):
+        if not src.is_file():
+            continue
+        rel = src.relative_to(case_dir)
+        if rel.parts[0] in _CASE_META_FILES or rel.name in _CASE_META_FILES:
+            continue
+        dest = input_dir / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dest)
+
+
 def _generate_run(
     parent_dir: Path,
     case_data: CaseData,
@@ -346,31 +367,15 @@ def _generate_run(
         params=params,
     )
 
-    # 3. Render input files via adapter
+    # 3. Copy all files from case directory into input/
+    _copy_case_files(case_data.case_dir, run_info.run_dir / "input")
+
+    # 3b. Render input files via adapter (overwrites copied templates with
+    #     parameter-applied versions)
     adapter.render_inputs(
         validation_data,
         run_info.run_dir,
     )
-
-    # 3b. Copy extra files from case copy_files list
-    if case_data.copy_files:
-        input_dir = run_info.run_dir / "input"
-        input_dir.mkdir(parents=True, exist_ok=True)
-        for file_spec in case_data.copy_files:
-            src = Path(file_spec)
-            if not src.is_absolute():
-                src = case_data.case_dir / src
-            if src.is_file():
-                shutil.copy2(src, input_dir / src.name)
-            elif src.is_dir():
-                dest = input_dir / src.name
-                shutil.copytree(src, dest, dirs_exist_ok=True)
-            else:
-                import logging
-
-                logging.getLogger(__name__).warning(
-                    "copy_files: not found, skipping: %s", src
-                )
 
     # 4. Resolve runtime and build execution command
     sim_config = _get_simulator_config(project, case_data.simulator)

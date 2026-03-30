@@ -174,8 +174,7 @@ class EmseAdapter(SimulatorAdapter):
         return {
             "case.toml": (
                 '[case]\nname = ""\nsimulator = "emses"\n'
-                'launcher = "default"\ndescription = ""\n'
-                "copy_files = []\n\n"
+                'launcher = "default"\ndescription = ""\n\n'
                 "[params]\n"
                 '# "tmgrid.nx" = 64\n'
                 '# "tmgrid.ny" = 64\n'

@@ -25,11 +25,6 @@
         "description": {
           "type": "string",
           "description": "Case description"
-        },
-        "copy_files": {
-          "type": "array",
-          "items": { "type": "string" },
-          "description": "Extra files/dirs to copy into input/. Absolute paths or relative to case.toml directory."
         }
       }
     },

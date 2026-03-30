@@ -121,8 +121,7 @@ class BeachAdapter(SimulatorAdapter):
         return {
             "case.toml": (
                 '[case]\nname = ""\nsimulator = "beach"\n'
-                'launcher = "default"\ndescription = ""\n'
-                "copy_files = []\n\n"
+                'launcher = "default"\ndescription = ""\n\n'
                 "[params]\n"
                 '# "sim.dt" = 1.0e-6\n'
                 '# "sim.max_step" = 1000\n'

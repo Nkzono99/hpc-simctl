@@ -365,7 +365,7 @@ plan にない高コスト操作をいきなり実行しないこと。
 1. `cases/<case_name>/` ディレクトリを作る
 2. `cases/<case_name>/case.toml` を書く (フォーマットは `tools/hpc-simctl/docs/toml-reference.md` の case.toml セクション参照)
 3. シミュレータの入力ファイル (例: `plasma.toml`) を同じディレクトリに置く
-   - `case.toml` の `copy_files` に入力ファイル名を列挙する
+   - case ディレクトリ内の全ファイル (`case.toml` を除く) が自動で `input/` にコピーされる
 
 ```bash
 # 例
