@@ -89,6 +89,16 @@ class TestName:
         assert adapter.name == "beach"
 
 
+class TestKnowledgeSources:
+    def test_includes_simctl_bundle_patterns(self) -> None:
+        sources = BeachAdapter.knowledge_sources()
+        assert "beach" in sources
+        patterns = sources["beach"]
+        assert "simctl/index.toml" in patterns
+        assert "simctl/**/*.toml" in patterns
+        assert "simctl/**/*.md" in patterns
+
+
 # ===================================================================
 # 2. render_inputs
 # ===================================================================

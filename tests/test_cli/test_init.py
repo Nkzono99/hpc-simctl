@@ -22,6 +22,7 @@ class TestInit:
         assert (tmp_path / "simproject.toml").exists()
         assert (tmp_path / "simulators.toml").exists()
         assert (tmp_path / "launchers.toml").exists()
+        assert (tmp_path / "campaign.toml").exists()
         assert (tmp_path / "cases").is_dir()
         assert (tmp_path / "runs").is_dir()
         assert (tmp_path / ".gitignore").exists()
@@ -62,6 +63,17 @@ class TestInit:
         assert "[launchers.srun]" in content
         assert 'type = "srun"' in content
         assert "use_slurm_ntasks = true" in content
+
+    def test_init_campaign_content(self, tmp_path: Path) -> None:
+        """campaign.toml is created with schema and simulator hint."""
+        runner.invoke(app, ["init", "emses", "-y", "--path", str(tmp_path)])
+        content = (tmp_path / "campaign.toml").read_text(encoding="utf-8")
+        assert "#:schema" in content
+        assert "[campaign]" in content
+        assert f'name = "{tmp_path.name}"' in content
+        assert 'simulator = "emses"' in content
+        assert "[variables]" in content
+        assert "[observables]" in content
 
     def test_init_gitignore_content(self, tmp_path: Path) -> None:
         """.gitignore contains run output exclusion patterns."""

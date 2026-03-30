@@ -179,6 +179,9 @@ class BeachAdapter(SimulatorAdapter):
                 "docs/**/*.md",
                 "schemas/*.json",
                 "examples/**/*.toml",
+                "simctl/index.toml",
+                "simctl/**/*.toml",
+                "simctl/**/*.md",
             ],
         }
 

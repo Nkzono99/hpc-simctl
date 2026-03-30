@@ -21,6 +21,11 @@ project/
   campaign.toml                  # 研究意図
   refs/                          # シミュレータリファレンスリポジトリ
     MPIEMSES3D/
+      simctl/                    # simulator repo 側 knowledge bundle
+        index.toml
+        examples/
+        fragments/
+        constraints/
       docs/                      # パラメータ詳細、物理的制約
     beach/
   .simctl/
@@ -175,6 +180,29 @@ surface_potential = { source = "work/volt", column = 1, description = "表面電
 1. `variables` から survey.toml のパラメータ軸を自動生成
 2. `observables` から解析対象を特定
 3. `hypothesis` に基づいて結果の解釈・考察を生成
+
+## Simulator Repo 側 `simctl/` Bundle
+
+想定外にうまく効いた運用として、
+`refs/` に取得した simulator repo 内の典型入力例を Agent が参照し、
+case / survey のパラメータ生成に活用できることが分かってきた。
+
+この導線を正式化するため、simulator repo 側に
+`simctl/` ディレクトリを置き、以下を提供することを推奨する。
+
+- `simctl/index.toml` — bundle 全体の目録
+- `simctl/examples/` — 完全な入力例
+- `simctl/fragments/` — 部分設定
+- `simctl/constraints/` — 数値安定性や既知制約
+
+Agent の利用順序は次を基本とする。
+
+1. `simctl/index.toml` で候補と全体像を把握
+2. 各 entry の `meta.toml` で用途と適用条件を読む
+3. `input.toml` / `fragment.toml` などの実ファイルを参照
+4. `constraints/*.toml` と `notes.md` で危険条件を避ける
+
+詳細仕様は [simulator-kb-spec.md](./simulator-kb-spec.md) を参照。
 
 ## 知見 (Insights)
 

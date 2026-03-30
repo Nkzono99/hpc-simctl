@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 _SIMPROJECT_FILE = "simproject.toml"
 _SIMULATORS_FILE = "simulators.toml"
 _LAUNCHERS_FILE = "launchers.toml"
+_CAMPAIGN_FILE = "campaign.toml"
 _CLAUDE_MD = "CLAUDE.md"
 _AGENTS_MD = "AGENTS.md"
 _SKILLS_MD = "SKILLS.md"
@@ -890,6 +891,34 @@ def _build_launchers_toml(launchers: dict[str, dict[str, Any]]) -> str:
     return buf.getvalue().decode("utf-8")
 
 
+def _build_campaign_toml(project_name: str, simulator_names: list[str]) -> str:
+    """Build a minimal campaign.toml skeleton."""
+    lines = [
+        f"#:schema {_SCHEMA_BASE_URL}/campaign.json",
+        "[campaign]",
+        f'name = "{project_name}"',
+        'description = ""',
+        'hypothesis = ""',
+    ]
+    if simulator_names:
+        lines.append(f'simulator = "{simulator_names[0]}"')
+    lines.extend([
+        "",
+        "[variables]",
+        "",
+        "[observables]",
+        "",
+    ])
+    return "\n".join(lines)
+
+
+def _venv_pip_executable(venv_dir: Path) -> Path:
+    """Return the pip executable path inside a virtual environment."""
+    if sys.platform == "win32":
+        return venv_dir / "Scripts" / "pip.exe"
+    return venv_dir / "bin" / "pip"
+
+
 def init(
     simulators: Annotated[
         Optional[list[str]],
@@ -981,6 +1010,13 @@ def init(
         created.append(_LAUNCHERS_FILE)
     else:
         skipped.append(_LAUNCHERS_FILE)
+
+    # campaign.toml
+    campaign_content = _build_campaign_toml(project_name, sim_names)
+    if _write_if_missing(project_dir / _CAMPAIGN_FILE, campaign_content):
+        created.append(_CAMPAIGN_FILE)
+    else:
+        skipped.append(_CAMPAIGN_FILE)
 
     # cases/ directory (with per-simulator subdirectories)
     if _mkdir_if_missing(project_dir / "cases"):
@@ -1080,7 +1116,7 @@ def init(
             # Install simulator-specific packages
             pip_pkgs = _collect_pip_packages(sim_names) if sim_names else []
             if pip_pkgs:
-                pip_exe = str(venv_dir / "bin" / "pip")
+                pip_exe = str(_venv_pip_executable(venv_dir))
                 typer.echo(f"  Installing: {', '.join(pip_pkgs)} ...")
                 pip_result = subprocess.run(
                     [pip_exe, "install", *pip_pkgs],

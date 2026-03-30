@@ -838,9 +838,17 @@ def knowledge_sources(cls) -> dict[str, list[str]]:
             "README.md",
             "docs/**/*.md",
             "schemas/*.json",
+            "simctl/index.toml",
+            "simctl/**/*.toml",
+            "simctl/**/*.md",
         ],
     }
 ```
+
+simulator repo 側で `simctl/` knowledge bundle を提供する場合は、
+少なくとも `index.toml`、各 entry の `meta.toml`、関連する notes を
+この glob に含めることを推奨する。
+bundle の規約は `docs/simulator-kb-spec.md` を参照。
 
 ### campaign.toml との連携
 

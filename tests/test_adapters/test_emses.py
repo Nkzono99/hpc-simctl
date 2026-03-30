@@ -78,6 +78,16 @@ class TestName:
         assert adapter.name == "emses"
 
 
+class TestKnowledgeSources:
+    def test_includes_simctl_bundle_patterns(self) -> None:
+        sources = EmseAdapter.knowledge_sources()
+        assert "MPIEMSES3D" in sources
+        patterns = sources["MPIEMSES3D"]
+        assert "simctl/index.toml" in patterns
+        assert "simctl/**/*.toml" in patterns
+        assert "simctl/**/*.md" in patterns
+
+
 # ===================================================================
 # 2. render_inputs
 # ===================================================================
