@@ -175,11 +175,13 @@ simctl sweep runs/cavity/scan
 ### 7. Job の投入
 
 ```bash
-# 単一 run を投入
-simctl submit R20260327-0001
+# cwd の run を投入
+cd runs/cavity/test/R20260327-0001
+simctl run
 
 # survey 内の全 run を一括投入
-simctl submit --all runs/cavity/scan
+cd runs/cavity/scan
+simctl run --all
 ```
 
 ### 8. 状態の確認
@@ -198,26 +200,61 @@ simctl list runs/cavity/scan
 
 ## コマンドリファレンス
 
+### プロジェクト管理
+
 | コマンド | 説明 |
 |---------|------|
-| `simctl init [PATH]` | プロジェクトの初期化 (simproject.toml 等を生成) |
-| `simctl doctor [PATH]` | 環境検査 (設定ファイル、sbatch 可用性、run_id 一意性) |
-| `simctl create CASE --dest DIR` | Case から単一 run を生成 |
-| `simctl sweep DIR` | survey.toml からパラメータ直積で全 run を一括生成 |
-| `simctl submit RUN` | sbatch で run を job 投入 |
-| `simctl submit --all DIR` | ディレクトリ内の全 created run を一括投入 |
-| `simctl status RUN` | run の状態確認 |
-| `simctl sync RUN` | Slurm 状態を manifest.toml に反映 |
+| `simctl init [SIMS...] [-y]` | プロジェクトの初期化 (対話型がデフォルト) |
+| `simctl doctor [PATH]` | 環境検査 (設定・sbatch・run_id 一意性・環境検出) |
+| `simctl config show` | 設定表示 |
+| `simctl config add-simulator` | シミュレータ追加 (対話型) |
+| `simctl config add-launcher` | ランチャー追加 (対話型) |
+
+### Run 作成・投入
+
+| コマンド | 説明 |
+|---------|------|
+| `simctl new CASE` | 新規ケースのスキャフォールド生成 |
+| `simctl create CASE` | cwd にケースから run 生成 |
+| `simctl sweep [DIR]` | survey.toml からパラメータ直積で全 run 一括生成 |
+| `simctl run [-qn QUEUE]` | cwd の run を sbatch で投入 |
+| `simctl run --all [-qn QUEUE]` | cwd 内の全 created run を一括投入 |
+| `simctl clone` | run 複製・派生 |
+| `simctl extend` | スナップショットから継続 run 生成 |
+
+### 状態管理・モニタリング
+
+| コマンド | 説明 |
+|---------|------|
+| `simctl status` | run の状態確認 |
+| `simctl sync` | Slurm 状態を manifest.toml に反映 |
+| `simctl log` | 最新 job の stdout 表示 + 進捗% |
+| `simctl jobs` | プロジェクト内の実行中ジョブ一覧 |
+| `simctl history` | 投入履歴表示 |
 | `simctl list [PATH]` | run の一覧表示 (状態・タグでフィルタ可能) |
-| `simctl clone RUN --dest DIR` | run の複製・派生 |
-| `simctl summarize RUN` | Adapter による run 解析 summary 生成 |
-| `simctl collect DIR` | survey 内の全 run から集計データ生成 |
-| `simctl archive RUN` | run のアーカイブ |
-| `simctl purge-work RUN` | work/ 内の不要ファイル削除 |
+
+### 解析・整理
+
+| コマンド | 説明 |
+|---------|------|
+| `simctl summarize` | Adapter による run 解析 summary 生成 |
+| `simctl collect [DIR]` | survey 内の全 run から集計データ生成 |
+| `simctl archive` | run のアーカイブ |
+| `simctl purge-work` | work/ 内の不要ファイル削除 |
+
+### 知識管理
+
+| コマンド | 説明 |
+|---------|------|
+| `simctl update` | シミュレータパッケージのアップグレード |
 | `simctl update-refs [SIMS...]` | refs/ リポジトリ更新 + ナレッジインデックス再生成 |
 | `simctl knowledge save NAME` | 知見を .simctl/insights/ に保存 |
 | `simctl knowledge list` | 知見一覧表示 |
+| `simctl knowledge show NAME` | 知見の詳細表示 |
 | `simctl knowledge sync` | リンク先プロジェクトから知見をインポート |
+| `simctl knowledge links` | プロジェクトリンク一覧 |
+
+全コマンドは引数省略時にカレントディレクトリをデフォルトとする。
 
 ## プロジェクト構成
 
@@ -231,15 +268,22 @@ hpc-simctl/
       cli/                 # CLI エントリポイント (typer)
         main.py            # コマンド登録
         init.py            # init / doctor
+        new.py             # new (ケーススキャフォールド)
         create.py          # create / sweep
-        submit.py          # submit
+        submit.py          # run (sbatch 投入)
         status.py          # status / sync
+        log.py             # log (stdout 表示)
+        jobs.py            # jobs (実行中ジョブ一覧)
+        history.py         # history (投入履歴)
         list.py            # list
         clone.py           # clone
+        extend.py          # extend (継続 run)
         analyze.py         # summarize / collect
         manage.py          # archive / purge-work
-        update_refs.py     # refs/ 更新 + ナレッジインデックス
-        knowledge.py       # 知見管理 (save/list/sync)
+        update.py          # update (パッケージ更新)
+        update_refs.py     # update-refs (refs/ 更新 + ナレッジ)
+        knowledge.py       # knowledge (知見管理)
+        config.py          # config (設定管理)
       core/                # ドメインロジック
         project.py         # Project 読込・検証
         case.py            # Case 読込・展開
@@ -287,6 +331,10 @@ created --> submitted --> running --> completed
 
 completed --> archived --> purged
 ```
+
+> **Note**: `simctl sync` は Slurm の観測結果を manifest に反映するため、
+> ポーリング間隔によっては `submitted → completed` のように途中状態を飛び越す遷移が発生します。
+> 詳細は [SPEC.md](SPEC.md) を参照してください。
 
 ## 技術スタック
 
