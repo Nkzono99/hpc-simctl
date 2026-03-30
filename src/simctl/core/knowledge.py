@@ -140,15 +140,18 @@ def parse_insight(path: Path) -> Insight | None:
     for line in lines[1:end_idx]:
         if ":" not in line:
             continue
-        key, _, value = line.partition(":")
+        key, _, raw_value = line.partition(":")
         key = key.strip()
-        value = value.strip()
+        stripped = raw_value.strip()
         # Handle list values: [a, b, c]
-        if value.startswith("[") and value.endswith("]"):
-            value = [
-                v.strip().strip("\"'") for v in value[1:-1].split(",") if v.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            meta[key] = [
+                v.strip().strip("\"'")
+                for v in stripped[1:-1].split(",")
+                if v.strip()
             ]
-        meta[key] = value
+        else:
+            meta[key] = stripped
 
     content = "\n".join(lines[end_idx + 1 :]).strip()
 
