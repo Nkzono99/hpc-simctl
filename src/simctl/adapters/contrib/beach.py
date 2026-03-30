@@ -24,8 +24,9 @@ try:
 except ImportError:
     tomli_w = None  # type: ignore[assignment]
 
-from simctl.adapters.base import SimulatorAdapter
+from simctl.adapters._utils import find_venv
 from simctl.adapters._utils.toml_utils import apply_dotted_overrides
+from simctl.adapters.base import SimulatorAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -336,6 +337,14 @@ OMP_PLACES=cores
         """
         runtime: dict[str, Any] = {"resolver_mode": resolver_mode}
         executable = simulator_config.get("executable", "beach")
+
+        venv_path = simulator_config.get("venv_path", "")
+        if not venv_path:
+            found = find_venv(Path.cwd())
+            if found:
+                venv_path = str(found)
+        if venv_path:
+            runtime["venv_path"] = venv_path
 
         if resolver_mode == "package":
             resolved = shutil.which(executable)

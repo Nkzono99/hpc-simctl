@@ -28,13 +28,18 @@ try:
 except ImportError:
     tomli_w = None  # type: ignore[assignment]
 
-from simctl.adapters.base import SimulatorAdapter
+from simctl.adapters._utils import find_venv
 from simctl.adapters._utils.toml_utils import apply_dotted_overrides
+from simctl.adapters.base import SimulatorAdapter
 
 logger = logging.getLogger(__name__)
 
 INPUT_DIR = "input"
 WORK_DIR = "work"
+
+# Domain decomposition: [mpi] group, nodes = [nxdiv, nydiv, nzdiv]
+DOMAIN_DECOMP_SECTION = "mpi"
+DOMAIN_DECOMP_KEY = "nodes"
 
 # Known EMSES ASCII diagnostic file names
 _DIAGNOSTIC_FILES = frozenset(
@@ -69,6 +74,31 @@ _DEFAULT_MODULES = [
     "hdf5/1.12.2_intel-2023.2-impi",
     "fftw/3.3.10_intel-2022.3-impi",
 ]
+
+
+def compute_mpi_processes(config: dict[str, Any]) -> int | None:
+    """Compute the required MPI process count from domain decomposition.
+
+    In MPIEMSES3D, the ``[mpi]`` section's ``nodes`` parameter
+    (a list ``[nxdiv, nydiv, nzdiv]``) defines the domain
+    decomposition.  Total processes = product(nodes).
+
+    Args:
+        config: Parsed plasma.toml configuration dictionary.
+
+    Returns:
+        Total MPI process count, or ``None`` if nodes is not specified.
+    """
+    mpi_section = config.get(DOMAIN_DECOMP_SECTION, {})
+    nodes = mpi_section.get(DOMAIN_DECOMP_KEY)
+    if nodes is None:
+        return None
+    if isinstance(nodes, (list, tuple)):
+        result = 1
+        for n in nodes:
+            result *= int(n)
+        return result
+    return int(nodes)
 
 
 class EmseAdapter(SimulatorAdapter):
@@ -349,6 +379,14 @@ srun mpiemses3D plasma.toml
         """
         runtime: dict[str, Any] = {"resolver_mode": resolver_mode}
         executable = simulator_config.get("executable", "mpiemses3D")
+
+        venv_path = simulator_config.get("venv_path", "")
+        if not venv_path:
+            found = find_venv(Path.cwd())
+            if found:
+                venv_path = str(found)
+        if venv_path:
+            runtime["venv_path"] = venv_path
 
         if resolver_mode == "package":
             resolved = shutil.which(executable)
