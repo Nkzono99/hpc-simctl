@@ -42,37 +42,7 @@ WORK_DIR = "work"
 DOMAIN_DECOMP_SECTION = "mpi"
 DOMAIN_DECOMP_KEY = "nodes"
 
-# Known EMSES ASCII diagnostic file names
-_DIAGNOSTIC_FILES = frozenset(
-    {
-        "energy",
-        "energy1",
-        "energy2",
-        "ewave",
-        "chgacm1",
-        "chgacm2",
-        "chgmov",
-        "influx",
-        "isflux",
-        "noflux",
-        "icur",
-        "ocur",
-        "currnt",
-        "seyield",
-        "volt",
-        "pbody",
-        "pbodyr",
-        "pbodyd",
-        "oltime",
-        "nesc",
-    }
-)
 
-# EMSES-specific modules (site-common modules like intel/intelmpi come from launcher)
-_DEFAULT_MODULES = [
-    "hdf5/1.12.2_intel-2023.2-impi",
-    "fftw/3.3.10_intel-2022.3-impi",
-]
 
 
 def compute_mpi_processes(config: dict[str, Any]) -> int | None:
@@ -123,7 +93,6 @@ class EmseAdapter(SimulatorAdapter):
             "adapter": "emses",
             "resolver_mode": "local_executable",
             "executable": "mpiemses3D",
-            "modules": list(_DEFAULT_MODULES),
         }
 
     @classmethod
@@ -146,7 +115,6 @@ class EmseAdapter(SimulatorAdapter):
             "adapter": "emses",
             "resolver_mode": resolver_mode,
             "executable": executable,
-            "modules": list(_DEFAULT_MODULES),
         }
 
         if resolver_mode == "local_source":
@@ -156,13 +124,6 @@ class EmseAdapter(SimulatorAdapter):
             config["build_command"] = typer.prompt(
                 "    Build command", default="make -j"
             )
-
-        if typer.confirm("    Customize module list?", default=False):
-            modules_str = typer.prompt(
-                "    Modules (comma-separated)",
-                default=", ".join(_DEFAULT_MODULES),
-            )
-            config["modules"] = [m.strip() for m in modules_str.split(",") if m.strip()]
 
         return config
 
@@ -719,12 +680,15 @@ srun mpiemses3D plasma.toml
         if h5_files:
             outputs["hdf5_fields"] = [str(f.relative_to(run_dir)) for f in h5_files]
 
-        # ASCII diagnostics
+        # ASCII diagnostics (non-HDF5, non-log files directly in work/)
+        log_patterns = {"*.out", "*.err", "*.log"}
         diag_files: list[str] = []
-        for diag_name in sorted(_DIAGNOSTIC_FILES):
-            f = work_dir / diag_name
-            if f.is_file():
-                diag_files.append(str(f.relative_to(run_dir)))
+        for f in sorted(work_dir.iterdir()):
+            if not f.is_file() or f.suffix == ".h5":
+                continue
+            if any(f.match(p) for p in log_patterns):
+                continue
+            diag_files.append(str(f.relative_to(run_dir)))
         if diag_files:
             outputs["diagnostics"] = diag_files
 
@@ -929,8 +893,12 @@ srun mpiemses3D plasma.toml
         return ["date"]
 
     def get_modules(self) -> list[str]:
-        """Return default module names for EMSES."""
-        return list(_DEFAULT_MODULES)
+        """Return default module names for EMSES.
+
+        Returns empty list — modules are now managed via sites/*.toml
+        and simulators.toml, not hardcoded in the adapter.
+        """
+        return []
 
     def get_extra_env(self) -> dict[str, str]:
         """Return default environment variables for EMSES."""
