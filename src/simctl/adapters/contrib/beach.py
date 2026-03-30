@@ -69,9 +69,8 @@ class BeachAdapter(SimulatorAdapter):
         """Return default simulators.toml entry for BEACH."""
         return {
             "adapter": "beach",
-            "resolver_mode": "local_executable",
+            "resolver_mode": "package",
             "executable": "beach",
-            "modules": ["intel/2023.2", "intelmpi/2023.2"],
         }
 
     @classmethod
@@ -82,8 +81,8 @@ class BeachAdapter(SimulatorAdapter):
         typer.echo("\n  Configuring 'beach' simulator (BEACH BEM):")
 
         resolver_mode = typer.prompt(
-            "    Resolver mode (local_executable / local_source / package)",
-            default="local_executable",
+            "    Resolver mode (package / local_executable / local_source)",
+            default="package",
         )
         executable = typer.prompt(
             "    Executable path or name",

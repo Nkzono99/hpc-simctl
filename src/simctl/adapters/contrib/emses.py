@@ -91,7 +91,7 @@ class EmseAdapter(SimulatorAdapter):
         """Return default simulators.toml entry for EMSES."""
         return {
             "adapter": "emses",
-            "resolver_mode": "local_executable",
+            "resolver_mode": "package",
             "executable": "mpiemses3D",
         }
 
@@ -103,8 +103,8 @@ class EmseAdapter(SimulatorAdapter):
         typer.echo("\n  Configuring 'emses' simulator (EMSES PIC):")
 
         resolver_mode = typer.prompt(
-            "    Resolver mode (local_executable / local_source / package)",
-            default="local_executable",
+            "    Resolver mode (package / local_executable / local_source)",
+            default="package",
         )
         executable = typer.prompt(
             "    Executable path or name",
