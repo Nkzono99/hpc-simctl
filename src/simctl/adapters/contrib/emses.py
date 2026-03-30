@@ -68,10 +68,8 @@ _DIAGNOSTIC_FILES = frozenset(
     }
 )
 
-# Default module set for the HPC environment
+# EMSES-specific modules (site-common modules like intel/intelmpi come from launcher)
 _DEFAULT_MODULES = [
-    "intel/2023.2",
-    "intelmpi/2023.2",
     "hdf5/1.12.2_intel-2023.2-impi",
     "fftw/3.3.10_intel-2022.3-impi",
 ]

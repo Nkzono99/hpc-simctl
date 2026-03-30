@@ -402,7 +402,7 @@ def _generate_run(
         exec_line,
         run_id=run_info.run_id,
         resource_style=launcher.resource_style,
-        modules=launcher.modules,
+        modules=launcher.modules + list(sim_config.get("modules", [])),
         extra_sbatch=launcher.extra_sbatch,
         extra_env=launcher.site_env,
         setup_commands=setup_cmds,
