@@ -362,16 +362,16 @@ plan にない高コスト操作をいきなり実行しないこと。
 
 ### 新しい Case を作る
 
-1. `cases/<case_name>/` ディレクトリを作る
+1. `cases/<case_name>/` ディレクトリと `cases/<case_name>/input/` を作る
 2. `cases/<case_name>/case.toml` を書く (フォーマットは `tools/hpc-simctl/docs/toml-reference.md` の case.toml セクション参照)
-3. シミュレータの入力ファイル (例: `plasma.toml`) を同じディレクトリに置く
-   - case ディレクトリ内の全ファイル (`case.toml` を除く) が自動で `input/` にコピーされる
+3. シミュレータの入力ファイル (例: `plasma.toml`) を `input/` に置く
+   - `input/` 以下が run の `input/` にそのままコピーされる
 
-```bash
-# 例
-mkdir -p cases/my_new_case
-# → cases/my_new_case/case.toml を編集
-# → cases/my_new_case/plasma.toml を配置
+```
+cases/my_new_case/
+  case.toml            # メタデータ・パラメータ定義
+  input/               # テンプレート入力ファイル
+    plasma.toml
 ```
 
 ### 新しい Survey を作る

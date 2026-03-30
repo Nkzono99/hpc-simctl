@@ -289,22 +289,20 @@ def _build_manifest(
     )
 
 
-_CASE_META_FILES = {"case.toml"}
-
-
 def _copy_case_files(case_dir: Path, input_dir: Path) -> None:
-    """Copy all files from the case directory into input/, preserving structure.
+    """Copy input template files from the case directory into the run's input/.
 
-    Skips case metadata files (case.toml).  Directory structure under
-    ``case_dir`` is replicated under ``input_dir``.
+    Copies from ``case_dir/input/`` if it exists, preserving directory
+    structure.  ``case.toml`` and other top-level metadata are never copied.
     """
+    src_dir = case_dir / "input"
+    if not src_dir.is_dir():
+        return
     input_dir.mkdir(parents=True, exist_ok=True)
-    for src in case_dir.rglob("*"):
+    for src in src_dir.rglob("*"):
         if not src.is_file():
             continue
-        rel = src.relative_to(case_dir)
-        if rel.parts[0] in _CASE_META_FILES or rel.name in _CASE_META_FILES:
-            continue
+        rel = src.relative_to(src_dir)
         dest = input_dir / rel
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dest)

@@ -371,10 +371,13 @@ class BeachAdapter(SimulatorAdapter):
         if case_dir_str:
             case_dir = Path(case_dir_str)
             for name in ("beach.toml", "beach_template.toml"):
-                candidate = case_dir / name
-                if candidate.is_file():
-                    with open(candidate, "rb") as f:
-                        config = tomllib.load(f)
+                # Look in input/ subdirectory first, then case root for compat
+                for candidate in (case_dir / "input" / name, case_dir / name):
+                    if candidate.is_file():
+                        with open(candidate, "rb") as f:
+                            config = tomllib.load(f)
+                        break
+                if config:
                     break
 
         if params and config:
@@ -481,10 +484,13 @@ OMP_PLACES=cores
         if case_dir_str:
             case_dir = Path(case_dir_str)
             for candidate_name in ("beach.toml", "beach_template.toml"):
-                candidate = case_dir / candidate_name
-                if candidate.is_file():
-                    with open(candidate, "rb") as f:
-                        template_config = tomllib.load(f)
+                # Look in input/ subdirectory first, then case root for compat
+                for candidate in (case_dir / "input" / candidate_name, case_dir / candidate_name):
+                    if candidate.is_file():
+                        with open(candidate, "rb") as f:
+                            template_config = tomllib.load(f)
+                        break
+                if template_config:
                     break
 
         # Also check input_files list

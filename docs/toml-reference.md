@@ -125,7 +125,15 @@ modules = ["openmpi/4.1"]
 
 Case template definition. Located in `cases/<case_name>/case.toml`.
 
-`simctl create` / `simctl sweep` 実行時、case ディレクトリ内の全ファイル (`case.toml` を除く) がディレクトリ構造ごと run の `input/` に自動コピーされる。その後 adapter がパラメータ適用済みファイルで上書きする。
+シミュレータの入力ファイルは `cases/<case_name>/input/` に置く。`simctl create` / `simctl sweep` 実行時、`input/` 以下がディレクトリ構造ごと run の `input/` に自動コピーされる。その後 adapter がパラメータ適用済みファイルで上書きする。
+
+```
+cases/
+  flat_surface/
+    case.toml          # メタデータ・パラメータ定義
+    input/             # テンプレート入力ファイル
+      plasma.toml
+```
 
 ```toml
 [case]

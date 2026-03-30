@@ -573,10 +573,12 @@ srun mpiemses3D plasma.toml
 
         if case_dir_str:
             case_dir = Path(case_dir_str)
-            candidate = case_dir / "plasma.toml"
-            if candidate.is_file():
-                with open(candidate, "rb") as f:
-                    template_config = tomllib.load(f)
+            # Look in input/ subdirectory first, then case root for compat
+            for candidate in (case_dir / "input" / "plasma.toml", case_dir / "plasma.toml"):
+                if candidate.is_file():
+                    with open(candidate, "rb") as f:
+                        template_config = tomllib.load(f)
+                    break
 
         # Also check explicit input_files list
         input_files: list[str] = case_section.get("input_files", [])
