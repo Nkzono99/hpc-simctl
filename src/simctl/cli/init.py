@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 from typing import Annotated, Any, Optional
 
+import jinja2
 import typer
 
 from simctl.core.discovery import validate_uniqueness
@@ -262,265 +263,36 @@ def _build_simulator_guides(simulator_names: list[str]) -> str:
     return "\n".join(parts)
 
 
+def _get_jinja_env() -> jinja2.Environment:
+    """Return a Jinja2 environment that loads from simctl/templates/."""
+    templates_dir = Path(__file__).resolve().parent.parent / "templates"
+    return jinja2.Environment(
+        loader=jinja2.FileSystemLoader(str(templates_dir)),
+        keep_trailing_newline=True,
+        undefined=jinja2.StrictUndefined,
+    )
+
+
 def _build_agent_md(
     doc_name: str,
     project_name: str,
     simulator_names: list[str],
 ) -> str:
     """Build shared agent instructions for CLAUDE.md / AGENTS.md."""
-    sim_section = ""
+    simulator_guides = ""
     if simulator_names:
-        guides = _build_simulator_guides(simulator_names)
-        sim_section = f"""
-## シミュレータ固有知識
+        simulator_guides = _build_simulator_guides(simulator_names)
 
-{guides}
-"""
-
-    # Build refs section
     doc_repos = _collect_doc_repos(simulator_names) if simulator_names else []
-    refs_section = ""
-    if doc_repos:
-        refs_lines = "\n".join(
-            f"- **`refs/{dest}/`** — {url}" for url, dest in doc_repos
-        )
-        refs_section = f"""
-## リファレンスリポジトリ
 
-`refs/` 以下にシミュレータのソースコード・ドキュメントを配置している (Git 管理外)。
-パラメータの意味や入力ファイル形式を調べる際に参照すること。
-
-{refs_lines}
-"""
-
-    return f"""\
-# {doc_name} — {project_name}
-
-このプロジェクトは simctl (HPC シミュレーション管理 CLI) で管理されています。
-人がベース入力ファイルと計算資源方針を与え、AI エージェントが
-campaign 設計、case / survey 編集、run 生成、投入、監視、解析、
-知見整理を半自動で進めることを想定しています。
-
-## 運用モード
-
-- 人が主に決めるもの: ベース入力ファイル、計算資源の上限、研究目的、公開してよい知見
-- Agent が進めてよいもの:
-  `campaign.toml` / `case.toml` / `survey.toml` の編集、run 生成、
-  個別 run の投入、状態同期、ログ確認、要約・集計、知見整理
-- 確認が必要なもの:
-  初回の大規模 survey、`simctl run --all`、資源増加を伴う retry、
-  `archive` / `purge-work`、実行バイナリやモジュール設定の変更
-- destructive / 高コスト操作には、実行前に理由と想定影響を短く残す
-
-## 最初にやること
-
-1. `simctl context --json` で project / campaign / runs / recent_failures を把握する
-2. **simctl の使い方がわからなければ `tools/hpc-simctl/docs/toml-reference.md` を読む**
-   - TOML のフォーマットはここに全て書いてある。src/ は読まない
-3. `campaign.toml`、関連する `cases/*/case.toml`、
-   `runs/**/survey.toml`、`.simctl/facts.toml`、
-   必要なら最近の log を読む
-4. action の前に plan を JSON で明示する
-
-```json
-{{
-  "goal": "map stability boundary for dt and nx",
-  "edits": [
-    "campaign.toml",
-    "cases/plasma/case.toml",
-    "runs/plasma/stability/survey.toml"
-  ],
-  "commands": [
-    "simctl sweep runs/plasma/stability",
-    "simctl run --all runs/plasma/stability"
-  ],
-  "checkpoints": [
-    "Confirm survey size and queue before bulk submit",
-    "Review failed logs before retry"
-  ]
-}}
-```
-
-plan にない高コスト操作をいきなり実行しないこと。
-
-## 編集優先順位
-
-1. `campaign.toml` で研究意図、変数、観測量を整理する
-2. `cases/*/case.toml` で共通パラメータ、job 設定、分類を管理する
-3. `runs/**/survey.toml` で掃引軸を定義する
-4. `runs/**/input/*` の直接編集は、adapter で表現できない差分か、
-   log を見たうえでの緊急修正に限る
-
-- `runs/**/input/*` を直接直したら、同じ修正を上流の `case.toml` やテンプレートへ戻す
-- `manifest.toml` は正本だが手動編集しない
-- `work/` と `.simctl/knowledge/` の自動生成物は手で整形しない
-
-## Case / Survey / Run の作り方 (Agent 向けチートシート)
-
-**TOML フォーマットの詳細は `tools/hpc-simctl/docs/toml-reference.md` を参照すること。**
-ここでは手順だけを示す。フィールドの意味・省略可否はドキュメントを見ること。
-
-### 新しい Case を作る
-
-1. `cases/<case_name>/` ディレクトリと `cases/<case_name>/input/` を作る
-2. `cases/<case_name>/case.toml` を書く (フォーマットは `tools/hpc-simctl/docs/toml-reference.md` の case.toml セクション参照)
-3. シミュレータの入力ファイル (例: `plasma.toml`) を `input/` に置く
-   - `input/` 以下が run の `input/` にそのままコピーされる
-
-```
-cases/my_new_case/
-  case.toml            # メタデータ・パラメータ定義
-  input/               # テンプレート入力ファイル
-    plasma.toml
-```
-
-### 新しい Survey を作る
-
-1. `runs/` 以下に survey ディレクトリを作る (分類階層は自由)
-2. `survey.toml` を書く (フォーマットは `tools/hpc-simctl/docs/toml-reference.md` の survey.toml セクション参照)
-3. `simctl sweep <survey_dir>` で run を一括生成する
-
-```bash
-# 例
-mkdir -p runs/sheath/angle_scan
-# → runs/sheath/angle_scan/survey.toml を編集
-simctl sweep runs/sheath/angle_scan
-# → runs/sheath/angle_scan/R20260330-0001/ 等が自動生成される
-```
-
-### 単一 Run を作る
-
-```bash
-simctl create <case_name> --dest <path>
-# 例: simctl create my_case --dest runs/sheath/test
-```
-
-### やってはいけないこと
-
-- `Rxxxx/` ディレクトリを mkdir で作る
-- `manifest.toml` を Write で書く
-- `Rxxxx/input/` にファイルを直接置く
-- `Rxxxx/submit/job.sh` を手書きする
-- これらは全て `simctl create` / `simctl sweep` が自動で行う
-
-## 推奨ワークフロー
-
-- Design: `campaign.toml`, `case.toml`, `survey.toml`
-  Commands: `simctl context --json`, `simctl config show`,
-  `simctl knowledge list`, `simctl knowledge facts`
-- Create: `cases/`, `runs/**/survey.toml`
-  Commands: `simctl new`, `simctl create`, `simctl sweep`
-- Submit: `runs/**/R*/`
-  Commands: `simctl run`, `simctl run --all`
-- Monitor: `manifest.toml`, `work/*.out`, `work/*.err`
-  Commands: `simctl status`, `simctl sync`, `simctl log`,
-  `simctl jobs`, `simctl history`, `simctl list`
-- Analyze: `analysis/`, survey directory
-  Commands: `simctl summarize`, `simctl collect`
-- Learn: `.simctl/insights/`, `.simctl/facts.toml`
-  Commands: `simctl knowledge save`, `simctl knowledge add-fact`,
-  `simctl knowledge sync`
-
-## 失敗時の扱い
-
-- `submitted` / `running` が長く止まって見えるときは、
-  まず `simctl sync` で状態を合わせる
-- `timeout` / `oom` / `preempted` は retry 候補だが、job 条件の変更理由を plan に書く
-- `exit_error` は必ず `simctl log -e` や `work/*.err` を確認してから再試行する
-- 同じ run の試行回数が 3 回前後に達したら、自動 retry を止めて原因を要約する
-- action registry を使う agent では `retry_run` は再投入そのものではなく、
-  `failed -> created` の再準備とみなす
-
-## 知見の記録
-
-- 人向けの考察や途中メモは `simctl knowledge save` で `.simctl/insights/` に保存する
-- 機械可読な安定知見は `simctl knowledge add-fact` で `.simctl/facts.toml` に追加する
-- `high` confidence は、複数 run の再現か deterministic な確認がある場合だけ使う
-- 既存 fact を修正するときは上書きせず、
-  新しい fact を追加して `--supersedes fNNN` を使う
-
-## 重要なファイル
-
-- **`manifest.toml`** — run の正本。状態・パラメータ・provenance をすべて記録
-- **`campaign.toml`** — 研究意図、仮説、変数、観測量
-- **`simproject.toml`** — プロジェクト名・説明
-- **`simulators.toml`** — シミュレータの adapter / executable / modules 定義
-- **`launchers.toml`** — MPI ランチャーの設定
-- **`case.toml`** — ケーステンプレートの定義
-- **`survey.toml`** — パラメータサーベイの定義 (直積展開)
-- **`tools/hpc-simctl/`** — simctl 本体のソースコード・ドキュメント (Git 管理外)
-  - `docs/` — アーキテクチャ、TOML リファレンス等
-  - `SPEC.md` — 仕様書
-{sim_section}{refs_section}
-## 環境構築
-
-`simctl init` がプロジェクトルートに `.venv` と `tools/hpc-simctl/` を自動構築する。
-手動セットアップが必要な場合は `SKILLS.md` の `/setup-env` を参照。
-
-```bash
-# ブートストラップ (simctl 未インストールでも実行可能)
-uvx --from git+https://github.com/Nkzono99/hpc-simctl.git simctl init
-
-# activate して利用開始
-source .venv/bin/activate
-simctl doctor
-```
-
-## 運用ルール
-
-- run ディレクトリ (`Rxxxx/`) が全操作の基点
-- `manifest.toml` が正本。手動編集は避け、simctl コマンド経由で更新する
-- `work/` の大容量ファイルは Git 管理外 (.gitignore 済み)
-- `.venv/` はプロジェクトルートに配置。Git 管理外
-- `tools/hpc-simctl/` はプロジェクトルートに配置。Git 管理外
-- パラメータ変更は case.toml / survey.toml で管理し、新しい run を生成する
-- `refs/` 以下はシミュレータの参考資料。パラメータの意味を調べる際に参照する
-- simctl のドキュメント・仕様書は `tools/hpc-simctl/` を参照する
-- `.simctl/knowledge/` にナレッジインデックスがある。ドキュメントの所在はここで把握する
-- シミュレータ更新時は `simctl update-refs` でリファレンスとナレッジを最新化する
-
-## 絶対禁止事項
-
-### run ディレクトリを手で作らない
-
-run ディレクトリ (`Rxxxx/`) 内のファイル群 (`manifest.toml`, `input/`, `submit/job.sh`) を
-**手動で作成・Write してはいけない**。必ず simctl CLI で生成する。
-
-- 単一 run: `simctl create <case_name>` (cwd に run を生成)
-- survey 展開: `simctl sweep <survey_dir>` (survey.toml から全 run を一括生成)
-
-Agent が編集してよいのは以下のみ:
-- `campaign.toml` / `case.toml` / `survey.toml` — 設計ファイル
-- `runs/**/survey.toml` — 掃引軸の定義
-- `cases/**/` 内のテンプレート入力ファイル (例: `plasma.toml`)
-
-Agent が自分で書いてはいけないもの:
-- `Rxxxx/manifest.toml` — simctl が自動生成・管理する
-- `Rxxxx/input/*` — simctl create / sweep が case テンプレートからコピーする
-- `Rxxxx/submit/job.sh` — simctl が launcher 設定から自動生成する
-
-**正しい手順**: case.toml / survey.toml を編集 → `simctl sweep` or `simctl create` → run が自動生成される
-
-## simctl の使い方を調べるとき
-
-**ドキュメントを先に読むこと。ソースコードを読みに行かないこと。**
-
-simctl の TOML フォーマット、コマンド体系、設計思想を知りたいときは、
-以下の順序で情報源を参照する:
-
-1. **`tools/hpc-simctl/docs/toml-reference.md`** — 全 TOML ファイルのフィールド定義・例
-2. **`tools/hpc-simctl/docs/getting-started.md`** — ワークフロー・コマンド例
-3. **`tools/hpc-simctl/SPEC.md`** — 仕様の詳細 (設計判断の根拠)
-4. **`tools/hpc-simctl/docs/architecture.md`** — 内部設計 (adapter / launcher の仕組み)
-5. **`schemas/*.json`** — JSON Schema (TOML の機械可読な定義)
-6. **`simctl --help` / `simctl <command> --help`** — コマンドのオプション確認
-
-`tools/hpc-simctl/src/` のソースコードを直接読むのは **最終手段**。
-ドキュメントと `--help` で解決しない場合にのみ参照すること。
-
-理由: src/ を読んでも実装の詳細に引きずられて正しい使い方がわからなくなる。
-ドキュメントには「何をすべきか」が、ソースコードには「どう実装されているか」しか書かれていない。
-"""
+    env = _get_jinja_env()
+    template = env.get_template("agent.md")
+    return template.render(
+        doc_name=doc_name,
+        project_name=project_name,
+        simulator_guides=simulator_guides,
+        doc_repos=doc_repos,
+    )
 
 
 def _build_claude_md(project_name: str, simulator_names: list[str]) -> str:
@@ -535,189 +307,18 @@ def _build_agents_md(project_name: str, simulator_names: list[str]) -> str:
 
 def _build_skills_md(project_name: str, simulator_names: list[str]) -> str:
     """Build SKILLS.md content."""
-    # Build pip packages section
     pip_pkgs = _collect_pip_packages(simulator_names) if simulator_names else []
-    pip_install_line = ""
     if pip_pkgs:
-        pkgs_str = " ".join(pip_pkgs)
-        pip_install_line = f"uv pip install {pkgs_str}"
+        pip_install_line = f"uv pip install {' '.join(pip_pkgs)}"
     else:
         pip_install_line = "# uv pip install <必要なパッケージ>"
 
-    return f"""\
-# SKILLS.md — {project_name}
-
-AI エージェントが実行できるスキル (定型タスク) の一覧。
-
-## /setup-env
-
-プロジェクトの Python 環境をセットアップする。
-
-**前提**: プロジェクトルートで実行すること。uv がインストール済みであること。
-
-**手順**:
-
-```bash
-# 方法 1: ブートストラップ (新規プロジェクト)
-uvx --from git+https://github.com/Nkzono99/hpc-simctl.git simctl init
-source .venv/bin/activate
-
-# 方法 2: 手動セットアップ (既存プロジェクト)
-uv venv .venv
-mkdir -p tools && git clone https://github.com/Nkzono99/hpc-simctl.git tools/hpc-simctl
-uv pip install -e ./tools/hpc-simctl
-{pip_install_line}
-source .venv/bin/activate
-simctl doctor
-```
-
-**注意事項**:
-- `.venv/` と `tools/` は `.gitignore` に追加済み
-- HPC ノードでは login ノードで環境構築し、compute ノードでは同じ .venv を使う
-- `module load` が必要なモジュールは `simulators.toml` の `modules` に定義済み
-- simctl 更新: `cd tools/hpc-simctl && git pull`
-
-## /survey-design
-
-パラメータサーベイを設計する。
-
-**入力**: ケース名、変動パラメータ、値の範囲
-**出力**: `survey.toml` ファイル
-
-**手順**:
-1. 指定されたケースの `case.toml` と入力ファイルを読む
-2. `refs/` 以下のシミュレータドキュメントでパラメータの意味と妥当な範囲を確認する
-3. `survey.toml` を生成する (直積展開)
-4. 生成される run 数を報告する
-
-## /run-all
-
-サーベイの全 run を生成して投入する。
-
-**入力**: survey ディレクトリパス
-**出力**: 全 run が submitted 状態
-
-**手順**:
-1. `simctl sweep <survey_dir>` で run 生成
-2. `simctl list <survey_dir>` で確認
-3. `simctl run --all` で投入 (`-qn QUEUE` でパーティション指定可)
-4. 投入結果を報告
-
-## /check-status
-
-run やサーベイの状態を確認・同期する。
-
-**入力**: run パスまたはサーベイディレクトリ
-**出力**: 状態一覧 (completed / running / failed / submitted)
-
-**手順**:
-1. `simctl jobs` で実行中ジョブ一覧を確認
-2. `simctl list <path>` で一覧取得
-3. 各 run に対して `simctl sync` で Slurm と同期
-4. 状態をサマリーとして報告 (完了数 / 実行中 / 失敗)
-
-## /analyze
-
-完了した run の結果を解析・集計する。
-
-**入力**: run パスまたはサーベイディレクトリ
-**出力**: 解析サマリー
-
-**手順**:
-1. `simctl summarize` で各 run の要約を生成
-2. サーベイの場合は `simctl collect <dir>` で集計
-3. 結果の概要と注目すべき傾向を報告
-
-## /debug-failed
-
-失敗した run を診断する。
-
-**入力**: failed 状態の run パス
-**出力**: 原因の診断と対処方針
-
-**手順**:
-1. `manifest.toml` から投入情報を読む
-2. `simctl log -e` で stderr を確認
-3. `work/*.err`, `work/*.out` からエラーメッセージを抽出
-4. 原因を分類 (OOM / segfault / timeout / input error)
-5. 対処方針を提案 (リソース変更 / パラメータ修正 / clone して再投入)
-
-## /cleanup
-
-完了・不要な run を整理する。
-
-**入力**: 対象ディレクトリ
-**出力**: アーカイブ・削除結果
-
-**手順**:
-1. `simctl list <dir>` で状態を確認
-2. completed な run を `simctl archive` でアーカイブ
-3. 必要に応じて `simctl purge-work` で大容量ファイルを削除
-4. 整理結果を報告
-
-## /update-refs
-
-リファレンスリポジトリを更新し、ナレッジインデックスを再生成する。
-
-**前提**: プロジェクトルートで実行すること。ネットワーク接続が必要。
-
-**手順**:
-1. `simctl update-refs` を実行
-2. `refs/` 以下の全リポジトリが `git fetch --depth 1` + `git reset` で最新化される
-3. 変更があったリポジトリを検出 (コミットハッシュ比較)
-4. `.simctl/knowledge/{{simulator}}.md` にナレッジインデックスを再生成
-5. 更新サマリーを確認
-
-**ナレッジインデックスの使い方**:
-- `.simctl/knowledge/{{simulator}}.md` にドキュメントの所在一覧がある
-- パラメータの意味・制約・物理的安定性条件は `refs/` 内のドキュメントを直接読む
-- 前回更新からの変更差分は Change Log セクションに記録される
-
-**注意事項**:
-- `refs/` のリポジトリは shallow clone なので通常の `git pull` は使わない
-- `.simctl/knowledge/` は自動生成ファイル。手動編集しないこと
-- シミュレータのバージョンアップ時は必ずこのコマンドを実行すること
-
-## /learn
-
-実験結果や経験から知見を `.simctl/insights/` に保存する。
-
-**手順**:
-1. 完了した run の結果 (`simctl summarize`, ログ, 出力) を読む
-2. 新たに分かったこと・期待と異なる結果を特定する
-3. 知見の種類を判断する:
-   - `constraint`: 安定性・制約の発見 (例: CFL 条件違反で不安定)
-   - `result`: 実験結果のサマリー (例: サーベイ全体の傾向)
-   - `analysis`: 物理的考察・解釈 (例: 加熱メカニズムの推定)
-   - `dependency`: パラメータ依存性 (例: 密度と帯電量の関係)
-4. `simctl knowledge save <name> -t <type> -s <simulator> -m "<内容>"` で保存
-5. 必要に応じてタグを付与 (`--tags "stability,cfl,grid"`)
-
-**例**:
-```bash
-simctl knowledge save mag_scan_summary -t result -s emses \\
-  -m "磁場角度 0-90 度のサーベイ。45度で最もイオン加速が効率的。"
-```
-
-## /recall
-
-現在のタスクに関連する知見を検索・提示する。
-
-**手順**:
-1. 現在の campaign.toml / case.toml からシミュレータとパラメータを読む
-2. `simctl knowledge list -s <simulator>` で関連 insights を検索
-3. リンク先プロジェクトの知見も `simctl knowledge sync` でインポート
-4. 関連する知見をサマリーとして提示し、パラメータ設定に反映する
-
-## /sync-knowledge
-
-リンク先プロジェクトから知見をインポートする。
-
-**手順**:
-1. `.simctl/links.toml` を確認
-2. `simctl knowledge sync` で全リンク先から新しい insights をインポート
-3. インポート結果を報告
-"""
+    env = _get_jinja_env()
+    template = env.get_template("skills.md")
+    return template.render(
+        project_name=project_name,
+        pip_install_line=pip_install_line,
+    )
 
 
 def _get_data_path() -> Path:
