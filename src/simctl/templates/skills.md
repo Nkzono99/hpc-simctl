@@ -1,14 +1,346 @@
 # SKILLS.md — {{ project_name }}
 
-AI エージェントが実行できるスキル (定型タスク) の一覧。
+Agent と人がそのまま参照できる **実行例集** です。
+定型作業はまずこのファイルの Bash 例に沿って進めます。
 
-## /setup-env
+詳細なフィールド定義は `tools/hpc-simctl/docs/toml-reference.md` を参照してください。
 
-プロジェクトの Python 環境をセットアップする。
+---
 
-**前提**: プロジェクトルートで実行すること。uv がインストール済みであること。
+## 0. project の現在地を把握する
 
-**手順**:
+```bash
+simctl context
+simctl list
+simctl jobs
+```
+
+使う場面:
+- 新しいセッションを始めたとき
+- 何が走っているか把握したいとき
+
+---
+
+## 1. 新しい Case を作る
+
+```bash
+# 雛形を作る (cases/<sim>/ 以下なら simulator を自動検出)
+cd cases/emses && simctl new my_case
+# または simulator を明示
+simctl new my_case -s emses -d cases/emses
+
+# case 定義を編集
+$EDITOR cases/emses/my_case/case.toml
+
+# テンプレート入力を置く
+$EDITOR cases/emses/my_case/input/plasma.toml
+```
+
+---
+
+## 2. Case から単一 Run を作る
+
+```bash
+cd runs/test/basic
+simctl create my_case
+simctl list
+```
+
+`--dest` で生成先を変更できる:
+
+```bash
+simctl create my_case --dest runs/test/basic
+```
+
+---
+
+## 3. Survey を組んで展開する
+
+```bash
+mkdir -p runs/sheath/angle_scan
+$EDITOR runs/sheath/angle_scan/survey.toml
+
+# survey.toml から全 run を生成
+simctl sweep runs/sheath/angle_scan
+simctl list runs/sheath/angle_scan
+```
+
+`simctl create survey` でも同じ:
+
+```bash
+cd runs/sheath/angle_scan
+simctl create survey
+```
+
+---
+
+## 4. 個別 Run を投入する
+
+```bash
+cd runs/test/basic/R20260330-0001
+simctl run
+simctl status
+simctl history
+```
+
+queue を明示したいとき:
+
+```bash
+simctl run -qn compute
+```
+
+dry-run で確認:
+
+```bash
+simctl run --dry-run
+```
+
+---
+
+## 5. Survey 全体を投入する
+
+```bash
+cd runs/sheath/angle_scan
+simctl list
+simctl run --all
+```
+
+queue を明示したいとき:
+
+```bash
+simctl run --all -qn compute
+```
+
+注意:
+- `run --all` は高コスト操作。事前に plan を出す
+- 初回の大規模 survey は承認を取る
+
+---
+
+## 6. 状態確認と同期
+
+### 個別 run
+
+```bash
+cd runs/test/basic/R20260330-0001
+simctl status     # manifest の状態を表示 (更新しない)
+simctl sync       # Slurm 状態を manifest に反映
+```
+
+### プロジェクト全体
+
+```bash
+simctl list runs/sheath/angle_scan
+simctl jobs           # submitted/running のジョブ一覧
+simctl jobs --all     # 全 run のジョブ情報
+simctl history        # 投入履歴 (最新20件)
+simctl history -n 0   # 全件
+```
+
+---
+
+## 7. ログを見る
+
+```bash
+cd runs/test/basic/R20260330-0001
+
+# stdout (デフォルト20行)
+simctl log
+
+# stderr
+simctl log -e
+
+# 行数を指定
+simctl log -n 100
+
+# follow (tail -f 相当)
+simctl log -f
+
+# 必要なら work 以下も見る
+ls work/
+tail -n 100 work/*.err
+tail -n 100 work/*.out
+```
+
+---
+
+## 8. Failed Run を調べる
+
+```bash
+cd runs/test/basic/R20260330-0001
+simctl sync
+simctl status
+simctl log -e
+simctl log
+```
+
+判断の目安:
+- `timeout` → walltime 延長候補
+- `oom` → メモリ増加または問題サイズ縮小候補
+- `preempted` → 同条件再投入候補
+- `exit_error` → まず log / err を確認
+
+---
+
+## 9. Retry のために再準備する
+
+```bash
+# case を修正して新しい run を作る
+$EDITOR cases/emses/sheath_basic/case.toml
+simctl create sheath_basic --dest runs/sheath/retry
+
+# または survey を修正して再展開
+$EDITOR runs/sheath/angle_scan/survey.toml
+simctl sweep runs/sheath/angle_scan
+```
+
+その後、必要な run を投入する:
+
+```bash
+simctl run
+# または
+simctl run --all
+```
+
+---
+
+## 10. Run を Clone する
+
+```bash
+# cwd の run を clone
+simctl clone --dest runs/test/variant
+
+# パラメータを変更して clone
+simctl clone --set dt=0.5e-8 --set nx=128
+```
+
+---
+
+## 11. 完了した Run を継続する
+
+```bash
+# cwd の completed run から continuation run を生成
+simctl extend
+
+# ステップ数を指定して継続
+simctl extend --nstep 200000
+
+# 継続 run を生成して即投入
+simctl extend --run
+```
+
+---
+
+## 12. Run を要約する
+
+```bash
+cd runs/test/basic/R20260330-0001
+simctl summarize
+```
+
+---
+
+## 13. Survey 結果を集計する
+
+```bash
+simctl collect runs/sheath/angle_scan
+```
+
+---
+
+## 14. 人向け知見を保存する
+
+```bash
+simctl knowledge save sheath_scan_summary \
+  -t result \
+  -s emses \
+  -m "Angle scan shows strongest response near 45 degrees."
+```
+
+タグ付きの例:
+
+```bash
+simctl knowledge save dt_instability_note \
+  -t constraint \
+  -s emses \
+  --tags "stability,cfl,dt" \
+  -m "dt above 1.0e-8 destabilizes the nx=64 setup."
+```
+
+知見タイプ: `constraint`, `result`, `analysis`, `dependency`
+
+---
+
+## 15. 機械可読な Fact を追加する
+
+```bash
+simctl knowledge add-fact \
+  "dt > 1.0e-8 destabilizes EMSES electrostatic runs at nx=64" \
+  -t constraint \
+  -s emses \
+  --param-name tmgrid.dt \
+  --scope-text "baseline electrostatic scan" \
+  --evidence-kind run_observation \
+  --evidence-ref run:R20260330-0004 \
+  -c high \
+  --tags "stability,cfl,dt"
+```
+
+fact を確認する:
+
+```bash
+simctl knowledge facts
+simctl knowledge facts --scope emses
+simctl knowledge facts --tag stability -c medium
+```
+
+fact タイプ: `observation`, `constraint`, `dependency`, `policy`, `hypothesis`
+
+---
+
+## 16. 他 Project から知見を取り込む
+
+```bash
+simctl knowledge links
+simctl knowledge sync
+simctl knowledge sync -s emses
+```
+
+---
+
+## 17. Refs と Simulator Knowledge を確認する
+
+```bash
+# refs の更新
+simctl update-refs
+
+# ナレッジインデックスの確認
+find .simctl/knowledge -maxdepth 2 -type f | sort
+
+# refs の中身を確認
+find refs -maxdepth 2 -type d | sort
+find refs -maxdepth 4 -type f | head -200
+```
+
+---
+
+## 18. 整理・アーカイブ
+
+```bash
+# completed run をアーカイブ
+simctl archive
+simctl archive --yes   # 確認をスキップ
+
+# work/ の不要ファイルを削除
+simctl purge-work
+simctl purge-work --yes
+```
+
+注意: `archive` / `purge-work` は確認が必要な操作。
+
+---
+
+## 19. 環境セットアップ
 
 ```bash
 # 方法 1: ブートストラップ (新規プロジェクト)
@@ -24,149 +356,26 @@ source .venv/bin/activate
 simctl doctor
 ```
 
-**注意事項**:
-- `.venv/` と `tools/` は `.gitignore` に追加済み
-- HPC ノードでは login ノードで環境構築し、compute ノードでは同じ .venv を使う
-- `module load` が必要なモジュールは `simulators.toml` の `modules` に定義済み
-- simctl 更新: `cd tools/hpc-simctl && git pull`
+---
 
-## /survey-design
+## 20. コマンドのオプションを調べる
 
-パラメータサーベイを設計する。
-
-**入力**: ケース名、変動パラメータ、値の範囲
-**出力**: `survey.toml` ファイル
-
-**手順**:
-1. 指定されたケースの `case.toml` と入力ファイルを読む
-2. `refs/` 以下のシミュレータドキュメントでパラメータの意味と妥当な範囲を確認する
-3. `survey.toml` を生成する (直積展開)
-4. 生成される run 数を報告する
-
-## /run-all
-
-サーベイの全 run を生成して投入する。
-
-**入力**: survey ディレクトリパス
-**出力**: 全 run が submitted 状態
-
-**手順**:
-1. `simctl sweep <survey_dir>` で run 生成
-2. `simctl list <survey_dir>` で確認
-3. `simctl run --all` で投入 (`-qn QUEUE` でパーティション指定可)
-4. 投入結果を報告
-
-## /check-status
-
-run やサーベイの状態を確認・同期する。
-
-**入力**: run パスまたはサーベイディレクトリ
-**出力**: 状態一覧 (completed / running / failed / submitted)
-
-**手順**:
-1. `simctl jobs` で実行中ジョブ一覧を確認
-2. `simctl list <path>` で一覧取得
-3. 各 run に対して `simctl sync` で Slurm と同期
-4. 状態をサマリーとして報告 (完了数 / 実行中 / 失敗)
-
-## /analyze
-
-完了した run の結果を解析・集計する。
-
-**入力**: run パスまたはサーベイディレクトリ
-**出力**: 解析サマリー
-
-**手順**:
-1. `simctl summarize` で各 run の要約を生成
-2. サーベイの場合は `simctl collect <dir>` で集計
-3. 結果の概要と注目すべき傾向を報告
-
-## /debug-failed
-
-失敗した run を診断する。
-
-**入力**: failed 状態の run パス
-**出力**: 原因の診断と対処方針
-
-**手順**:
-1. `manifest.toml` から投入情報を読む
-2. `simctl log -e` で stderr を確認
-3. `work/*.err`, `work/*.out` からエラーメッセージを抽出
-4. 原因を分類 (OOM / segfault / timeout / input error)
-5. 対処方針を提案 (リソース変更 / パラメータ修正 / clone して再投入)
-
-## /cleanup
-
-完了・不要な run を整理する。
-
-**入力**: 対象ディレクトリ
-**出力**: アーカイブ・削除結果
-
-**手順**:
-1. `simctl list <dir>` で状態を確認
-2. completed な run を `simctl archive` でアーカイブ
-3. 必要に応じて `simctl purge-work` で大容量ファイルを削除
-4. 整理結果を報告
-
-## /update-refs
-
-リファレンスリポジトリを更新し、ナレッジインデックスを再生成する。
-
-**前提**: プロジェクトルートで実行すること。ネットワーク接続が必要。
-
-**手順**:
-1. `simctl update-refs` を実行
-2. `refs/` 以下の全リポジトリが `git fetch --depth 1` + `git reset` で最新化される
-3. 変更があったリポジトリを検出 (コミットハッシュ比較)
-4. `.simctl/knowledge/{simulator}.md` にナレッジインデックスを再生成
-5. 更新サマリーを確認
-
-**ナレッジインデックスの使い方**:
-- `.simctl/knowledge/{simulator}.md` にドキュメントの所在一覧がある
-- パラメータの意味・制約・物理的安定性条件は `refs/` 内のドキュメントを直接読む
-- 前回更新からの変更差分は Change Log セクションに記録される
-
-**注意事項**:
-- `refs/` のリポジトリは shallow clone なので通常の `git pull` は使わない
-- `.simctl/knowledge/` は自動生成ファイル。手動編集しないこと
-- シミュレータのバージョンアップ時は必ずこのコマンドを実行すること
-
-## /learn
-
-実験結果や経験から知見を `.simctl/insights/` に保存する。
-
-**手順**:
-1. 完了した run の結果 (`simctl summarize`, ログ, 出力) を読む
-2. 新たに分かったこと・期待と異なる結果を特定する
-3. 知見の種類を判断する:
-   - `constraint`: 安定性・制約の発見 (例: CFL 条件違反で不安定)
-   - `result`: 実験結果のサマリー (例: サーベイ全体の傾向)
-   - `analysis`: 物理的考察・解釈 (例: 加熱メカニズムの推定)
-   - `dependency`: パラメータ依存性 (例: 密度と帯電量の関係)
-4. `simctl knowledge save <name> -t <type> -s <simulator> -m "<内容>"` で保存
-5. 必要に応じてタグを付与 (`--tags "stability,cfl,grid"`)
-
-**例**:
 ```bash
-simctl knowledge save mag_scan_summary -t result -s emses \
-  -m "磁場角度 0-90 度のサーベイ。45度で最もイオン加速が効率的。"
+simctl --help
+simctl create --help
+simctl sweep --help
+simctl run --help
+simctl status --help
+simctl knowledge --help
+simctl knowledge add-fact --help
 ```
 
-## /recall
+---
 
-現在のタスクに関連する知見を検索・提示する。
+## 短い注意
 
-**手順**:
-1. 現在の campaign.toml / case.toml からシミュレータとパラメータを読む
-2. `simctl knowledge list -s <simulator>` で関連 insights を検索
-3. リンク先プロジェクトの知見も `simctl knowledge sync` でインポート
-4. 関連する知見をサマリーとして提示し、パラメータ設定に反映する
-
-## /sync-knowledge
-
-リンク先プロジェクトから知見をインポートする。
-
-**手順**:
-1. `.simctl/links.toml` を確認
-2. `simctl knowledge sync` で全リンク先から新しい insights をインポート
-3. インポート結果を報告
+- run は simctl で生成する
+- `manifest.toml` は手で書かない
+- `Rxxxx/input/*` や `submit/job.sh` を直接作らない
+- まず実行例に沿って進める
+- 迷ったら `AGENTS.md` に戻る
