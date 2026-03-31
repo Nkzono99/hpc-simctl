@@ -7,7 +7,6 @@ from typing import Annotated, Optional
 
 import typer
 
-from simctl.core.exceptions import SimctlError
 from simctl.core.project import find_project_root
 
 
@@ -97,12 +96,17 @@ def new(
 
     case_dir.mkdir(parents=True)
 
-    # Resolve default launcher name and site profile from project config
+    # Resolve project root (used for launcher, site profile, and ref templates)
     default_launcher = "srun"
     site_resource_style = "standard"
+    project_root: Path | None = None
     try:
         project_root = find_project_root(target_dir)
-        if project_root:
+    except Exception:
+        pass
+
+    if project_root:
+        try:
             from simctl.core.project import load_project
 
             project = load_project(project_root)
@@ -114,13 +118,12 @@ def new(
 
             site = load_site_profile(project_root)
             site_resource_style = site.resource_style
-    except Exception:
-        pass  # Fall back to defaults
+        except Exception:
+            pass  # Fall back to defaults
 
     # Look for rich template files in refs/<repo>/
     ref_templates: dict[str, Path] = {}
     try:
-        project_root = find_project_root(target_dir)
         if project_root and hasattr(adapter_cls, "doc_repos"):
             refs_dir = project_root / "refs"
             for _url, repo_name in adapter_cls.doc_repos():
@@ -170,7 +173,8 @@ def new(
     # Optionally generate survey.toml stub
     if survey:
         _generate_survey_stub(
-            case_name, sim_name, default_launcher, target_dir,
+            case_name, sim_name, default_launcher,
+            project_root=project_root,
             resource_style=site_resource_style,
         )
 
@@ -179,7 +183,8 @@ def _generate_survey_stub(
     case_name: str,
     simulator: str,
     launcher: str,
-    cases_sim_dir: Path,
+    *,
+    project_root: Path | None = None,
     resource_style: str = "standard",
 ) -> None:
     """Generate a survey.toml stub under runs/<case_name>/.
@@ -188,13 +193,10 @@ def _generate_survey_stub(
         case_name: Name of the base case.
         simulator: Simulator name.
         launcher: Launcher profile name.
-        cases_sim_dir: The cases/<sim>/ directory (used to find project root).
+        project_root: Project root directory (if already resolved).
         resource_style: Site resource style ("standard" or "rsc").
     """
-    # Find runs/ directory relative to project root
-    try:
-        project_root = find_project_root(cases_sim_dir)
-    except SimctlError:
+    if project_root is None:
         typer.echo("  Warning: Could not find project root; skipping survey.toml.")
         return
 

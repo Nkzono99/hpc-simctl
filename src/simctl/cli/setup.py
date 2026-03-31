@@ -9,10 +9,7 @@ from typing import Annotated, Optional
 
 import typer
 
-if sys.version_info >= (3, 11):
-    import tomllib
-else:
-    import tomli as tomllib
+from simctl.core.knowledge import _repo_name_from_url
 
 _DEFAULT_SIMCTL_REPO = "https://github.com/Nkzono99/hpc-simctl.git"
 
@@ -73,8 +70,15 @@ def setup(
 
     typer.echo(f"Setting up project in {project_dir}")
 
-    # 2. Read simulator names from simulators.toml
-    sim_names = _read_simulator_names(project_dir)
+    # 2. Read simulator names from project config
+    sim_names: list[str] = []
+    try:
+        from simctl.core.project import load_project
+
+        project = load_project(project_dir)
+        sim_names = list(project.simulators.keys())
+    except Exception:
+        pass  # Continue without simulator-specific setup
 
     created: list[str] = []
     skipped: list[str] = []
@@ -93,7 +97,9 @@ def setup(
         skipped.extend(refs_skipped)
 
     # 5. Ensure .simctl/ skeleton exists
-    _ensure_simctl_skeleton(project_dir, created)
+    from simctl.cli.init import _create_simctl_skeleton
+
+    _create_simctl_skeleton(project_dir, created)
 
     # Print results
     typer.echo(f"\nProject '{project_dir.name}' is ready.")
@@ -125,11 +131,7 @@ def _clone_project(url: str, dest: Path | None) -> Path:
         Resolved path to the cloned directory.
     """
     if dest is None:
-        # Extract repo name from URL
-        name = url.rsplit("/", 1)[-1]
-        if name.endswith(".git"):
-            name = name[:-4]
-        dest = Path.cwd() / name
+        dest = Path.cwd() / _repo_name_from_url(url)
 
     dest = dest.resolve()
     if dest.exists():
@@ -154,36 +156,3 @@ def _clone_project(url: str, dest: Path | None) -> Path:
 
     typer.echo(f"Cloned to {dest}")
     return dest
-
-
-def _read_simulator_names(project_dir: Path) -> list[str]:
-    """Read simulator names from simulators.toml."""
-    sim_file = project_dir / "simulators.toml"
-    if not sim_file.exists():
-        return []
-
-    with open(sim_file, "rb") as f:
-        data = tomllib.load(f)
-
-    sims = data.get("simulators", {})
-    return [name for name, cfg in sims.items() if isinstance(cfg, dict)]
-
-
-def _ensure_simctl_skeleton(project_dir: Path, created: list[str]) -> None:
-    """Create .simctl/ skeleton directories if they don't exist."""
-    simctl_dir = project_dir / ".simctl"
-    for subdir in ("insights",):
-        d = simctl_dir / subdir
-        if not d.exists():
-            d.mkdir(parents=True, exist_ok=True)
-            created.append(f".simctl/{subdir}/")
-
-    for filename, default_content in (
-        ("facts.toml", "# Structured facts\nfacts = []\n"),
-        ("links.toml", "# Project links\n[projects]\n\n[shared]\n"),
-    ):
-        f = simctl_dir / filename
-        if not f.exists():
-            simctl_dir.mkdir(parents=True, exist_ok=True)
-            f.write_text(default_content, encoding="utf-8")
-            created.append(f".simctl/{filename}")

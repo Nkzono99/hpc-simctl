@@ -117,6 +117,28 @@ def _mkdir_if_missing(path: Path) -> bool:
     return True
 
 
+_FACTS_DEFAULT = "# Structured facts\nfacts = []\n"
+_LINKS_DEFAULT = "# Project links\n[projects]\n\n[shared]\n"
+
+
+def _create_simctl_skeleton(project_dir: Path, created: list[str]) -> None:
+    """Create .simctl/ skeleton (insights/, facts.toml, links.toml).
+
+    Args:
+        project_dir: Project root directory.
+        created: Mutable list to append created items.
+    """
+    simctl_dir = project_dir / ".simctl"
+    if _mkdir_if_missing(simctl_dir):
+        created.append(".simctl/")
+    if _mkdir_if_missing(simctl_dir / "insights"):
+        created.append(".simctl/insights/")
+    if _write_if_missing(simctl_dir / "facts.toml", _FACTS_DEFAULT):
+        created.append(".simctl/facts.toml")
+    if _write_if_missing(simctl_dir / "links.toml", _LINKS_DEFAULT):
+        created.append(".simctl/links.toml")
+
+
 def _build_simulators_toml(simulator_names: list[str]) -> str:
     """Build simulators.toml content from adapter default configs.
 
@@ -977,15 +999,7 @@ def init(
         skipped.append("runs/")
 
     # .simctl/ skeleton (insights, facts, links)
-    simctl_dir = project_dir / ".simctl"
-    if _mkdir_if_missing(simctl_dir):
-        created.append(".simctl/")
-    if _mkdir_if_missing(simctl_dir / "insights"):
-        created.append(".simctl/insights/")
-    if _write_if_missing(simctl_dir / "facts.toml", "# Structured facts\nfacts = []\n"):
-        created.append(".simctl/facts.toml")
-    if _write_if_missing(simctl_dir / "links.toml", "# Project links\n[projects]\n\n[shared]\n"):
-        created.append(".simctl/links.toml")
+    _create_simctl_skeleton(project_dir, created)
 
     # refs/ — clone simulator doc repos
     if sim_names:
