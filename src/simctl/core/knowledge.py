@@ -258,6 +258,137 @@ def _resolve_link_path(project_root: Path, path_str: str) -> Path:
     return p
 
 
+def _is_git_url(s: str) -> bool:
+    """Check if a string looks like a git URL."""
+    return (
+        s.startswith("https://")
+        or s.startswith("http://")
+        or s.startswith("git@")
+    ) and s.endswith(".git")
+
+
+def _repo_name_from_url(url: str) -> str:
+    """Extract repository name from a git URL."""
+    # https://github.com/user/repo.git -> repo
+    # git@github.com:user/repo.git -> repo
+    stem = url.rsplit("/", 1)[-1].rsplit(":", 1)[-1]
+    if stem.endswith(".git"):
+        stem = stem[:-4]
+    return stem
+
+
+def add_link(
+    project_root: Path,
+    target: str,
+    *,
+    name: str = "",
+) -> tuple[str, str, Path]:
+    """Add a project link to .simctl/links.toml.
+
+    Args:
+        project_root: Project root directory.
+        target: Local path or git URL (``https://*.git``).
+        name: Link name (auto-detected from target if empty).
+
+    Returns:
+        Tuple of (link_name, link_type, resolved_path).
+
+    Raises:
+        RuntimeError: If tomli_w is not available or git clone fails.
+    """
+    if tomli_w is None:
+        raise RuntimeError("tomli_w is required to write links.toml")
+
+    simctl_dir = project_root / _SIMCTL_DIR
+    simctl_dir.mkdir(exist_ok=True)
+    links_file = simctl_dir / _LINKS_FILE
+
+    # Load existing
+    raw: dict[str, Any] = {}
+    if links_file.is_file():
+        with open(links_file, "rb") as f:
+            raw = tomllib.load(f)
+
+    if _is_git_url(target):
+        link_type = "shared"
+        link_name = name or _repo_name_from_url(target)
+        # Clone into .simctl/shared/<name>/
+        shared_dir = simctl_dir / "shared"
+        shared_dir.mkdir(exist_ok=True)
+        clone_dest = shared_dir / link_name
+        if not clone_dest.exists():
+            import subprocess
+
+            result = subprocess.run(
+                ["git", "clone", target, str(clone_dest)],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                check=False,
+            )
+            if result.returncode != 0:
+                raise RuntimeError(
+                    f"git clone failed: {(result.stderr or '').strip()[:300]}"
+                )
+        # Store relative path from project root
+        store_path = f".simctl/shared/{link_name}"
+        resolved = clone_dest.resolve()
+        section = raw.setdefault("shared", {})
+    else:
+        link_type = "project"
+        target_path = Path(target).expanduser()
+        if not target_path.is_absolute():
+            target_path = (project_root / target_path).resolve()
+        link_name = name or target_path.name
+        # Store as given (relative or absolute)
+        store_path = target
+        resolved = target_path
+        section = raw.setdefault("projects", {})
+
+    section[link_name] = store_path
+
+    with open(links_file, "wb") as f:
+        tomli_w.dump(raw, f)
+
+    return link_name, link_type, resolved
+
+
+def remove_link(project_root: Path, name: str) -> bool:
+    """Remove a link from .simctl/links.toml.
+
+    Args:
+        project_root: Project root directory.
+        name: Link name to remove.
+
+    Returns:
+        True if the link was found and removed, False otherwise.
+    """
+    if tomli_w is None:
+        raise RuntimeError("tomli_w is required to write links.toml")
+
+    links_file = project_root / _SIMCTL_DIR / _LINKS_FILE
+    if not links_file.is_file():
+        return False
+
+    with open(links_file, "rb") as f:
+        raw = tomllib.load(f)
+
+    found = False
+    for section_key in ("projects", "shared"):
+        section = raw.get(section_key, {})
+        if name in section:
+            del section[name]
+            found = True
+            break
+
+    if found:
+        with open(links_file, "wb") as f:
+            tomli_w.dump(raw, f)
+
+    return found
+
+
 def sync_insights(
     project_root: Path,
     *,

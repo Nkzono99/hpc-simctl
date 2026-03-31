@@ -53,9 +53,10 @@ tools/
 # Reference repos (cloned by simctl init)
 refs/
 
-# Auto-generated knowledge indexes (insights/ and facts.toml are tracked)
+# Auto-generated knowledge indexes (insights/, facts.toml, links.toml are tracked)
 .simctl/knowledge/
 .simctl/environment.toml
+.simctl/shared/
 
 # heavy run outputs
 runs/**/work/outputs/
@@ -974,6 +975,17 @@ def init(
         created.append("runs/")
     else:
         skipped.append("runs/")
+
+    # .simctl/ skeleton (insights, facts, links)
+    simctl_dir = project_dir / ".simctl"
+    if _mkdir_if_missing(simctl_dir):
+        created.append(".simctl/")
+    if _mkdir_if_missing(simctl_dir / "insights"):
+        created.append(".simctl/insights/")
+    if _write_if_missing(simctl_dir / "facts.toml", "# Structured facts\nfacts = []\n"):
+        created.append(".simctl/facts.toml")
+    if _write_if_missing(simctl_dir / "links.toml", "# Project links\n[projects]\n\n[shared]\n"):
+        created.append(".simctl/links.toml")
 
     # refs/ — clone simulator doc repos
     if sim_names:

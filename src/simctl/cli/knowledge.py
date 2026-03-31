@@ -13,11 +13,13 @@ from simctl.core.knowledge import (
     INSIGHT_TYPES,
     Fact,
     Insight,
+    add_link,
     get_insights_dir,
     list_insights,
     load_links,
     next_fact_id,
     query_facts,
+    remove_link,
     save_fact,
     sync_insights,
     write_insight,
@@ -251,14 +253,8 @@ def links_cmd() -> None:
     if not links:
         typer.echo(
             "No links configured. "
-            "Create .simctl/links.toml with:"
+            "Use 'simctl knowledge link <path_or_url>' to add one."
         )
-        typer.echo("")
-        typer.echo('  [projects]')
-        typer.echo('  other-project = "../other-project"')
-        typer.echo("")
-        typer.echo("  [shared]")
-        typer.echo('  knowledge = "~/.simctl/knowledge"')
         return
 
     for link in links:
@@ -268,6 +264,72 @@ def links_cmd() -> None:
             f"  [{link.link_type}] {link.name}: "
             f"{link.path} ({status})"
         )
+
+
+@knowledge_app.command("link")
+def link_cmd(
+    target: Annotated[
+        str,
+        typer.Argument(
+            help="Local path or git URL (https://*.git).",
+        ),
+    ],
+    name: Annotated[
+        Optional[str],
+        typer.Option(
+            "--name", "-n",
+            help="Link name (auto-detected from path/URL).",
+        ),
+    ] = None,
+) -> None:
+    """Add a link to another project or shared knowledge repo.
+
+    Local paths are added as project links.
+    Git URLs are cloned to .simctl/shared/ and added as shared links.
+
+    Examples:
+      simctl knowledge link ../other-experiment
+      simctl knowledge link https://github.com/user/knowledge-base.git
+      simctl knowledge link ../shared-data --name shared-kb
+    """
+    root = _find_root()
+    try:
+        link_name, link_type, resolved = add_link(
+            root, target, name=name or "",
+        )
+    except RuntimeError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1) from None
+
+    typer.echo(
+        f"Linked [{link_type}] {link_name}: {resolved}"
+    )
+
+
+@knowledge_app.command("unlink")
+def unlink_cmd(
+    name: Annotated[
+        str,
+        typer.Argument(help="Link name to remove."),
+    ],
+) -> None:
+    """Remove a project link.
+
+    Examples:
+      simctl knowledge unlink other-experiment
+    """
+    root = _find_root()
+    try:
+        removed = remove_link(root, name)
+    except RuntimeError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1) from None
+
+    if removed:
+        typer.echo(f"Unlinked: {name}")
+    else:
+        typer.echo(f"Link not found: {name}", err=True)
+        raise typer.Exit(code=1)
 
 
 @knowledge_app.command("add-fact")
