@@ -31,7 +31,7 @@ repo/
         sheath-basic/
           meta.toml         # entry メタデータ
           input.toml        # 完全な入力ファイル
-          notes.md          # 人間向け補足
+          README.md         # 人間向け補足 (GitHub で自動表示)
       electromagnetic/
         alfven-wave/
           meta.toml
@@ -147,7 +147,6 @@ summary = "Minimal 1D sheath. Stable for moderate density."
 
 [files]
 input = ["input.toml"]
-notes = ["notes.md"]
 
 [applicability]
 model = "electrostatic"
@@ -173,13 +172,15 @@ avoid_if = ["strongly electromagnetic phenomena"]
 | フィールド | 説明 |
 |---|---|
 | `input` | 完全入力例または fragment ファイル一覧 |
-| `notes` | 人間向け補足 |
 | `related` | 参照したい追加ファイル |
 
 ファイル名は自由。推奨:
 - example: `input.toml` (またはシミュレータ固有名 `plasma.toml` 等)
 - fragment: `fragment.toml`
-- notes: `notes.md`
+
+人間向け補足は `README.md` としてディレクトリに置く。
+GitHub でディレクトリを開いたときに自動レンダリングされる。
+`[files]` には含めない (暗黙の規約)。
 
 ### `[applicability]`
 
@@ -212,7 +213,7 @@ Agent がパラメータ生成に使う補助情報。
 2. `cookbook/index.toml` で全 entry を一覧し、候補を選ぶ
 3. 選んだ entry の `meta.toml` で用途と適用条件を確認
 4. `input.toml` / `fragment.toml` の実ファイルを読む
-5. `notes.md` で注意事項を確認
+5. `README.md` で注意事項を確認
 
 ## ID と互換性
 
@@ -271,7 +272,7 @@ cookbook/
 1. `index.toml` を読んで、目的に合う entry を探す
 2. entry の `meta.toml` で用途と適用条件を確認する
 3. `input.toml` (または `fragment.toml`) を読む
-4. `notes.md` があれば注意事項を確認する
+4. `README.md` があれば注意事項を確認する
 5. 必要に応じて example をコピーし、パラメータを変更して使う
 
 ## entry の追加手順
@@ -299,7 +300,6 @@ summary = "{一文の説明}"
 
 [files]
 input = ["{入力ファイル名}"]
-notes = ["notes.md"]
 
 [applicability]
 # この entry が想定する条件を書く
@@ -317,7 +317,7 @@ vary_first = ["{最初に振るべきパラメータ}"]
   - simulator 固有の名前 ({simulator の入力ファイル名}) でもよい
 - fragment: 他の入力に合成して使う部分設定を `fragment.toml` として置く
 
-### 4. notes.md を書く (任意)
+### 4. README.md を書く (任意)
 
 - この entry の意図、背景、注意事項を書く
 - パラメータの選定理由があれば書く
@@ -347,7 +347,7 @@ recommended_for = ["{推奨用途}"]
 - example は **そのまま実行できる** こと
 - `meta.toml` の `[recommended].vary_first` には、実際に振って意味のあるパラメータだけを書く
 - `tags` は既存 entry と語彙を揃える (`index.toml` の既存タグを確認)
-- fragment は **単体では実行できない** ことを `notes.md` に明記する
+- fragment は **単体では実行できない** ことを `README.md` に明記する
 
 ## タグ一覧
 

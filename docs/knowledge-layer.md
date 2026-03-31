@@ -197,7 +197,7 @@ Agent の利用順序:
 2. `cookbook/index.toml` で候補を選ぶ
 3. 各 entry の `meta.toml` で用途と適用条件を確認
 4. `input.toml` / `fragment.toml` の実ファイルを読む
-5. `notes.md` で注意事項を確認
+5. `README.md` で注意事項を確認
 
 制約チェックは simctl Adapter の `validate_params()` が担当する。
 cookbook は「何をどう使うか」に集中する。
