@@ -127,10 +127,14 @@ hpc-simctl/
 | `simctl config add-launcher` | ランチャー追加 (対話型) |
 | `simctl update-refs` | refs/ リポジトリ更新 + ナレッジインデックス再生成 |
 | `simctl knowledge save` | 知見を .simctl/insights/ に保存 |
+| `simctl knowledge add-fact` | 構造化 fact を .simctl/facts.toml に追加 |
 | `simctl knowledge list` | 知見一覧表示 |
+| `simctl knowledge facts` | 構造化 fact 一覧表示 |
 | `simctl knowledge show` | 知見の詳細表示 |
-| `simctl knowledge sync` | リンク先から知見をインポート |
+| `simctl knowledge link` | プロジェクトリンク追加 (ローカルパス / git URL) |
+| `simctl knowledge unlink` | プロジェクトリンク削除 |
 | `simctl knowledge links` | プロジェクトリンク一覧 |
+| `simctl knowledge sync` | リンク先から知見をインポート |
 
 全コマンドは引数省略時にカレントディレクトリをデフォルトとする。
 

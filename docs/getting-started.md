@@ -25,10 +25,26 @@ source .venv/bin/activate
 
 `simctl init` が以下を自動的に行います:
 
-1. `.venv/` を作成 (uv venv)
-2. `tools/hpc-simctl/` に simctl リポジトリを clone
-3. simctl を `.venv` に editable install (`uv pip install -e`)
-4. シミュレータ固有パッケージをインストール
+1. 設定ファイル群を生成 (`simproject.toml`, `simulators.toml`, `launchers.toml`, `campaign.toml`)
+2. `.simctl/` 骨格を作成 (`insights/`, `facts.toml`, `links.toml`)
+3. `.venv/` を作成 (uv venv)
+4. `tools/hpc-simctl/` に simctl リポジトリを clone
+5. simctl を `.venv` に editable install (`uv pip install -e`)
+6. シミュレータ固有パッケージをインストール
+7. `git init` + Initial commit で clean な状態にする
+
+### 既存プロジェクトの clone + セットアップ
+
+GitHub 等にある既存の simctl プロジェクトをセットアップする場合は `simctl setup` を使います:
+
+```bash
+uvx --from git+https://github.com/Nkzono99/hpc-simctl.git simctl setup https://github.com/user/my-project.git
+cd my-project
+source .venv/bin/activate
+simctl doctor
+```
+
+`simctl setup` は既存の TOML ファイルを上書きせず、環境 (`.venv`, `tools/`, `refs/`, `.simctl/`) のみセットアップします。
 
 インストール確認:
 
@@ -79,12 +95,21 @@ Initialized project 'my-hpc-project' in /home/user/my-hpc-project
     simproject.toml
     simulators.toml
     launchers.toml
+    campaign.toml
+    .simctl/
+    .simctl/insights/
+    .simctl/facts.toml
+    .simctl/links.toml
     cases/
     runs/
     .gitignore
+    CLAUDE.md
+    AGENTS.md
+    git init
     .venv
     tools/hpc-simctl
     uv pip install -e tools/hpc-simctl
+    git commit (Initial commit)
 ```
 
 ### 生成されるファイル
@@ -120,6 +145,20 @@ MPI の起動方式を定義します。初期状態は空です。
 大容量の実行出力を Git 管理対象外にします。
 
 ```gitignore
+# Python venv
+.venv/
+
+# simctl tool (cloned by simctl init)
+tools/
+
+# Reference repos
+refs/
+
+# Auto-generated (insights/, facts.toml, links.toml are tracked)
+.simctl/knowledge/
+.simctl/environment.toml
+.simctl/shared/
+
 # heavy run outputs
 runs/**/work/outputs/
 runs/**/work/restart/

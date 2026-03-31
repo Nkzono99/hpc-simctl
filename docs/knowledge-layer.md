@@ -251,9 +251,16 @@ created: 2026-03-30
 simctl knowledge save mag_results -t result -s emses \
   -m "磁場角度 45度でイオンフラックス最大"
 
+# 構造化 fact の追加
+simctl knowledge add-fact "CFL limit: dt < 1.0 for emses" \
+  -t constraint -s emses --param-name tmgrid.dt -c high \
+  --evidence-kind run_observation --evidence-ref run:R20260330-0001
+
 # 一覧
 simctl knowledge list
 simctl knowledge list -s emses -t constraint
+simctl knowledge facts
+simctl knowledge facts --scope emses -c high
 
 # 表示
 simctl knowledge show emses_cfl_limit
@@ -265,17 +272,36 @@ simctl knowledge sync -s emses
 
 ### SKILL による操作
 
-AI エージェントは以下のスキルを使って知識を管理する:
-
-- **`/learn`**: 実験結果から知見を抽出して insights/ に保存
-- **`/recall`**: 現在のタスクに関連する知見を検索・提示
-- **`/sync-knowledge`**: リンク先プロジェクトから知見をインポート
+AI エージェントは `/learn` スキルを使って知見を保存する。
+「知識をまとめて」「結果を記録して」等の指示はすべて `/learn` 経由で
+プロジェクトの knowledge システムに保存される（Agent 自身の memory には保存しない）。
 
 ## プロジェクト間の知識共有
 
 ### links.toml
 
-`.simctl/links.toml` で他プロジェクトや共有知識ストアへの参照を定義:
+`.simctl/links.toml` で他プロジェクトや共有知識ストアへの参照を定義する。
+`simctl knowledge link` コマンドで追加できる:
+
+```bash
+# ローカルプロジェクトをリンク
+simctl knowledge link ../surface-charging
+simctl knowledge link ../magnetosphere-v1
+
+# Git リポジトリをリンク (.simctl/shared/ に clone される)
+simctl knowledge link https://github.com/user/knowledge-base.git
+
+# 名前を指定してリンク
+simctl knowledge link ../shared-data --name my-shared
+
+# リンク解除
+simctl knowledge unlink surface-charging
+
+# リンク一覧
+simctl knowledge links
+```
+
+結果の `links.toml`:
 
 ```toml
 [projects]
@@ -283,7 +309,7 @@ surface-charging = "../surface-charging"
 magnetosphere-v1 = "../magnetosphere-v1"
 
 [shared]
-knowledge = "~/.simctl/knowledge"
+knowledge-base = ".simctl/shared/knowledge-base"
 ```
 
 ### sync の流れ

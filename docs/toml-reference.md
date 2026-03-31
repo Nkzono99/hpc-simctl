@@ -117,7 +117,51 @@ modules = ["openmpi/4.1"]
 ### resource_style
 
 - **`standard`**: Emits `#SBATCH --ntasks=N`, `#SBATCH --nodes=N`, etc.
-- **`rsc`**: Emits `#SBATCH --rsc p=N:t=T:c=C` (camphor/FUJITSU-style). `p` = processes (from `ntasks`), `t` = threads per process, `c` = cores per thread.
+- **`rsc`**: Emits `#SBATCH --rsc p=N:t=T:c=C` (camphor/FUJITSU-style). `p` = processes, `t` = threads per process, `c` = cores per process.
+
+---
+
+## site.toml
+
+HPC サイト固有の環境設定。`simctl init` でサイトプロファイル選択時に自動生成される。
+Launcher (MPI 起動方式) とは独立に、ジョブスクリプト生成に影響する環境設定を管理する。
+
+```toml
+[site]
+name = "camphor"
+resource_style = "rsc"
+modules = ["intel/2023.2", "intelmpi/2023.2"]
+stdout = "stdout.%J.log"
+stderr = "stderr.%J.log"
+
+[site.env]
+OMP_PROC_BIND = "spread"
+
+[site.simulators.emses]
+modules = ["hdf5/1.12.2_intel-2023.2-impi", "fftw/3.3.10_intel-2022.3-impi"]
+```
+
+### `[site]`
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | No | サイト名 |
+| `resource_style` | string | No | `"standard"` or `"rsc"` |
+| `modules` | string[] | No | サイト共通モジュール |
+| `stdout` | string | No | カスタム stdout ファイル名 |
+| `stderr` | string | No | カスタム stderr ファイル名 |
+| `extra_sbatch` | string[] | No | 追加 `#SBATCH` ディレクティブ |
+| `setup_commands` | string[] | No | 実行前セットアップコマンド |
+
+### `[site.env]`
+
+ジョブスクリプト内で `export` する環境変数。
+
+### `[site.simulators.<name>]`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `modules` | string[] | シミュレータ固有の追加モジュール (サイト共通モジュールとマージされる) |
 
 ---
 
@@ -186,16 +230,36 @@ Optional metadata for organizing runs.
 
 Slurm job parameters. These become `#SBATCH` directives in `job.sh`.
 
+#### Standard mode (`resource_style = "standard"`)
+
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `partition` | string | No | Partition/queue name. Can be overridden at submit time with `simctl run -qn <name>` |
 | `nodes` | integer | No | Number of nodes |
 | `ntasks` | integer | No | Number of MPI tasks |
-| `cpus_per_task` | integer | No | CPUs per task (for hybrid MPI+OpenMP) |
 | `walltime` | string | Yes | Wall time limit (HH:MM:SS) |
-| `job_name` | string | No | Job name (defaults to run_id) |
-| `threads_per_process` | integer | No | Threads per process (for `resource_style = "rsc"`, default 1) |
-| `cores_per_thread` | integer | No | Cores per thread (for `resource_style = "rsc"`, default 1) |
+
+#### RSC mode (`resource_style = "rsc"`, camphor 等)
+
+`site.toml` で `resource_style = "rsc"` の場合、`simctl new` は以下のフィールドを生成する:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `partition` | string | No | Partition/queue name |
+| `processes` | integer | No | MPI プロセス数 (`--rsc p=N`) |
+| `threads` | integer | No | プロセスあたりスレッド数 (`--rsc t=T`) |
+| `cores` | integer | No | プロセスあたりコア数 (`--rsc c=C`, ≥ threads) |
+| `memory` | string | No | プロセスあたりメモリ (`--rsc m=MEM`, e.g. `"8G"`) |
+| `gpus` | integer | No | GPU 数 (`--rsc g=N`) |
+| `walltime` | string | Yes | Wall time limit (HH:MM:SS) |
+
+#### 共通フィールド
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `modules` | string[] | No | 追加モジュール (site modules にマージされる) |
+| `pre_commands` | string[] | No | 実行前シェルコマンド |
+| `post_commands` | string[] | No | 実行後シェルコマンド |
 
 ### `[params]`
 
