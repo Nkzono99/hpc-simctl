@@ -129,10 +129,34 @@ simctl purge-work         # work/ の不要ファイル削除
 simctl purge-work --yes
 ```
 
+## Cookbook を参照する
+
+`refs/` 以下のシミュレータリポジトリに `cookbook/` がある場合:
+
+```bash
+# entry 一覧 (index.toml)
+cat refs/<repo>/cookbook/index.toml
+
+# entry の詳細 (meta.toml)
+cat refs/<repo>/cookbook/examples/<category>/<name>/meta.toml
+
+# 入力例
+cat refs/<repo>/cookbook/examples/<category>/<name>/input.toml
+
+# fragment
+cat refs/<repo>/cookbook/fragments/<category>/<name>/meta.toml
+cat refs/<repo>/cookbook/fragments/<category>/<name>/fragment.toml
+```
+
+index.toml で `status = "stable"` の entry を選ぶ。
+meta.toml の `[recommended].vary_first` がサーベイ軸の候補になる。
+`[edit_policy].immutable` は変更しない。
+fragment は `[merge]` と `[compatibility]` を確認してから使う。
+
 ## 環境
 
 ```bash
 simctl doctor             # 環境検査
-simctl update-refs        # refs/ 更新 + ナレッジ再生成
+simctl update-refs        # refs/ 更新 + cookbook/ナレッジ再生成
 simctl config show        # 設定表示
 ```

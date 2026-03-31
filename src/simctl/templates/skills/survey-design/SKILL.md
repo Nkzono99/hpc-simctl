@@ -9,25 +9,46 @@ disable-model-invocation: true
 ## 手順
 
 1. 指定されたケースの `case.toml` と入力ファイルを読む
-2. `refs/` 以下のシミュレータドキュメントでパラメータの意味と妥当な範囲を確認する
+2. `refs/` の cookbook で既存の入力例を探す
+   - `cookbook/index.toml` で `tags` と `recommended_for` から候補を絞る
+   - 候補の `meta.toml` で `[recommended].vary_first` と `[edit_policy]` を確認
+   - `[cost]` から計算コストを見積もる
 3. `.simctl/facts.toml` で既知の制約を確認する
 4. `survey.toml` を生成する
-5. 生成される run 数を報告する
+5. 生成される run 数とコスト見積もりを報告する
+
+## cookbook の活用
 
 ```bash
-# 既存 case の確認
-cat cases/$ARGUMENTS/case.toml
-simctl knowledge facts
+# cookbook の entry 一覧を確認
+cat refs/<repo>/cookbook/index.toml
 
-# survey ディレクトリ作成と編集
+# 候補 entry の詳細を確認
+cat refs/<repo>/cookbook/examples/<category>/<name>/meta.toml
+
+# 入力例を参照
+cat refs/<repo>/cookbook/examples/<category>/<name>/input.toml
+
+# 既知の制約を確認
+simctl knowledge facts
+```
+
+## survey の作成
+
+```bash
 mkdir -p runs/<category>/<survey_name>
 # survey.toml を作成 (フォーマットは tools/hpc-simctl/docs/toml-reference.md 参照)
-
-# run 展開と確認
 simctl sweep runs/<category>/<survey_name>
 simctl list runs/<category>/<survey_name>
 ```
 
-## survey.toml のフォーマット
+## 注意
+
+- cookbook の `[edit_policy].immutable` パラメータは survey 軸にしない
+- `[edit_policy].sensitive` パラメータを振る場合は理由を plan に書く
+- `status = "stable"` の entry をベースにする
+- fragment を使う場合は `[merge]` と `[compatibility]` を確認する
+
+## TOML フォーマット
 
 詳細は `tools/hpc-simctl/docs/toml-reference.md` の survey.toml セクションを参照。
