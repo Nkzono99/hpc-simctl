@@ -456,47 +456,59 @@ def _prompt_simulators() -> tuple[list[str], dict[str, dict[str, Any]]]:
 
 
 @dataclass
-class SiteProfile:
-    """A site profile loaded from sites/*.toml.
+class _BundledSiteProfile:
+    """A bundled site profile loaded from sites/*.toml.
+
+    Used during ``simctl init`` to offer preconfigured site choices.
+    The file uses the same ``[site]`` format as project-level ``site.toml``,
+    plus an optional ``[launcher]`` section for launcher defaults.
 
     Attributes:
         name: Site name (file stem, e.g. "cmaphor").
-        launcher: Launcher configuration dict for launchers.toml.
-        simulators: Per-simulator overrides (e.g. extra modules).
+        launcher: Launcher-only configuration dict for launchers.toml.
+        source_path: Path to the bundled .toml file (copied as site.toml).
     """
 
     name: str
     launcher: dict[str, Any]
-    simulators: dict[str, dict[str, Any]]
+    source_path: Path
 
 
-def _load_site_profiles() -> dict[str, SiteProfile]:
-    """Load site profiles from bundled TOML files in simctl/sites/."""
+# Legacy alias for backward compatibility with code that references the old name.
+SiteProfile = _BundledSiteProfile
+
+
+def _load_site_profiles() -> dict[str, _BundledSiteProfile]:
+    """Load site profiles from bundled TOML files in simctl/sites/.
+
+    Each file uses the unified format:
+    - ``[site]`` section → copied as-is to project ``site.toml``
+    - ``[launcher]`` section → used for ``launchers.toml`` defaults
+    """
     sites_dir = Path(__file__).resolve().parent.parent / "sites"
-    profiles: dict[str, SiteProfile] = {}
+    profiles: dict[str, _BundledSiteProfile] = {}
     if not sites_dir.is_dir():
         return profiles
     for toml_file in sorted(sites_dir.glob("*.toml")):
         with open(toml_file, "rb") as f:
             data = tomllib.load(f)
-        launcher = data.get("launcher", {})
-        if launcher:
-            simulators = {
-                str(k): dict(v) for k, v in data.get("simulator", {}).items()
-            }
-            profiles[toml_file.stem] = SiteProfile(
-                name=toml_file.stem,
-                launcher=dict(launcher),
-                simulators=simulators,
-            )
+        # Require at least a [site] or [launcher] section
+        if "site" not in data and "launcher" not in data:
+            continue
+        launcher_data = dict(data.get("launcher", {}))
+        profiles[toml_file.stem] = _BundledSiteProfile(
+            name=toml_file.stem,
+            launcher=launcher_data,
+            source_path=toml_file,
+        )
     return profiles
 
 
-def _prompt_launchers() -> tuple[dict[str, dict[str, Any]], SiteProfile | None]:
+def _prompt_launchers() -> tuple[dict[str, dict[str, Any]], _BundledSiteProfile | None]:
     """Interactively prompt for launcher configuration.
 
     Returns:
-        Tuple of (launcher config dict, selected SiteProfile or None).
+        Tuple of (launcher config dict, selected _BundledSiteProfile or None).
     """
     site_profiles = _load_site_profiles()
 
@@ -870,7 +882,7 @@ def init(
         skipped.append(_SIMULATORS_FILE)
 
     # launchers.toml
-    site_profile: SiteProfile | None = None
+    site_profile: _BundledSiteProfile | None = None
     if interactive:
         launcher_configs, site_profile = _prompt_launchers()
         launcher_content = _build_launchers_toml(launcher_configs)
@@ -887,24 +899,44 @@ def init(
     else:
         skipped.append(_LAUNCHERS_FILE)
 
-    # Apply site profile's per-simulator modules to simulators.toml
-    if site_profile and site_profile.simulators:
-        sim_file = project_dir / _SIMULATORS_FILE
-        if sim_file.exists():
-            with open(sim_file, "rb") as f:
-                existing = tomllib.load(f)
-            sims = existing.get("simulators", {})
-            updated = False
-            for sim_name, site_sim_cfg in site_profile.simulators.items():
-                if sim_name in sims:
-                    site_modules = site_sim_cfg.get("modules", [])
-                    if site_modules:
+    # site.toml — copy from bundled site profile
+    if site_profile:
+        from simctl.core.site import _load_site_toml
+
+        site_file = project_dir / "site.toml"
+        if not site_file.exists():
+            # Read bundled file, write only the [site] sections (strip [launcher])
+            with open(site_profile.source_path, "rb") as f:
+                bundled_data = tomllib.load(f)
+            site_only: dict[str, Any] = {}
+            if "site" in bundled_data:
+                site_only["site"] = bundled_data["site"]
+            if site_only and tomli_w is not None:
+                with open(site_file, "wb") as f:
+                    tomli_w.dump(site_only, f)
+                created.append("site.toml")
+            elif site_only:
+                skipped.append("site.toml (tomli_w not available)")
+        else:
+            skipped.append("site.toml")
+
+        # Apply per-simulator modules from site profile to simulators.toml
+        site_data_loaded = _load_site_toml(site_profile.source_path)
+        if site_data_loaded.simulator_modules:
+            sim_file = project_dir / _SIMULATORS_FILE
+            if sim_file.exists():
+                with open(sim_file, "rb") as f:
+                    existing = tomllib.load(f)
+                sims = existing.get("simulators", {})
+                updated = False
+                for sim_name, site_modules in site_data_loaded.simulator_modules.items():
+                    if sim_name in sims and site_modules:
                         sims[sim_name]["modules"] = site_modules
                         updated = True
-            if updated and tomli_w is not None:
-                existing["simulators"] = sims
-                with open(sim_file, "wb") as f:
-                    tomli_w.dump(existing, f)
+                if updated and tomli_w is not None:
+                    existing["simulators"] = sims
+                    with open(sim_file, "wb") as f:
+                        tomli_w.dump(existing, f)
 
     # campaign.toml
     campaign_content = _build_campaign_toml(project_name, sim_names)

@@ -1,7 +1,7 @@
 """Job script (job.sh) generation.
 
 Generates Slurm batch scripts from run configuration, launcher profile,
-and simulator adapter output.
+and site profile (HPC environment abstraction).
 
 Supports two resource specification modes:
 
@@ -13,7 +13,10 @@ from __future__ import annotations
 
 import stat
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from simctl.core.site import SiteProfile
 
 
 class JobScriptError(RuntimeError):
@@ -26,6 +29,10 @@ def generate_job_script(
     exec_line: str,
     *,
     run_id: str = "",
+    site: SiteProfile | None = None,
+    simulator_name: str = "",
+    extra_setup_commands: list[str] | None = None,
+    # --- Legacy kwargs (used when site is None) ---
     extra_sbatch: list[str] | None = None,
     extra_env: dict[str, str] | None = None,
     modules: list[str] | None = None,
@@ -39,22 +46,31 @@ def generate_job_script(
 
     The script is written to ``<run_dir>/submit/job.sh`` and made executable.
 
+    When *site* is provided, environment-dependent values (resource_style,
+    modules, extra_sbatch, env, stdout/stderr formats, setup_commands) are
+    taken from the :class:`~simctl.core.site.SiteProfile`.  The legacy
+    keyword arguments are ignored in that case.
+
     Args:
         run_dir: Target run directory.
-        job_config: Job parameters.  Required keys: ``partition``,
-            ``walltime``.  Optional: ``nodes``, ``ntasks``, ``job_name``.
-        exec_line: The execution line produced by the launcher (e.g.
-            ``"srun ./solver input.toml"``).
-        run_id: Run identifier used as the default job name if ``job_name``
-            is not set in *job_config*.
-        extra_sbatch: Additional ``#SBATCH`` lines (without the ``#SBATCH``
-            prefix) to include verbatim.
-        extra_env: Extra environment variables to export before execution.
-        modules: Module names to load (via ``module load``).
-        setup_commands: Shell commands to run before the main execution
-            (e.g. copying files to work/, running preprocessors).
-        post_commands: Shell commands to run after the main execution
-            (e.g. post-processing, visualization).
+        job_config: Job parameters.  Required keys: ``walltime``.
+            Optional: ``partition``, ``nodes``, ``ntasks``, ``job_name``.
+        exec_line: The execution line produced by the launcher.
+        run_id: Run identifier used as the default job name.
+        site: Site profile supplying environment-dependent settings.
+        simulator_name: Simulator name (for per-simulator module lookup
+            in *site*).
+        extra_setup_commands: Additional setup commands to prepend
+            (e.g. venv activation).  These are prepended before
+            site/job_config setup commands.
+        extra_sbatch: (Legacy) Additional ``#SBATCH`` lines.
+        extra_env: (Legacy) Extra environment variables.
+        modules: (Legacy) Module names to load.
+        setup_commands: (Legacy) Shell commands before execution.
+        post_commands: Shell commands after execution.
+        resource_style: (Legacy) ``"standard"`` or ``"rsc"``.
+        stdout_format: (Legacy) Custom stdout format.
+        stderr_format: (Legacy) Custom stderr format.
 
     Returns:
         Path to the generated ``submit/job.sh`` file.
@@ -64,19 +80,37 @@ def generate_job_script(
     """
     _validate_job_config(job_config)
 
-    # Merge modules from job_config and explicit parameter
-    all_modules = list(modules or [])
+    # Resolve settings from SiteProfile or legacy kwargs
+    if site is not None:
+        effective_resource_style = site.resource_style
+        effective_modules = site.modules_for(simulator_name)
+        effective_extra_sbatch = list(site.extra_sbatch)
+        effective_env = dict(site.env)
+        effective_stdout = site.stdout_format
+        effective_stderr = site.stderr_format
+        effective_setup: list[str] = list(extra_setup_commands or [])
+        effective_setup.extend(site.setup_commands)
+    else:
+        effective_resource_style = resource_style
+        effective_modules = list(modules or [])
+        effective_extra_sbatch = list(extra_sbatch or [])
+        effective_env = dict(extra_env or {})
+        effective_stdout = stdout_format
+        effective_stderr = stderr_format
+        effective_setup = list(extra_setup_commands or [])
+        effective_setup.extend(setup_commands or [])
+
+    # Merge modules from job_config
     config_modules = job_config.get("modules", [])
     if isinstance(config_modules, list):
         for m in config_modules:
-            if m not in all_modules:
-                all_modules.append(m)
+            if m not in effective_modules:
+                effective_modules.append(m)
 
-    # Merge setup/post commands from job_config and explicit parameter
-    all_setup = list(setup_commands or [])
+    # Merge setup/post commands from job_config
     config_pre = job_config.get("pre_commands", job_config.get("setup_commands", []))
     if isinstance(config_pre, list):
-        all_setup.extend(config_pre)
+        effective_setup.extend(config_pre)
 
     all_post = list(job_config.get("post_commands", []))
     if post_commands:
@@ -87,14 +121,14 @@ def generate_job_script(
         exec_line=exec_line,
         run_dir=run_dir,
         run_id=run_id,
-        extra_sbatch=extra_sbatch or [],
-        extra_env=extra_env or {},
-        modules=all_modules,
-        setup_commands=all_setup,
+        extra_sbatch=effective_extra_sbatch,
+        extra_env=effective_env,
+        modules=effective_modules,
+        setup_commands=effective_setup,
         post_commands=all_post,
-        resource_style=resource_style,
-        stdout_format=stdout_format,
-        stderr_format=stderr_format,
+        resource_style=effective_resource_style,
+        stdout_format=effective_stdout,
+        stderr_format=effective_stderr,
     )
 
     return write_job_script(run_dir, content)

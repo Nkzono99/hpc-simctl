@@ -22,6 +22,7 @@ from simctl.core.survey import (
     generate_display_name,
     load_survey,
 )
+from simctl.core.site import SiteProfile, load_site_profile
 from simctl.jobgen.generator import generate_job_script
 from simctl.launchers.base import Launcher, load_launchers
 
@@ -326,6 +327,7 @@ def _generate_run(
     project: ProjectConfig,
     adapter: SimulatorAdapter,
     launcher: Launcher,
+    site: SiteProfile,
     existing_ids: set[str],
     params: dict[str, Any],
     *,
@@ -343,6 +345,7 @@ def _generate_run(
         project: Loaded project configuration.
         adapter: Simulator adapter instance.
         launcher: Launcher profile instance.
+        site: Site profile for environment-dependent settings.
         existing_ids: Already-known run IDs (for dedup).
         params: Full parameter snapshot for this run.
         display_name: Human-readable name for the run.
@@ -401,25 +404,44 @@ def _generate_run(
     )
     job_config = _build_job_config(case_data.job)
 
-    # Build setup commands: venv activation + launcher setup
-    setup_cmds: list[str] = []
+    # Build extra setup commands: venv activation
+    extra_setup: list[str] = []
     venv_activate = project.root_dir / ".venv" / "bin" / "activate"
     if venv_activate.exists():
-        setup_cmds.append(f"source {venv_activate}")
-    setup_cmds.extend(launcher.setup_commands)
+        extra_setup.append(f"source {venv_activate}")
+
+    # Merge simulator-level modules from simulators.toml into site profile
+    sim_extra_modules = list(sim_config.get("modules", []))
+    if sim_extra_modules:
+        # Create an augmented site with extra sim modules
+        merged_sim_modules = dict(site.simulator_modules)
+        existing = list(merged_sim_modules.get(case_data.simulator, []))
+        for m in sim_extra_modules:
+            if m not in existing:
+                existing.append(m)
+        merged_sim_modules[case_data.simulator] = existing
+        effective_site = SiteProfile(
+            name=site.name,
+            resource_style=site.resource_style,
+            modules=list(site.modules),
+            simulator_modules=merged_sim_modules,
+            stdout_format=site.stdout_format,
+            stderr_format=site.stderr_format,
+            extra_sbatch=list(site.extra_sbatch),
+            env=dict(site.env),
+            setup_commands=list(site.setup_commands),
+        )
+    else:
+        effective_site = site
 
     generate_job_script(
         run_info.run_dir,
         job_config,
         exec_line,
         run_id=run_info.run_id,
-        resource_style=launcher.resource_style,
-        modules=launcher.modules + list(sim_config.get("modules", [])),
-        extra_sbatch=launcher.extra_sbatch,
-        extra_env=launcher.site_env,
-        setup_commands=setup_cmds,
-        stdout_format=launcher.stdout_format,
-        stderr_format=launcher.stderr_format,
+        site=effective_site,
+        simulator_name=case_data.simulator,
+        extra_setup_commands=extra_setup,
     )
 
     # 6. Build and write manifest
@@ -500,9 +522,10 @@ def _create_single(case_name: str, target_dir: Path) -> None:
         )
         raise typer.Exit(code=1)
 
-    # Get adapter and launcher
+    # Get adapter, launcher, and site profile
     adapter = _get_adapter_instance(project, case_data.simulator)
     launcher = _get_launcher(project, case_data.launcher)
+    site = load_site_profile(project.root_dir)
 
     # Collect existing run IDs for dedup
     runs_dir = project.root_dir / "runs"
@@ -519,6 +542,7 @@ def _create_single(case_name: str, target_dir: Path) -> None:
             project=project,
             adapter=adapter,
             launcher=launcher,
+            site=site,
             existing_ids=existing_ids,
             params=dict(case_data.params),
             display_name=case_data.name,
@@ -551,11 +575,12 @@ def _create_survey(survey_dir: Path) -> None:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1) from exc
 
-    # Get adapter and launcher (prefer survey-level overrides)
+    # Get adapter, launcher, and site profile (prefer survey-level overrides)
     simulator_name = survey_data.simulator or case_data.simulator
     launcher_name = survey_data.launcher or case_data.launcher
     adapter = _get_adapter_instance(project, simulator_name)
     launcher = _get_launcher(project, launcher_name)
+    site = load_site_profile(project.root_dir)
 
     # Expand parameter axes
     combinations = expand_axes(survey_data.axes)
@@ -598,6 +623,7 @@ def _create_survey(survey_dir: Path) -> None:
                 project=project,
                 adapter=adapter,
                 launcher=launcher,
+                site=site,
                 existing_ids=existing_ids,
                 params=merged_params,
                 display_name=display_name,

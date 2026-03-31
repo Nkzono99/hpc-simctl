@@ -55,40 +55,66 @@ class Launcher(ABC):
         """Whether this launcher relies on SLURM_NTASKS for task count."""
         return self._use_slurm_ntasks
 
+    # ------------------------------------------------------------------
+    # Deprecated site_config properties — use SiteProfile instead.
+    # Kept temporarily for backward compatibility.
+    # ------------------------------------------------------------------
+
     @property
     def modules(self) -> list[str]:
-        """Module names to load in job script."""
+        """Module names to load in job script.
+
+        .. deprecated:: Use :class:`~simctl.core.site.SiteProfile` instead.
+        """
         return list(self._site_config.get("modules", []))
 
     @property
     def resource_style(self) -> str:
-        """Resource specification style: "standard" or "rsc" (cmaphor)."""
+        """Resource specification style: "standard" or "rsc".
+
+        .. deprecated:: Use :class:`~simctl.core.site.SiteProfile` instead.
+        """
         return str(self._site_config.get("resource_style", "standard"))
 
     @property
     def stdout_format(self) -> str | None:
-        """Custom stdout file format (e.g. "stdout.%J.log")."""
+        """Custom stdout file format (e.g. "stdout.%J.log").
+
+        .. deprecated:: Use :class:`~simctl.core.site.SiteProfile` instead.
+        """
         return self._site_config.get("stdout")
 
     @property
     def stderr_format(self) -> str | None:
-        """Custom stderr file format (e.g. "stderr.%J.log")."""
+        """Custom stderr file format (e.g. "stderr.%J.log").
+
+        .. deprecated:: Use :class:`~simctl.core.site.SiteProfile` instead.
+        """
         return self._site_config.get("stderr")
 
     @property
     def extra_sbatch(self) -> list[str]:
-        """Additional raw #SBATCH directives."""
+        """Additional raw #SBATCH directives.
+
+        .. deprecated:: Use :class:`~simctl.core.site.SiteProfile` instead.
+        """
         return list(self._site_config.get("extra_sbatch", []))
 
     @property
     def site_env(self) -> dict[str, str]:
-        """Site-specific environment variables."""
+        """Site-specific environment variables.
+
+        .. deprecated:: Use :class:`~simctl.core.site.SiteProfile` instead.
+        """
         raw = self._site_config.get("env", {})
         return {str(k): str(v) for k, v in raw.items()} if raw else {}
 
     @property
     def setup_commands(self) -> list[str]:
-        """Shell commands to run before the main execution in job.sh."""
+        """Shell commands to run before the main execution in job.sh.
+
+        .. deprecated:: Use :class:`~simctl.core.site.SiteProfile` instead.
+        """
         return list(self._site_config.get("setup_commands", []))
 
     @property
