@@ -24,6 +24,13 @@ simctl doctor
 `simctl init` が `.venv/` と `tools/hpc-simctl/` を自動構築し、editable install する。
 Agent は `tools/hpc-simctl/docs/` や `tools/hpc-simctl/SPEC.md` を直接参照できる。
 
+```bash
+# 既存プロジェクトを clone + セットアップ
+uvx --from git+https://github.com/Nkzono99/hpc-simctl.git simctl setup https://github.com/user/my-project.git
+source my-project/.venv/bin/activate
+simctl doctor
+```
+
 ## 技術スタック
 
 - 言語: Python 3.10+
@@ -46,6 +53,7 @@ hpc-simctl/
         __init__.py
         main.py
         init.py         # simctl init / doctor
+        setup.py        # simctl setup (clone + bootstrap)
         create.py       # simctl create / sweep
         submit.py       # simctl run (sbatch投入)
         status.py       # simctl status / sync
@@ -96,6 +104,7 @@ hpc-simctl/
 | コマンド | 説明 |
 |---------|------|
 | `simctl init [SIMS...] -y` | Project 初期化 (対話型がデフォルト) |
+| `simctl setup [URL]` | 既存プロジェクトを clone + 環境セットアップ |
 | `simctl doctor` | 環境検査 |
 | `simctl create CASE` | cwd にケースから run 生成 |
 | `simctl create survey` | cwd の survey.toml から全 run 一括生成 |

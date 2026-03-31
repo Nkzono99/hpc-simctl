@@ -18,6 +18,7 @@ from simctl.cli.list import list_runs
 from simctl.cli.log import log
 from simctl.cli.manage import archive, purge_work
 from simctl.cli.new import new
+from simctl.cli.setup import setup
 from simctl.cli.status import status, sync
 from simctl.cli.submit import run_cmd
 from simctl.cli.update import update
@@ -30,6 +31,7 @@ app = typer.Typer(
 )
 
 app.command("init")(init)
+app.command("setup")(setup)
 app.command("doctor")(doctor)
 app.add_typer(config_app, name="config")
 app.add_typer(knowledge_app, name="knowledge")

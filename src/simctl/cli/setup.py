@@ -1,0 +1,189 @@
+"""CLI command for setting up a cloned simctl project."""
+
+from __future__ import annotations
+
+import subprocess
+import sys
+from pathlib import Path
+from typing import Annotated, Optional
+
+import typer
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
+
+_DEFAULT_SIMCTL_REPO = "https://github.com/Nkzono99/hpc-simctl.git"
+
+
+def setup(
+    url: Annotated[
+        Optional[str],
+        typer.Argument(
+            help="Git URL of the project to clone. "
+            "If omitted, sets up the current directory.",
+        ),
+    ] = None,
+    path: Annotated[
+        Optional[Path],
+        typer.Option(
+            "--path",
+            "-p",
+            help="Destination directory (defaults to repo name or cwd).",
+        ),
+    ] = None,
+    simctl_repo: Annotated[
+        str,
+        typer.Option(
+            "--simctl-repo",
+            help="Git URL for hpc-simctl repository.",
+        ),
+    ] = _DEFAULT_SIMCTL_REPO,
+) -> None:
+    """Set up a simctl project from an existing Git repository.
+
+    Clones the repository (if URL given), then bootstraps the
+    development environment (.venv, tools/, refs/) without touching
+    existing configuration files (TOML, CLAUDE.md, etc.).
+
+    Bootstrap usage (no prior install needed):
+      uvx --from git+https://github.com/Nkzono99/hpc-simctl.git \\
+        simctl setup https://github.com/user/my-project.git
+
+    Set up an already-cloned directory:
+      cd my-project && simctl setup
+    """
+    # 1. Clone if URL is given
+    project_dir = _clone_project(url, path) if url else (path or Path.cwd()).resolve()
+
+    if not project_dir.exists():
+        typer.echo(f"Error: {project_dir} does not exist.", err=True)
+        raise typer.Exit(code=1)
+
+    # Verify it looks like a simctl project
+    simproject = project_dir / "simproject.toml"
+    if not simproject.exists():
+        typer.echo(
+            f"Error: {project_dir} does not contain simproject.toml. "
+            "Is this a simctl project?",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    typer.echo(f"Setting up project in {project_dir}")
+
+    # 2. Read simulator names from simulators.toml
+    sim_names = _read_simulator_names(project_dir)
+
+    created: list[str] = []
+    skipped: list[str] = []
+
+    # 3. Bootstrap .venv + tools/ + editable install
+    from simctl.cli.init import _bootstrap_environment
+
+    _bootstrap_environment(project_dir, sim_names, simctl_repo, created, skipped)
+
+    # 4. Clone refs/ (doc repos)
+    if sim_names:
+        from simctl.cli.init import _clone_doc_repos
+
+        refs_created, refs_skipped = _clone_doc_repos(project_dir, sim_names)
+        created.extend(refs_created)
+        skipped.extend(refs_skipped)
+
+    # 5. Ensure .simctl/ skeleton exists
+    _ensure_simctl_skeleton(project_dir, created)
+
+    # Print results
+    typer.echo(f"\nProject '{project_dir.name}' is ready.")
+    if created:
+        typer.echo("  Set up:")
+        for item in created:
+            typer.echo(f"    {item}")
+    if skipped:
+        typer.echo("  Skipped (already exist):")
+        for item in skipped:
+            typer.echo(f"    {item}")
+
+    if sys.platform == "win32":
+        activate_cmd = r".venv\Scripts\activate"
+    else:
+        activate_cmd = "source .venv/bin/activate"
+    typer.echo(f"\n  Next: cd {project_dir.name} && {activate_cmd}")
+    typer.echo("  Then: simctl doctor")
+
+
+def _clone_project(url: str, dest: Path | None) -> Path:
+    """Clone a project repository.
+
+    Args:
+        url: Git URL to clone.
+        dest: Destination path. If None, uses repo name.
+
+    Returns:
+        Resolved path to the cloned directory.
+    """
+    if dest is None:
+        # Extract repo name from URL
+        name = url.rsplit("/", 1)[-1]
+        if name.endswith(".git"):
+            name = name[:-4]
+        dest = Path.cwd() / name
+
+    dest = dest.resolve()
+    if dest.exists():
+        typer.echo(f"Error: {dest} already exists.", err=True)
+        raise typer.Exit(code=1)
+
+    typer.echo(f"Cloning {url} ...")
+    result = subprocess.run(
+        ["git", "clone", url, str(dest)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    if result.returncode != 0:
+        typer.echo(
+            f"Error: git clone failed: {(result.stderr or '').strip()[:300]}",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    typer.echo(f"Cloned to {dest}")
+    return dest
+
+
+def _read_simulator_names(project_dir: Path) -> list[str]:
+    """Read simulator names from simulators.toml."""
+    sim_file = project_dir / "simulators.toml"
+    if not sim_file.exists():
+        return []
+
+    with open(sim_file, "rb") as f:
+        data = tomllib.load(f)
+
+    sims = data.get("simulators", {})
+    return [name for name, cfg in sims.items() if isinstance(cfg, dict)]
+
+
+def _ensure_simctl_skeleton(project_dir: Path, created: list[str]) -> None:
+    """Create .simctl/ skeleton directories if they don't exist."""
+    simctl_dir = project_dir / ".simctl"
+    for subdir in ("insights",):
+        d = simctl_dir / subdir
+        if not d.exists():
+            d.mkdir(parents=True, exist_ok=True)
+            created.append(f".simctl/{subdir}/")
+
+    for filename, default_content in (
+        ("facts.toml", "# Structured facts\nfacts = []\n"),
+        ("links.toml", "# Project links\n[projects]\n\n[shared]\n"),
+    ):
+        f = simctl_dir / filename
+        if not f.exists():
+            simctl_dir.mkdir(parents=True, exist_ok=True)
+            f.write_text(default_content, encoding="utf-8")
+            created.append(f".simctl/{filename}")
