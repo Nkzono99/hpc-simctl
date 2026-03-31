@@ -1011,6 +1011,7 @@ def init(
         created.append(f"{_VSCODE_DIR}/{_VSCODE_SETTINGS}")
 
     # git init
+    fresh_git = False
     if (project_dir / ".git").exists():
         skipped.append("git init")
     else:
@@ -1025,11 +1026,36 @@ def init(
         )
         if result.returncode == 0:
             created.append("git init")
+            fresh_git = True
         else:
             typer.echo(f"  Warning: git init failed: {(result.stderr or '').strip()}")
 
     # Bootstrap: .venv + tools/hpc-simctl + editable install
     _bootstrap_environment(project_dir, sim_names, simctl_repo, created, skipped)
+
+    # Initial commit (only for freshly created repos)
+    if fresh_git:
+        subprocess.run(
+            ["git", "add", "."],
+            cwd=project_dir,
+            capture_output=True,
+            check=False,
+        )
+        result = subprocess.run(
+            ["git", "commit", "-m", "Initial commit"],
+            cwd=project_dir,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+        if result.returncode == 0:
+            created.append("git commit (Initial commit)")
+        else:
+            typer.echo(
+                f"  Warning: initial commit failed: {(result.stderr or '').strip()}"
+            )
 
     # Print results
     typer.echo(f"Initialized project '{project_name}' in {project_dir}")
