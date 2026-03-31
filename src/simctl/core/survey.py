@@ -91,7 +91,12 @@ def load_survey(survey_dir: Path) -> SurveyData:
 
     survey_id = survey_section.get("id")
     if not isinstance(survey_id, str) or not survey_id:
-        raise SurveyConfigError(f"Missing or empty 'survey.id' in {survey_file}")
+        # Auto-generate survey id from date and directory name
+        from datetime import datetime, timezone
+
+        date_str = datetime.now(tz=timezone.utc).strftime("%Y%m%d")
+        dir_slug = survey_dir.name.replace(" ", "-")
+        survey_id = f"S{date_str}-{dir_slug}"
 
     name = str(survey_section.get("name", ""))
     base_case = survey_section.get("base_case")

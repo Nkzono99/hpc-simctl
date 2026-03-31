@@ -328,6 +328,7 @@ class EmseAdapter(SimulatorAdapter):
 
         tmgrid = config.get("tmgrid", {})
         plasma = config.get("plasma", {})
+        esorem = config.get("esorem", {})
         mpi_sec = config.get(DOMAIN_DECOMP_SECTION, {})
         species_list = config.get("species", [])
 
@@ -338,7 +339,10 @@ class EmseAdapter(SimulatorAdapter):
         cv = plasma.get("cv", 1.0)
 
         # CFL condition: dt * cv < dx (dx = 1.0 in normalized units)
-        if dt is not None and cv is not None:
+        # Only applies to electromagnetic mode (emflag=1); in electrostatic
+        # mode (emflag=0) cv is a normalization constant, not a wave speed.
+        emflag = esorem.get("emflag", 1)
+        if dt is not None and cv is not None and emflag != 0:
             cfl_ratio = float(dt) * float(cv)
             if cfl_ratio >= 1.0:
                 issues.append(ValidationIssue(

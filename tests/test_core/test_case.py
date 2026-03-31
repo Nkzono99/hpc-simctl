@@ -88,5 +88,5 @@ class TestResolveCase:
     def test_resolve_dir_without_case_toml(self, tmp_path: Path) -> None:
         case_dir = tmp_path / "cases" / "empty_case"
         case_dir.mkdir(parents=True)
-        with pytest.raises(CaseNotFoundError, match=r"case\.toml not found"):
+        with pytest.raises(CaseNotFoundError, match=r"not found"):
             resolve_case("empty_case", tmp_path)

@@ -246,10 +246,13 @@ def load_case(case_dir: Path) -> CaseData:
 def resolve_case(case_name: str, project_dir: Path) -> Path:
     """Resolve a case name to its directory path.
 
-    Looks for ``cases/<case_name>/case.toml`` under the project root.
+    Resolution order:
+    1. ``cases/<case_name>/case.toml`` (exact match, supports ``sim/name``)
+    2. ``cases/<campaign_simulator>/<case_name>/case.toml``
+    3. Scan all ``cases/<sim>/<case_name>/case.toml`` subdirectories
 
     Args:
-        case_name: Logical name of the case.
+        case_name: Logical name of the case (e.g. ``"flat"`` or ``"emses/flat"``).
         project_dir: Root of the simctl project.
 
     Returns:
@@ -258,9 +261,40 @@ def resolve_case(case_name: str, project_dir: Path) -> Path:
     Raises:
         CaseNotFoundError: If the case directory or case.toml is not found.
     """
-    case_dir = project_dir.resolve() / "cases" / case_name
-    if not case_dir.is_dir():
-        raise CaseNotFoundError(f"Case directory not found: {case_dir}")
-    if not (case_dir / _CASE_FILE).exists():
-        raise CaseNotFoundError(f"{_CASE_FILE} not found in {case_dir}")
-    return case_dir
+    cases_root = project_dir.resolve() / "cases"
+
+    # 1. Direct match: cases/<case_name>/case.toml
+    case_dir = cases_root / case_name
+    if case_dir.is_dir() and (case_dir / _CASE_FILE).exists():
+        return case_dir
+
+    # 2. Campaign simulator fallback: cases/<campaign.simulator>/<case_name>
+    from simctl.core.campaign import load_campaign
+
+    campaign = load_campaign(project_dir)
+    if campaign and campaign.simulator:
+        case_dir = cases_root / campaign.simulator / case_name
+        if case_dir.is_dir() and (case_dir / _CASE_FILE).exists():
+            return case_dir
+
+    # 3. Scan all simulator subdirectories
+    if cases_root.is_dir():
+        matches: list[Path] = []
+        for sim_dir in sorted(cases_root.iterdir()):
+            candidate = sim_dir / case_name
+            if candidate.is_dir() and (candidate / _CASE_FILE).exists():
+                matches.append(candidate)
+        if len(matches) == 1:
+            return matches[0]
+        if len(matches) > 1:
+            paths = ", ".join(str(m.relative_to(project_dir)) for m in matches)
+            raise CaseNotFoundError(
+                f"Ambiguous case name '{case_name}': found in multiple "
+                f"simulators ({paths}). Use '<simulator>/{case_name}' to "
+                f"disambiguate."
+            )
+
+    raise CaseNotFoundError(
+        f"Case '{case_name}' not found under {cases_root}. "
+        f"Tried: cases/{case_name}/, cases/<sim>/{case_name}/."
+    )

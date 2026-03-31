@@ -89,15 +89,53 @@ def new(
 
     case_dir.mkdir(parents=True)
 
+    # Resolve default launcher name from project config
+    default_launcher = "srun"
+    try:
+        project_root = find_project_root(target_dir)
+        if project_root:
+            from simctl.core.project import load_project
+
+            project = load_project(project_root)
+            launcher_names = list(project.launchers.keys())
+            if launcher_names:
+                default_launcher = launcher_names[0]
+    except Exception:
+        pass  # Fall back to "srun"
+
+    # Look for rich template files in refs/<repo>/
+    ref_templates: dict[str, Path] = {}
+    try:
+        project_root = find_project_root(target_dir)
+        if project_root and hasattr(adapter_cls, "doc_repos"):
+            refs_dir = project_root / "refs"
+            for _url, repo_name in adapter_cls.doc_repos():
+                repo_dir = refs_dir / repo_name
+                if not repo_dir.is_dir():
+                    continue
+                # Look for template input files at repo root
+                for candidate_name in ("plasma.toml", "beach.toml"):
+                    candidate = repo_dir / candidate_name
+                    if candidate.is_file():
+                        ref_templates[candidate_name] = candidate
+    except Exception:
+        pass
+
     # Write template files
     templates = adapter_cls.case_template()
     created: list[str] = []
 
     for filename, content in templates.items():
         filepath = case_dir / filename
-        # Fill in case name in case.toml
+        # Fill in case name and launcher in case.toml
         if filename == "case.toml":
             content = content.replace('name = ""', f'name = "{case_name}"', 1)
+            content = content.replace(
+                'launcher = "default"', f'launcher = "{default_launcher}"', 1
+            )
+        # Override with rich template from refs/ if available
+        if filename in ref_templates:
+            content = ref_templates[filename].read_text(encoding="utf-8")
         filepath.write_text(content, encoding="utf-8")
         created.append(filename)
 
