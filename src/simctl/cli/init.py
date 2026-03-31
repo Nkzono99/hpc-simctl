@@ -859,7 +859,7 @@ def init(
       simctl init emses beach
 
     Bootstrap usage (no prior install needed):
-      uvx --from git+https://github.com/Nkzono99/hpc-simctl.git simctl init
+      uvx --from hpc-simctl simctl init
     """
     interactive = not yes
     project_dir = (path or Path.cwd()).resolve()

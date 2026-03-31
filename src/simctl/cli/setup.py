@@ -45,8 +45,7 @@ def setup(
     existing configuration files (TOML, CLAUDE.md, etc.).
 
     Bootstrap usage (no prior install needed):
-      uvx --from git+https://github.com/Nkzono99/hpc-simctl.git \\
-        simctl setup https://github.com/user/my-project.git
+      uvx --from hpc-simctl simctl setup https://github.com/user/my-project.git
 
     Set up an already-cloned directory:
       cd my-project && simctl setup

@@ -9,7 +9,7 @@ disable-model-invocation: true
 ## 方法 1: ブートストラップ (新規プロジェクト)
 
 ```bash
-uvx --from git+https://github.com/Nkzono99/hpc-simctl.git simctl init
+uvx --from hpc-simctl simctl init
 source .venv/bin/activate
 simctl doctor
 ```
