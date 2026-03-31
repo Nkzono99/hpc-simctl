@@ -82,17 +82,17 @@ class TestLoadSiteProfile:
         """site.toml is the primary source."""
         site_toml = tmp_path / "site.toml"
         site_toml.write_text(
-            '[site]\n'
+            "[site]\n"
             'name = "testsite"\n'
             'resource_style = "rsc"\n'
             'modules = ["mod/a", "mod/b"]\n'
             'stdout = "stdout.%J.log"\n'
             'stderr = "stderr.%J.log"\n'
-            '\n'
-            '[site.env]\n'
+            "\n"
+            "[site.env]\n"
             'FOO = "bar"\n'
-            '\n'
-            '[site.simulators.emses]\n'
+            "\n"
+            "[site.simulators.emses]\n"
             'modules = ["hdf5/1.12"]\n'
         )
         # Also create simproject.toml so it looks like a project
@@ -111,9 +111,9 @@ class TestLoadSiteProfile:
         """Legacy: extract site config from launchers.toml if no site.toml."""
         launchers_toml = tmp_path / "launchers.toml"
         launchers_toml.write_text(
-            '[launchers.srun]\n'
+            "[launchers.srun]\n"
             'type = "srun"\n'
-            'use_slurm_ntasks = true\n'
+            "use_slurm_ntasks = true\n"
             'resource_style = "rsc"\n'
             'modules = ["intel/2023.2"]\n'
             'stdout = "stdout.%J.log"\n'
@@ -129,9 +129,7 @@ class TestLoadSiteProfile:
         """No site.toml and no site keys in launchers.toml → STANDARD_SITE."""
         launchers_toml = tmp_path / "launchers.toml"
         launchers_toml.write_text(
-            '[launchers.srun]\n'
-            'type = "srun"\n'
-            'use_slurm_ntasks = true\n'
+            '[launchers.srun]\ntype = "srun"\nuse_slurm_ntasks = true\n'
         )
 
         profile = load_site_profile(tmp_path)
@@ -147,14 +145,10 @@ class TestLoadSiteProfile:
     def test_site_toml_takes_priority(self, tmp_path: Path) -> None:
         """site.toml wins over launchers.toml."""
         (tmp_path / "site.toml").write_text(
-            '[site]\n'
-            'name = "from_site_toml"\n'
-            'resource_style = "rsc"\n'
+            '[site]\nname = "from_site_toml"\nresource_style = "rsc"\n'
         )
         (tmp_path / "launchers.toml").write_text(
-            '[launchers.srun]\n'
-            'type = "srun"\n'
-            'resource_style = "standard"\n'
+            '[launchers.srun]\ntype = "srun"\nresource_style = "standard"\n'
         )
 
         profile = load_site_profile(tmp_path)
@@ -164,7 +158,7 @@ class TestLoadSiteProfile:
     def test_setup_commands(self, tmp_path: Path) -> None:
         """setup_commands are loaded from site.toml."""
         (tmp_path / "site.toml").write_text(
-            '[site]\n'
+            "[site]\n"
             'name = "test"\n'
             'setup_commands = ["ulimit -s unlimited", "export LC_ALL=C"]\n'
         )

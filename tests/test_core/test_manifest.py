@@ -107,9 +107,9 @@ class TestUpdateManifest:
         data = ManifestData(run={"id": "R1"})
         write_manifest(tmp_path, data)
 
-        updated = update_manifest(tmp_path, {
-            "job": {"job_id": "12345", "scheduler": "slurm"}
-        })
+        updated = update_manifest(
+            tmp_path, {"job": {"job_id": "12345", "scheduler": "slurm"}}
+        )
         assert updated.job["job_id"] == "12345"
         assert updated.run["id"] == "R1"
 

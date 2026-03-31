@@ -197,9 +197,7 @@ def sync(
                 if att.get("job_id") == job_id:
                     att["terminal_state"] = job_status.run_state.value
                     att["slurm_state"] = job_status.slurm_state
-                    att["finished_at"] = datetime.now(
-                        tz=timezone.utc
-                    ).isoformat()
+                    att["finished_at"] = datetime.now(tz=timezone.utc).isoformat()
                     if job_status.failure_reason:
                         att["failure_reason"] = job_status.failure_reason
                     if job_status.exit_code:
@@ -208,9 +206,7 @@ def sync(
             import contextlib
 
             with contextlib.suppress(SimctlError):
-                update_manifest(
-                    run_dir, {"job": {"attempts": attempts}}
-                )
+                update_manifest(run_dir, {"job": {"attempts": attempts}})
 
     msg = f"{run_id}: {current_status} -> {job_status.run_state.value}"
     if job_status.failure_reason:

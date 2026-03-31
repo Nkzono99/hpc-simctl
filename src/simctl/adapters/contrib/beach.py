@@ -296,12 +296,14 @@ class BeachAdapter(SimulatorAdapter):
         ]
         for param_name, value in positives:
             if value is not None and float(value) <= 0:
-                issues.append(ValidationIssue(
-                    severity="error",
-                    message=f"{param_name} must be positive, got {value}.",
-                    parameter=param_name,
-                    constraint_name="positive_required",
-                ))
+                issues.append(
+                    ValidationIssue(
+                        severity="error",
+                        message=f"{param_name} must be positive, got {value}.",
+                        parameter=param_name,
+                        constraint_name="positive_required",
+                    )
+                )
 
         # Timestep stability: dt * omega_pe should be reasonable
         # omega_pe = sqrt(n_e * e^2 / (m_e * eps0))
@@ -311,52 +313,50 @@ class BeachAdapter(SimulatorAdapter):
             e_charge = 1.602176634e-19
             m_electron = 9.10938370e-31
             eps0 = 8.854187817e-12
-            omega_pe = math.sqrt(
-                float(e_density) * e_charge**2 / (m_electron * eps0)
-            )
+            omega_pe = math.sqrt(float(e_density) * e_charge**2 / (m_electron * eps0))
             dt_omega = float(dt) * omega_pe
             if dt_omega > 0.5:
-                issues.append(ValidationIssue(
-                    severity="warning",
-                    message=(
-                        f"dt * omega_pe = {dt_omega:.3f} > 0.5. "
-                        f"Time step may be too large for plasma "
-                        f"timescale. Consider dt < "
-                        f"{0.5 / omega_pe:.2e} s."
-                    ),
-                    parameter="sim.dt",
-                    constraint_name="timestep_stability",
-                    details={
-                        "dt": float(dt),
-                        "omega_pe": omega_pe,
-                        "dt_omega_pe": dt_omega,
-                        "recommended_max_dt": 0.5 / omega_pe,
-                    },
-                ))
+                issues.append(
+                    ValidationIssue(
+                        severity="warning",
+                        message=(
+                            f"dt * omega_pe = {dt_omega:.3f} > 0.5. "
+                            f"Time step may be too large for plasma "
+                            f"timescale. Consider dt < "
+                            f"{0.5 / omega_pe:.2e} s."
+                        ),
+                        parameter="sim.dt",
+                        constraint_name="timestep_stability",
+                        details={
+                            "dt": float(dt),
+                            "omega_pe": omega_pe,
+                            "dt_omega_pe": dt_omega,
+                            "recommended_max_dt": 0.5 / omega_pe,
+                        },
+                    )
+                )
 
         # Charge neutrality
-        if (
-            e_density is not None
-            and i_density is not None
-            and float(e_density) > 0
-        ):
+        if e_density is not None and i_density is not None and float(e_density) > 0:
             ratio = float(i_density) / float(e_density)
             if abs(ratio - 1.0) > 0.1:
-                issues.append(ValidationIssue(
-                    severity="warning",
-                    message=(
-                        f"Charge neutrality: ion/electron density "
-                        f"ratio = {ratio:.3f}. Significant imbalance "
-                        f"may be intentional but verify."
-                    ),
-                    parameter="environment.ion_density",
-                    constraint_name="charge_neutrality",
-                    details={
-                        "electron_density": float(e_density),
-                        "ion_density": float(i_density),
-                        "ratio": ratio,
-                    },
-                ))
+                issues.append(
+                    ValidationIssue(
+                        severity="warning",
+                        message=(
+                            f"Charge neutrality: ion/electron density "
+                            f"ratio = {ratio:.3f}. Significant imbalance "
+                            f"may be intentional but verify."
+                        ),
+                        parameter="environment.ion_density",
+                        constraint_name="charge_neutrality",
+                        details={
+                            "electron_density": float(e_density),
+                            "ion_density": float(i_density),
+                            "ratio": ratio,
+                        },
+                    )
+                )
 
         return issues
 
@@ -485,7 +485,10 @@ OMP_PLACES=cores
             case_dir = Path(case_dir_str)
             for candidate_name in ("beach.toml", "beach_template.toml"):
                 # Look in input/ subdirectory first, then case root for compat
-                for candidate in (case_dir / "input" / candidate_name, case_dir / candidate_name):
+                for candidate in (
+                    case_dir / "input" / candidate_name,
+                    case_dir / candidate_name,
+                ):
                     if candidate.is_file():
                         with open(candidate, "rb") as f:
                             template_config = tomllib.load(f)

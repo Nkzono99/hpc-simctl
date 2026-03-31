@@ -51,17 +51,16 @@ def save(
     insight_type: Annotated[
         str,
         typer.Option(
-            "--type", "-t",
-            help=(
-                "Insight type: constraint, result, analysis, "
-                "or dependency."
-            ),
+            "--type",
+            "-t",
+            help=("Insight type: constraint, result, analysis, or dependency."),
         ),
     ] = "result",
     simulator: Annotated[
         str,
         typer.Option(
-            "--simulator", "-s",
+            "--simulator",
+            "-s",
             help="Simulator this insight applies to.",
         ),
     ] = "",
@@ -75,9 +74,9 @@ def save(
     message: Annotated[
         Optional[str],
         typer.Option(
-            "--message", "-m",
-            help="Insight content (markdown). "
-            "If omitted, reads from stdin.",
+            "--message",
+            "-m",
+            help="Insight content (markdown). If omitted, reads from stdin.",
         ),
     ] = None,
 ) -> None:
@@ -104,11 +103,7 @@ def save(
 
         message = sys.stdin.read()
 
-    tag_list = (
-        [t.strip() for t in tags.split(",") if t.strip()]
-        if tags
-        else []
-    )
+    tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
 
     insight = Insight(
         name=name,
@@ -129,7 +124,8 @@ def list_cmd(
     simulator: Annotated[
         Optional[str],
         typer.Option(
-            "--simulator", "-s",
+            "--simulator",
+            "-s",
             help="Filter by simulator.",
         ),
     ] = None,
@@ -163,14 +159,8 @@ def list_cmd(
     for ins in insights:
         type_badge = f"[{ins.type}]"
         sim_badge = f"({ins.simulator})" if ins.simulator else ""
-        tags_str = (
-            " " + ", ".join(f"#{t}" for t in ins.tags)
-            if ins.tags
-            else ""
-        )
-        typer.echo(
-            f"  {ins.name} {type_badge} {sim_badge}{tags_str}"
-        )
+        tags_str = " " + ", ".join(f"#{t}" for t in ins.tags) if ins.tags else ""
+        typer.echo(f"  {ins.name} {type_badge} {sim_badge}{tags_str}")
 
 
 @knowledge_app.command("show")
@@ -201,7 +191,8 @@ def sync(
     simulator: Annotated[
         Optional[str],
         typer.Option(
-            "--simulator", "-s",
+            "--simulator",
+            "-s",
             help="Sync only insights for this simulator.",
         ),
     ] = None,
@@ -219,24 +210,16 @@ def sync(
     links = load_links(root)
 
     if not links:
-        typer.echo(
-            "No links configured. "
-            "Create .simctl/links.toml to link projects."
-        )
+        typer.echo("No links configured. Create .simctl/links.toml to link projects.")
         return
 
     typer.echo("Syncing from linked projects...")
     for link in links:
         exists = link.path.is_dir()
         status = "" if exists else " (not found)"
-        typer.echo(
-            f"  [{link.link_type}] {link.name}: "
-            f"{link.path}{status}"
-        )
+        typer.echo(f"  [{link.link_type}] {link.name}: {link.path}{status}")
 
-    imported, skipped = sync_insights(
-        root, simulator=simulator or ""
-    )
+    imported, skipped = sync_insights(root, simulator=simulator or "")
     typer.echo(f"\nImported: {imported}, Skipped (exists): {skipped}")
 
 
@@ -252,18 +235,14 @@ def links_cmd() -> None:
 
     if not links:
         typer.echo(
-            "No links configured. "
-            "Use 'simctl knowledge link <path_or_url>' to add one."
+            "No links configured. Use 'simctl knowledge link <path_or_url>' to add one."
         )
         return
 
     for link in links:
         exists = link.path.is_dir()
         status = "OK" if exists else "NOT FOUND"
-        typer.echo(
-            f"  [{link.link_type}] {link.name}: "
-            f"{link.path} ({status})"
-        )
+        typer.echo(f"  [{link.link_type}] {link.name}: {link.path} ({status})")
 
 
 @knowledge_app.command("link")
@@ -277,7 +256,8 @@ def link_cmd(
     name: Annotated[
         Optional[str],
         typer.Option(
-            "--name", "-n",
+            "--name",
+            "-n",
             help="Link name (auto-detected from path/URL).",
         ),
     ] = None,
@@ -295,15 +275,15 @@ def link_cmd(
     root = _find_root()
     try:
         link_name, link_type, resolved = add_link(
-            root, target, name=name or "",
+            root,
+            target,
+            name=name or "",
         )
     except RuntimeError as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=1) from None
 
-    typer.echo(
-        f"Linked [{link_type}] {link_name}: {resolved}"
-    )
+    typer.echo(f"Linked [{link_type}] {link_name}: {resolved}")
 
 
 @knowledge_app.command("unlink")
@@ -341,14 +321,16 @@ def add_fact(
     fact_type: Annotated[
         str,
         typer.Option(
-            "--type", "-t",
+            "--type",
+            "-t",
             help="Fact type: observation, constraint, dependency, policy, hypothesis.",
         ),
     ] = "observation",
     simulator: Annotated[
         str,
         typer.Option(
-            "--simulator", "-s",
+            "--simulator",
+            "-s",
             help="Simulator this fact applies to.",
         ),
     ] = "",
@@ -404,7 +386,8 @@ def add_fact(
     confidence: Annotated[
         str,
         typer.Option(
-            "--confidence", "-c",
+            "--confidence",
+            "-c",
             help="Confidence level: high, medium, low.",
         ),
     ] = "medium",
@@ -438,8 +421,7 @@ def add_fact(
     """
     if confidence not in ("high", "medium", "low"):
         typer.echo(
-            f"Invalid confidence '{confidence}'. "
-            f"Must be: high, medium, low.",
+            f"Invalid confidence '{confidence}'. Must be: high, medium, low.",
             err=True,
         )
         raise typer.Exit(code=1)
@@ -457,11 +439,7 @@ def add_fact(
         typer.echo(f"Error: superseded fact not found: {supersedes}", err=True)
         raise typer.Exit(code=1)
 
-    tag_list = (
-        [t.strip() for t in tags.split(",") if t.strip()]
-        if tags
-        else []
-    )
+    tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
 
     from datetime import datetime, timezone
 
@@ -508,7 +486,8 @@ def facts_cmd(
     confidence: Annotated[
         Optional[str],
         typer.Option(
-            "--confidence", "-c",
+            "--confidence",
+            "-c",
             help="Minimum confidence: high, medium, low.",
         ),
     ] = None,

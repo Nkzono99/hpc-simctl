@@ -134,7 +134,8 @@ class TestSbatchSubmit:
 
         calls, runner = _make_runner(stdout="Submitted batch job 11111\n")
         sbatch_submit(
-            job_sh, work_dir,
+            job_sh,
+            work_dir,
             afterok="54321",
             extra_args=["--partition=debug"],
             runner=runner,

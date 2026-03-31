@@ -115,9 +115,7 @@ class TestGenerateJobScript:
         assert "#SBATCH --mem=8G" in content
         assert "#SBATCH --exclusive" in content
 
-    def test_module_loads(
-        self, run_dir: Path, job_config: dict[str, object]
-    ) -> None:
+    def test_module_loads(self, run_dir: Path, job_config: dict[str, object]) -> None:
         path = generate_job_script(
             run_dir,
             job_config,
@@ -127,9 +125,7 @@ class TestGenerateJobScript:
         content = path.read_text()
         assert "module load gcc/12.0 openmpi/4.1" in content
 
-    def test_extra_env_vars(
-        self, run_dir: Path, job_config: dict[str, object]
-    ) -> None:
+    def test_extra_env_vars(self, run_dir: Path, job_config: dict[str, object]) -> None:
         path = generate_job_script(
             run_dir,
             job_config,
@@ -139,16 +135,12 @@ class TestGenerateJobScript:
         content = path.read_text()
         assert "export OMP_NUM_THREADS=4" in content
 
-    def test_cd_to_work_dir(
-        self, run_dir: Path, job_config: dict[str, object]
-    ) -> None:
+    def test_cd_to_work_dir(self, run_dir: Path, job_config: dict[str, object]) -> None:
         path = generate_job_script(run_dir, job_config, "srun ./solver")
         content = path.read_text()
         assert f"cd {run_dir / 'work'}" in content
 
-    def test_executable_bit(
-        self, run_dir: Path, job_config: dict[str, object]
-    ) -> None:
+    def test_executable_bit(self, run_dir: Path, job_config: dict[str, object]) -> None:
         path = generate_job_script(run_dir, job_config, "srun ./solver")
         assert path.stat().st_mode & 0o100  # owner execute bit
 
@@ -179,9 +171,7 @@ class TestGenerateJobScript:
         assert path.parent.is_dir()
         assert path.parent.name == "submit"
 
-    def test_setup_commands(
-        self, run_dir: Path, job_config: dict[str, object]
-    ) -> None:
+    def test_setup_commands(self, run_dir: Path, job_config: dict[str, object]) -> None:
         """Setup commands appear before the exec line."""
         path = generate_job_script(
             run_dir,
@@ -197,9 +187,7 @@ class TestGenerateJobScript:
         exec_idx = content.index("srun ./solver")
         assert setup_idx < exec_idx
 
-    def test_post_commands(
-        self, run_dir: Path, job_config: dict[str, object]
-    ) -> None:
+    def test_post_commands(self, run_dir: Path, job_config: dict[str, object]) -> None:
         """Post commands appear after the main command, without exec prefix."""
         path = generate_job_script(
             run_dir,
@@ -252,7 +240,9 @@ class TestRscModeJobScript:
         self, run_dir: Path, rsc_job_config: dict[str, object]
     ) -> None:
         path = generate_job_script(
-            run_dir, rsc_job_config, "srun ./mpiemses3D plasma.inp",
+            run_dir,
+            rsc_job_config,
+            "srun ./mpiemses3D plasma.inp",
             resource_style="rsc",
         )
         content = path.read_text()
@@ -263,7 +253,9 @@ class TestRscModeJobScript:
         self, run_dir: Path, rsc_job_config: dict[str, object]
     ) -> None:
         path = generate_job_script(
-            run_dir, rsc_job_config, "srun ./solver",
+            run_dir,
+            rsc_job_config,
+            "srun ./solver",
             resource_style="rsc",
         )
         content = path.read_text()
@@ -279,7 +271,9 @@ class TestRscModeJobScript:
             "walltime": "24:00:00",
         }
         path = generate_job_script(
-            run_dir, config, "srun ./solver",
+            run_dir,
+            config,
+            "srun ./solver",
             resource_style="rsc",
         )
         content = path.read_text()
@@ -295,7 +289,9 @@ class TestRscModeJobScript:
             "walltime": "48:00:00",
         }
         path = generate_job_script(
-            run_dir, config, "srun ./solver",
+            run_dir,
+            config,
+            "srun ./solver",
             resource_style="rsc",
         )
         content = path.read_text()
@@ -312,7 +308,10 @@ class TestRscModeJobScript:
             "walltime": "24:00:00",
         }
         path = generate_job_script(
-            run_dir, config, "srun ./solver", resource_style="rsc",
+            run_dir,
+            config,
+            "srun ./solver",
+            resource_style="rsc",
         )
         content = path.read_text()
         assert "#SBATCH --rsc p=4:t=8:c=8:m=8G" in content
@@ -328,7 +327,10 @@ class TestRscModeJobScript:
             "walltime": "24:00:00",
         }
         path = generate_job_script(
-            run_dir, config, "srun ./solver", resource_style="rsc",
+            run_dir,
+            config,
+            "srun ./solver",
+            resource_style="rsc",
         )
         content = path.read_text()
         assert "#SBATCH --rsc p=4:t=1:c=1:g=2" in content
@@ -345,7 +347,10 @@ class TestRscModeJobScript:
             "walltime": "48:00:00",
         }
         path = generate_job_script(
-            run_dir, config, "srun ./solver", resource_style="rsc",
+            run_dir,
+            config,
+            "srun ./solver",
+            resource_style="rsc",
         )
         content = path.read_text()
         assert "#SBATCH --rsc p=8:t=4:c=4:m=16G:g=1" in content
@@ -355,7 +360,10 @@ class TestRscModeJobScript:
     ) -> None:
         """Without memory/gpus, --rsc stays p:t:c only."""
         path = generate_job_script(
-            run_dir, rsc_job_config, "srun ./solver", resource_style="rsc",
+            run_dir,
+            rsc_job_config,
+            "srun ./solver",
+            resource_style="rsc",
         )
         content = path.read_text()
         assert "#SBATCH --rsc p=800:t=1:c=1\n" in content
@@ -382,9 +390,7 @@ class TestRscModeJobScript:
 class TestPrePostCommands:
     """Tests for setup_commands and post_commands."""
 
-    def test_setup_commands(
-        self, run_dir: Path, job_config: dict[str, object]
-    ) -> None:
+    def test_setup_commands(self, run_dir: Path, job_config: dict[str, object]) -> None:
         path = generate_job_script(
             run_dir,
             job_config,
@@ -399,9 +405,7 @@ class TestPrePostCommands:
         exec_idx = content.index("srun ./solver")
         assert setup_idx < exec_idx
 
-    def test_post_commands(
-        self, run_dir: Path, job_config: dict[str, object]
-    ) -> None:
+    def test_post_commands(self, run_dir: Path, job_config: dict[str, object]) -> None:
         path = generate_job_script(
             run_dir,
             job_config,
@@ -435,7 +439,7 @@ class TestPrePostCommands:
             "ntasks": 4,
             "walltime": "00:10:00",
             "pre_commands": [
-                'if [ -f ./plasma.preinp ]; then\n    preinp\nfi',
+                "if [ -f ./plasma.preinp ]; then\n    preinp\nfi",
             ],
         }
         path = generate_job_script(run_dir, config, "srun ./solver")
@@ -457,7 +461,7 @@ class TestPrePostCommands:
                 "fftw/3.3.10_intel-2022.3-impi",
             ],
             "pre_commands": [
-                'if [ -f ./plasma.preinp ]; then\n    preinp\nfi',
+                "if [ -f ./plasma.preinp ]; then\n    preinp\nfi",
                 "export EMSES_DEBUG=no",
                 "rm -f *_0000.h5",
             ],

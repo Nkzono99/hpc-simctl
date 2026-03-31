@@ -98,9 +98,7 @@ def update(
 
     pip_exe = _find_venv_pip()
     if pip_exe is None:
-        typer.echo(
-            "No .venv found. Run 'simctl init' first or create .venv manually."
-        )
+        typer.echo("No .venv found. Run 'simctl init' first or create .venv manually.")
         raise typer.Exit(code=1)
 
     typer.echo(f"Upgrading packages for: {', '.join(simulators)}")

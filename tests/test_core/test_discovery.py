@@ -17,9 +17,7 @@ from simctl.core.discovery import (
 from simctl.core.exceptions import DuplicateRunIdError, RunNotFoundError
 
 
-def _make_run(
-    runs_dir: Path, *path_parts: str, run_id: str = "R20260327-0001"
-) -> Path:
+def _make_run(runs_dir: Path, *path_parts: str, run_id: str = "R20260327-0001") -> Path:
     """Helper to create a run directory with manifest.toml."""
     run_dir = runs_dir.joinpath(*path_parts)
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -41,10 +39,17 @@ class TestDiscoverRuns:
     def test_find_nested_runs(self, tmp_path: Path) -> None:
         runs_dir = tmp_path / "runs"
         _make_run(runs_dir, "cavity", "rect", "survey1", "R20260327-0001")
-        _make_run(runs_dir, "cavity", "rect", "survey1", "R20260327-0002",
-                  run_id="R20260327-0002")
-        _make_run(runs_dir, "layer", "survey2", "R20260328-0001",
-                  run_id="R20260328-0001")
+        _make_run(
+            runs_dir,
+            "cavity",
+            "rect",
+            "survey1",
+            "R20260327-0002",
+            run_id="R20260327-0002",
+        )
+        _make_run(
+            runs_dir, "layer", "survey2", "R20260328-0001", run_id="R20260328-0001"
+        )
         result = discover_runs(runs_dir)
         assert len(result) == 3
 

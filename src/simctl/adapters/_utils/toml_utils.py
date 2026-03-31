@@ -63,7 +63,11 @@ def apply_dotted_overrides(
                 # Numeric key not present as string; skip if target is a list-like
                 idx = int(part)
                 # Check if the parent is storing a list
-                target = target[idx] if isinstance(target, list) else target.setdefault(part, {})
+                target = (
+                    target[idx]
+                    if isinstance(target, list)
+                    else target.setdefault(part, {})
+                )
             else:
                 if part not in target:
                     target[part] = {}

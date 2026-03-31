@@ -266,7 +266,9 @@ def _clone_doc_repos(
         if result.returncode == 0:
             created.append(rel)
         else:
-            logger.warning("git clone %s failed: %s", url, (result.stderr or "").strip())
+            logger.warning(
+                "git clone %s failed: %s", url, (result.stderr or "").strip()
+            )
 
     return created, skipped
 
@@ -330,9 +332,7 @@ def _build_agents_md(project_name: str, simulator_names: list[str]) -> str:
     return _build_agent_md("AGENTS.md", project_name, simulator_names)
 
 
-def _build_skills(
-    project_name: str, simulator_names: list[str]
-) -> dict[str, str]:
+def _build_skills(project_name: str, simulator_names: list[str]) -> dict[str, str]:
     """Build individual SKILL.md contents for .claude/skills/.
 
     Returns:
@@ -681,13 +681,15 @@ def _build_campaign_toml(project_name: str, simulator_names: list[str]) -> str:
     ]
     if simulator_names:
         lines.append(f'simulator = "{simulator_names[0]}"')
-    lines.extend([
-        "",
-        "[variables]",
-        "",
-        "[observables]",
-        "",
-    ])
+    lines.extend(
+        [
+            "",
+            "[variables]",
+            "",
+            "[observables]",
+            "",
+        ]
+    )
     return "\n".join(lines)
 
 
@@ -773,10 +775,18 @@ def _bootstrap_environment(
     # 3. Editable install simctl into .venv
     typer.echo("  Installing hpc-simctl (editable) ...")
     install_result = subprocess.run(
-        [uv, "pip", "install", "-e", str(simctl_dir),
-         "--python", str(venv_dir / ("Scripts/python.exe"
-                                     if sys.platform == "win32"
-                                     else "bin/python"))],
+        [
+            uv,
+            "pip",
+            "install",
+            "-e",
+            str(simctl_dir),
+            "--python",
+            str(
+                venv_dir
+                / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
+            ),
+        ],
         cwd=str(project_dir),
         capture_output=True,
         text=True,
@@ -797,10 +807,21 @@ def _bootstrap_environment(
     if pip_pkgs:
         typer.echo(f"  Installing: {', '.join(pip_pkgs)} ...")
         pkg_result = subprocess.run(
-            [uv, "pip", "install", *pip_pkgs,
-             "--python", str(venv_dir / ("Scripts/python.exe"
-                                         if sys.platform == "win32"
-                                         else "bin/python"))],
+            [
+                uv,
+                "pip",
+                "install",
+                *pip_pkgs,
+                "--python",
+                str(
+                    venv_dir
+                    / (
+                        "Scripts/python.exe"
+                        if sys.platform == "win32"
+                        else "bin/python"
+                    )
+                ),
+            ],
             cwd=str(project_dir),
             capture_output=True,
             text=True,
@@ -957,7 +978,10 @@ def init(
                     existing = tomllib.load(f)
                 sims = existing.get("simulators", {})
                 updated = False
-                for sim_name, site_modules in site_data_loaded.simulator_modules.items():
+                for (
+                    sim_name,
+                    site_modules,
+                ) in site_data_loaded.simulator_modules.items():
                     if sim_name in sims and site_modules:
                         sims[sim_name]["modules"] = site_modules
                         updated = True
@@ -1233,33 +1257,27 @@ def doctor(
         existing = load_environment(project_dir)
         if existing:
             typer.echo(
-                f"[PASS] environment.toml found "
-                f"(cluster: {existing.cluster_name})"
+                f"[PASS] environment.toml found (cluster: {existing.cluster_name})"
             )
             if existing.partitions:
                 for p in existing.partitions:
                     default_mark = " (default)" if p.default else ""
-                    typer.echo(
-                        f"       partition: {p.name}{default_mark}"
-                    )
+                    typer.echo(f"       partition: {p.name}{default_mark}")
         else:
             typer.echo("[INFO] Detecting environment...")
             env_info = detect_environment()
             if env_info.partitions:
                 typer.echo(
-                    f"       Detected {len(env_info.partitions)} "
-                    f"Slurm partition(s)"
+                    f"       Detected {len(env_info.partitions)} Slurm partition(s)"
                 )
             try:
                 env_path = save_environment(project_dir, env_info)
                 typer.echo(
-                    f"[PASS] Saved environment to "
-                    f"{env_path.relative_to(project_dir)}"
+                    f"[PASS] Saved environment to {env_path.relative_to(project_dir)}"
                 )
             except RuntimeError:
                 typer.echo(
-                    "[WARN] Could not save environment.toml "
-                    "(tomli_w not installed)"
+                    "[WARN] Could not save environment.toml (tomli_w not installed)"
                 )
     except Exception as e:
         typer.echo(f"[WARN] Environment detection failed: {e}")
@@ -1272,9 +1290,7 @@ def doctor(
 
             campaign = load_campaign(project_dir)
             if campaign:
-                typer.echo(
-                    f"[PASS] campaign.toml: {campaign.name}"
-                )
+                typer.echo(f"[PASS] campaign.toml: {campaign.name}")
         except Exception as e:
             typer.echo(f"[FAIL] campaign.toml: {e}")
             failures.append("campaign.toml")

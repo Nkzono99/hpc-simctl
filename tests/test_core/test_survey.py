@@ -80,11 +80,13 @@ class TestExpandAxes:
         assert {"a": 2, "b": 20} in result
 
     def test_three_axes(self) -> None:
-        result = expand_axes({
-            "u": [2e5, 4e5],
-            "aspect": [2.0, 4.0],
-            "seed": [1, 2],
-        })
+        result = expand_axes(
+            {
+                "u": [2e5, 4e5],
+                "aspect": [2.0, 4.0],
+                "seed": [1, 2],
+            }
+        )
         assert len(result) == 8
 
     def test_empty_axes(self) -> None:

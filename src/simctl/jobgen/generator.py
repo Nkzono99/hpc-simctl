@@ -171,9 +171,7 @@ def _validate_job_config(job_config: dict[str, Any]) -> None:
     """
     missing = [k for k in _REQUIRED_JOB_KEYS if k not in job_config]
     if missing:
-        raise JobScriptError(
-            f"Missing required job config keys: {', '.join(missing)}"
-        )
+        raise JobScriptError(f"Missing required job config keys: {', '.join(missing)}")
 
 
 def _render_script(

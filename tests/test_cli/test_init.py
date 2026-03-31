@@ -213,9 +213,7 @@ class TestInit:
 
     def test_init_with_single_simulator(self, tmp_path: Path) -> None:
         """Init with a single simulator name works."""
-        result = runner.invoke(
-            app, ["init", "emses", "-y", "--path", str(tmp_path)]
-        )
+        result = runner.invoke(app, ["init", "emses", "-y", "--path", str(tmp_path)])
         assert result.exit_code == 0
         content = (tmp_path / "simulators.toml").read_text(encoding="utf-8")
         assert "[simulators.emses]" in content
@@ -239,9 +237,7 @@ class TestInit:
     def test_init_default_is_interactive(self, tmp_path: Path) -> None:
         """Init without -y is interactive (prompts for project name)."""
         user_input = "\n" * 20
-        result = runner.invoke(
-            app, ["init", "--path", str(tmp_path)], input=user_input
-        )
+        result = runner.invoke(app, ["init", "--path", str(tmp_path)], input=user_input)
         assert result.exit_code == 0
         assert "Project name" in result.output
 
@@ -252,9 +248,7 @@ class TestDoctor:
     def test_doctor_all_pass(self, tmp_path: Path) -> None:
         """Doctor passes on a properly initialized project with sbatch."""
         # Set up a valid project
-        (tmp_path / "simproject.toml").write_text(
-            '[project]\nname = "test-project"\n'
-        )
+        (tmp_path / "simproject.toml").write_text('[project]\nname = "test-project"\n')
         (tmp_path / "simulators.toml").write_text("[simulators]\n")
         (tmp_path / "launchers.toml").write_text("[launchers]\n")
         (tmp_path / "runs").mkdir()
@@ -285,9 +279,7 @@ class TestDoctor:
 
     def test_doctor_missing_simulators(self, tmp_path: Path) -> None:
         """Doctor fails if simulators.toml is missing."""
-        (tmp_path / "simproject.toml").write_text(
-            '[project]\nname = "test-project"\n'
-        )
+        (tmp_path / "simproject.toml").write_text('[project]\nname = "test-project"\n')
         (tmp_path / "launchers.toml").write_text("[launchers]\n")
 
         with patch("simctl.cli.init.shutil.which", return_value="/usr/bin/sbatch"):
@@ -298,9 +290,7 @@ class TestDoctor:
 
     def test_doctor_missing_launchers(self, tmp_path: Path) -> None:
         """Doctor fails if launchers.toml is missing."""
-        (tmp_path / "simproject.toml").write_text(
-            '[project]\nname = "test-project"\n'
-        )
+        (tmp_path / "simproject.toml").write_text('[project]\nname = "test-project"\n')
         (tmp_path / "simulators.toml").write_text("[simulators]\n")
 
         with patch("simctl.cli.init.shutil.which", return_value="/usr/bin/sbatch"):
@@ -311,9 +301,7 @@ class TestDoctor:
 
     def test_doctor_missing_sbatch(self, tmp_path: Path) -> None:
         """Doctor fails if sbatch is not in PATH."""
-        (tmp_path / "simproject.toml").write_text(
-            '[project]\nname = "test-project"\n'
-        )
+        (tmp_path / "simproject.toml").write_text('[project]\nname = "test-project"\n')
         (tmp_path / "simulators.toml").write_text("[simulators]\n")
         (tmp_path / "launchers.toml").write_text("[launchers]\n")
 
@@ -325,9 +313,7 @@ class TestDoctor:
 
     def test_doctor_duplicate_run_ids(self, tmp_path: Path) -> None:
         """Doctor fails if duplicate run_ids exist."""
-        (tmp_path / "simproject.toml").write_text(
-            '[project]\nname = "test-project"\n'
-        )
+        (tmp_path / "simproject.toml").write_text('[project]\nname = "test-project"\n')
         (tmp_path / "simulators.toml").write_text("[simulators]\n")
         (tmp_path / "launchers.toml").write_text("[launchers]\n")
         runs_dir = tmp_path / "runs"
@@ -349,9 +335,7 @@ class TestDoctor:
 
     def test_doctor_no_runs_dir(self, tmp_path: Path) -> None:
         """Doctor passes run_id check when runs/ does not exist."""
-        (tmp_path / "simproject.toml").write_text(
-            '[project]\nname = "test-project"\n'
-        )
+        (tmp_path / "simproject.toml").write_text('[project]\nname = "test-project"\n')
         (tmp_path / "simulators.toml").write_text("[simulators]\n")
         (tmp_path / "launchers.toml").write_text("[launchers]\n")
 

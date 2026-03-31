@@ -17,9 +17,7 @@ class TestLoadProject:
     """Tests for load_project()."""
 
     def test_load_minimal_project(self, tmp_path: Path) -> None:
-        (tmp_path / "simproject.toml").write_text(
-            '[project]\nname = "my-project"\n'
-        )
+        (tmp_path / "simproject.toml").write_text('[project]\nname = "my-project"\n')
         config = load_project(tmp_path)
         assert config.name == "my-project"
         assert config.description == ""
@@ -35,13 +33,9 @@ class TestLoadProject:
         assert config.description == "A test"
 
     def test_load_with_simulators_and_launchers(self, tmp_path: Path) -> None:
-        (tmp_path / "simproject.toml").write_text(
-            '[project]\nname = "proj"\n'
-        )
+        (tmp_path / "simproject.toml").write_text('[project]\nname = "proj"\n')
         (tmp_path / "simulators.toml").write_bytes(
-            tomli_w.dumps(
-                {"simulators": {"sim1": {"adapter": "a1"}}}
-            ).encode()
+            tomli_w.dumps({"simulators": {"sim1": {"adapter": "a1"}}}).encode()
         )
         (tmp_path / "launchers.toml").write_bytes(
             tomli_w.dumps(
@@ -89,9 +83,7 @@ class TestLoadProject:
             load_project(tmp_path)
 
     def test_frozen_dataclass(self, tmp_path: Path) -> None:
-        (tmp_path / "simproject.toml").write_text(
-            '[project]\nname = "proj"\n'
-        )
+        (tmp_path / "simproject.toml").write_text('[project]\nname = "proj"\n')
         config = load_project(tmp_path)
         with pytest.raises(AttributeError):
             config.name = "other"  # type: ignore[misc]

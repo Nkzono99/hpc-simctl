@@ -150,9 +150,12 @@ def log(
         raise typer.Exit(code=1)
 
     # Show progress
-    progress = _get_progress(run_dir, {
-        "simulator": dict(manifest.simulator),
-    })
+    progress = _get_progress(
+        run_dir,
+        {
+            "simulator": dict(manifest.simulator),
+        },
+    )
     typer.echo(f"Run: {run_id}  Log: {log_file.name}")
     if progress:
         typer.echo(progress)

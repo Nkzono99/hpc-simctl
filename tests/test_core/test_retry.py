@@ -67,4 +67,3 @@ def test_suggest_retry_for_run_respects_max_attempts_from_attempts_list(
     assert len(suggestions) == 1
     assert suggestions[0].action == "show_log"
     assert "Max attempts" in suggestions[0].rationale
-

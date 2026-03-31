@@ -124,9 +124,7 @@ class TestRenderInputs:
         assert config["tmgrid"]["dt"] == 0.002
         assert config["tmgrid"]["nx"] == 1000
 
-    def test_no_case_section_raises(
-        self, adapter: EmseAdapter, run_dir: Path
-    ) -> None:
+    def test_no_case_section_raises(self, adapter: EmseAdapter, run_dir: Path) -> None:
         with pytest.raises(ValueError, match="case"):
             adapter.render_inputs({}, run_dir)
 
@@ -164,9 +162,7 @@ class TestRenderInputs:
 class TestResolveRuntime:
     def test_package_mode(self, adapter: EmseAdapter) -> None:
         with patch("shutil.which", return_value="/usr/bin/mpiemses3D"):
-            rt = adapter.resolve_runtime(
-                {"executable": "mpiemses3D"}, "package"
-            )
+            rt = adapter.resolve_runtime({"executable": "mpiemses3D"}, "package")
         assert rt["executable"] == "/usr/bin/mpiemses3D"
 
     def test_local_executable_mode(self, adapter: EmseAdapter) -> None:
@@ -201,18 +197,12 @@ class TestResolveRuntime:
 
 
 class TestBuildProgramCommand:
-    def test_basic_command(
-        self, adapter: EmseAdapter, run_dir: Path
-    ) -> None:
-        cmd = adapter.build_program_command(
-            {"executable": "/opt/mpiemses3D"}, run_dir
-        )
+    def test_basic_command(self, adapter: EmseAdapter, run_dir: Path) -> None:
+        cmd = adapter.build_program_command({"executable": "/opt/mpiemses3D"}, run_dir)
         assert cmd[0] == "/opt/mpiemses3D"
         assert "plasma.toml" in cmd[1]
 
-    def test_default_executable(
-        self, adapter: EmseAdapter, run_dir: Path
-    ) -> None:
+    def test_default_executable(self, adapter: EmseAdapter, run_dir: Path) -> None:
         cmd = adapter.build_program_command({}, run_dir)
         assert cmd[0] == "mpiemses3D"
 
@@ -226,27 +216,21 @@ class TestDetectOutputs:
     def test_no_work_dir(self, adapter: EmseAdapter, tmp_path: Path) -> None:
         assert adapter.detect_outputs(tmp_path) == {}
 
-    def test_detects_h5_files(
-        self, adapter: EmseAdapter, run_dir: Path
-    ) -> None:
+    def test_detects_h5_files(self, adapter: EmseAdapter, run_dir: Path) -> None:
         (run_dir / "work" / "ex00_0000.h5").write_bytes(b"")
         (run_dir / "work" / "ey00_0000.h5").write_bytes(b"")
         outputs = adapter.detect_outputs(run_dir)
         assert "hdf5_fields" in outputs
         assert len(outputs["hdf5_fields"]) == 2
 
-    def test_detects_diagnostics(
-        self, adapter: EmseAdapter, run_dir: Path
-    ) -> None:
+    def test_detects_diagnostics(self, adapter: EmseAdapter, run_dir: Path) -> None:
         (run_dir / "work" / "energy").write_text("0 1.0 2.0")
         (run_dir / "work" / "volt").write_text("0 0.5")
         outputs = adapter.detect_outputs(run_dir)
         assert "diagnostics" in outputs
         assert len(outputs["diagnostics"]) == 2
 
-    def test_detects_snapshots(
-        self, adapter: EmseAdapter, run_dir: Path
-    ) -> None:
+    def test_detects_snapshots(self, adapter: EmseAdapter, run_dir: Path) -> None:
         snap_dir = run_dir / "work" / "SNAPSHOT1"
         snap_dir.mkdir()
         (snap_dir / "esdat0000.h5").write_bytes(b"")
@@ -255,9 +239,7 @@ class TestDetectOutputs:
         assert "snapshots" in outputs
         assert len(outputs["snapshots"]) == 2
 
-    def test_detects_logs(
-        self, adapter: EmseAdapter, run_dir: Path
-    ) -> None:
+    def test_detects_logs(self, adapter: EmseAdapter, run_dir: Path) -> None:
         (run_dir / "work" / "stdout.12345.log").write_text("output")
         outputs = adapter.detect_outputs(run_dir)
         assert "logs" in outputs
@@ -269,22 +251,14 @@ class TestDetectOutputs:
 
 
 class TestDetectStatus:
-    def test_unknown_no_work(
-        self, adapter: EmseAdapter, tmp_path: Path
-    ) -> None:
+    def test_unknown_no_work(self, adapter: EmseAdapter, tmp_path: Path) -> None:
         assert adapter.detect_status(tmp_path) == "unknown"
 
-    def test_unknown_empty_work(
-        self, adapter: EmseAdapter, run_dir: Path
-    ) -> None:
+    def test_unknown_empty_work(self, adapter: EmseAdapter, run_dir: Path) -> None:
         assert adapter.detect_status(run_dir) == "unknown"
 
-    def test_failed_on_error_log(
-        self, adapter: EmseAdapter, run_dir: Path
-    ) -> None:
-        (run_dir / "work" / "stderr.123.log").write_text(
-            "Segmentation fault"
-        )
+    def test_failed_on_error_log(self, adapter: EmseAdapter, run_dir: Path) -> None:
+        (run_dir / "work" / "stderr.123.log").write_text("Segmentation fault")
         assert adapter.detect_status(run_dir) == "failed"
 
     def test_completed_when_nstep_reached(
@@ -294,9 +268,7 @@ class TestDetectStatus:
         with open(run_dir / "input" / "plasma.toml", "wb") as f:
             tomli_w.dump({"jobcon": {"nstep": 100}}, f)
         # Energy file showing step 100 reached
-        (run_dir / "work" / "energy").write_text(
-            "50 1.0 2.0\n100 1.1 2.1\n"
-        )
+        (run_dir / "work" / "energy").write_text("50 1.0 2.0\n100 1.1 2.1\n")
         assert adapter.detect_status(run_dir) == "completed"
 
     def test_running_when_not_finished(
@@ -307,9 +279,7 @@ class TestDetectStatus:
         (run_dir / "work" / "energy").write_text("50 1.0 2.0\n")
         assert adapter.detect_status(run_dir) == "running"
 
-    def test_running_with_h5_files(
-        self, adapter: EmseAdapter, run_dir: Path
-    ) -> None:
+    def test_running_with_h5_files(self, adapter: EmseAdapter, run_dir: Path) -> None:
         (run_dir / "work" / "ex00_0000.h5").write_bytes(b"")
         assert adapter.detect_status(run_dir) == "running"
 
@@ -320,16 +290,12 @@ class TestDetectStatus:
 
 
 class TestSummarize:
-    def test_basic_summary(
-        self, adapter: EmseAdapter, run_dir: Path
-    ) -> None:
+    def test_basic_summary(self, adapter: EmseAdapter, run_dir: Path) -> None:
         summary = adapter.summarize(run_dir)
         assert summary["status"] == "unknown"
         assert "output_counts" in summary
 
-    def test_summary_with_energy(
-        self, adapter: EmseAdapter, run_dir: Path
-    ) -> None:
+    def test_summary_with_energy(self, adapter: EmseAdapter, run_dir: Path) -> None:
         (run_dir / "work" / "energy").write_text("50 1.0\n100 1.1\n")
         summary = adapter.summarize(run_dir)
         assert summary["total_energy_lines"] == 2
@@ -378,16 +344,13 @@ class TestCollectProvenance:
 
 
 class TestHelpers:
-    def test_get_setup_commands(
-        self, adapter: EmseAdapter, run_dir: Path
-    ) -> None:
+    def test_get_setup_commands(self, adapter: EmseAdapter, run_dir: Path) -> None:
         cmds = adapter.get_setup_commands(run_dir)
         assert any("plasma.toml" in c for c in cmds)
 
     def test_get_modules(self, adapter: EmseAdapter) -> None:
         modules = adapter.get_modules()
-        assert any("intel" in m for m in modules)
-        assert any("hdf5" in m for m in modules)
+        assert modules == []
 
     def test_get_extra_env(self, adapter: EmseAdapter) -> None:
         env = adapter.get_extra_env()

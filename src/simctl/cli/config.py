@@ -134,8 +134,7 @@ def add_simulator(
 
     if simulator not in available:
         typer.echo(
-            f"Unknown simulator: '{simulator}'. "
-            f"Available: {', '.join(available)}"
+            f"Unknown simulator: '{simulator}'. Available: {', '.join(available)}"
         )
         raise typer.Exit(code=1)
 

@@ -37,7 +37,9 @@ def extend(
     ] = None,
     dest: Annotated[
         Optional[Path],
-        typer.Option("--dest", "-d", help="Destination directory (defaults to source's parent)."),
+        typer.Option(
+            "--dest", "-d", help="Destination directory (defaults to source's parent)."
+        ),
     ] = None,
     nstep: Annotated[
         Optional[int],

@@ -30,7 +30,8 @@ def new(
     simulator: Annotated[
         Optional[str],
         typer.Option(
-            "--simulator", "-s",
+            "--simulator",
+            "-s",
             help="Simulator name (auto-detected from cwd if under cases/<sim>/).",
         ),
     ] = None,
@@ -78,8 +79,7 @@ def new(
 
         if sim_name not in available:
             typer.echo(
-                f"Unknown simulator: '{sim_name}'. "
-                f"Available: {', '.join(available)}"
+                f"Unknown simulator: '{sim_name}'. Available: {', '.join(available)}"
             )
             raise typer.Exit(code=1)
 
@@ -153,8 +153,7 @@ def new(
             # Replace job fields based on site resource style
             if site_resource_style == "rsc":
                 content = content.replace(
-                    'partition = ""\nnodes = 1\nntasks = 1\n'
-                    'walltime = "01:00:00"\n',
+                    'partition = ""\nnodes = 1\nntasks = 1\nwalltime = "01:00:00"\n',
                     'partition = ""\nprocesses = 1\nthreads = 1\n'
                     'cores = 1\nwalltime = "01:00:00"\n',
                 )
@@ -168,12 +167,16 @@ def new(
     typer.echo(f"  Path: {case_dir}")
     for f in created:
         typer.echo(f"    {f}")
-    typer.echo(f"\nEdit {case_dir / 'case.toml'} to configure parameters and job settings.")
+    typer.echo(
+        f"\nEdit {case_dir / 'case.toml'} to configure parameters and job settings."
+    )
 
     # Optionally generate survey.toml stub
     if survey:
         _generate_survey_stub(
-            case_name, sim_name, default_launcher,
+            case_name,
+            sim_name,
+            default_launcher,
             project_root=project_root,
             resource_style=site_resource_style,
         )
@@ -216,10 +219,7 @@ def _generate_survey_stub(
         )
     else:
         job_comment = (
-            '# partition = ""\n'
-            "# nodes = 1\n"
-            "# ntasks = 1\n"
-            '# walltime = "01:00:00"'
+            '# partition = ""\n# nodes = 1\n# ntasks = 1\n# walltime = "01:00:00"'
         )
 
     content = f"""\

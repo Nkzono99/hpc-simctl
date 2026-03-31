@@ -30,9 +30,11 @@ class ValidationIssue:
 
 
 # Valid insight types for .simctl/insights/ files
-INSIGHT_TYPES = frozenset({
-    "constraint",   # Stability/constraint findings (learned from failures)
-    "result",       # Experiment result summaries
-    "analysis",     # Physical interpretation / discussion
-    "dependency",   # Parameter dependency trends
-})
+INSIGHT_TYPES = frozenset(
+    {
+        "constraint",  # Stability/constraint findings (learned from failures)
+        "result",  # Experiment result summaries
+        "analysis",  # Physical interpretation / discussion
+        "dependency",  # Parameter dependency trends
+    }
+)

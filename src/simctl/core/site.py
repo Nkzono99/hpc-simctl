@@ -189,7 +189,11 @@ def _load_site_toml(path: Path) -> SiteProfile:
 
     # Parse env vars
     env_raw = site.get("env", {})
-    env = {str(k): str(v) for k, v in env_raw.items()} if isinstance(env_raw, dict) else {}
+    env = (
+        {str(k): str(v) for k, v in env_raw.items()}
+        if isinstance(env_raw, dict)
+        else {}
+    )
 
     # Parse setup_commands
     setup_raw = site.get("setup_commands", [])
@@ -228,7 +232,15 @@ def _load_from_launchers_toml(path: Path) -> SiteProfile | None:
     with open(path, "rb") as f:
         raw = tomllib.load(f)
 
-    _SITE_KEYS = {"resource_style", "modules", "stdout", "stderr", "extra_sbatch", "env", "setup_commands"}
+    _SITE_KEYS = {
+        "resource_style",
+        "modules",
+        "stdout",
+        "stderr",
+        "extra_sbatch",
+        "env",
+        "setup_commands",
+    }
 
     # Check each launcher profile for site-related keys
     launchers = raw.get("launchers", raw)
@@ -240,13 +252,21 @@ def _load_from_launchers_toml(path: Path) -> SiteProfile | None:
 
         # Found site keys — extract them
         env_raw = profile.get("env", {})
-        env = {str(k): str(v) for k, v in env_raw.items()} if isinstance(env_raw, dict) else {}
+        env = (
+            {str(k): str(v) for k, v in env_raw.items()}
+            if isinstance(env_raw, dict)
+            else {}
+        )
 
         setup_raw = profile.get("setup_commands", [])
-        setup_commands = [str(c) for c in setup_raw] if isinstance(setup_raw, list) else []
+        setup_commands = (
+            [str(c) for c in setup_raw] if isinstance(setup_raw, list) else []
+        )
 
         extra_raw = profile.get("extra_sbatch", [])
-        extra_sbatch = [str(d) for d in extra_raw] if isinstance(extra_raw, list) else []
+        extra_sbatch = (
+            [str(d) for d in extra_raw] if isinstance(extra_raw, list) else []
+        )
 
         logger.debug(
             "Extracted site profile from launchers.toml profile '%s' "
@@ -280,9 +300,7 @@ def save_site_profile(project_root: Path, profile: SiteProfile) -> Path:
     try:
         import tomli_w
     except ImportError as exc:
-        raise RuntimeError(
-            "tomli_w is required to write site.toml"
-        ) from exc
+        raise RuntimeError("tomli_w is required to write site.toml") from exc
 
     data: dict[str, Any] = {
         "site": {

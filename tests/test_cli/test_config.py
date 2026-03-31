@@ -20,9 +20,7 @@ runner = CliRunner()
 
 def _setup_project(tmp_path: Path) -> None:
     """Create a minimal simctl project for config tests."""
-    (tmp_path / "simproject.toml").write_text(
-        '[project]\nname = "test-project"\n'
-    )
+    (tmp_path / "simproject.toml").write_text('[project]\nname = "test-project"\n')
     (tmp_path / "simulators.toml").write_text("[simulators]\n")
     (tmp_path / "launchers.toml").write_text("[launchers]\n")
 
@@ -54,11 +52,13 @@ class TestConfigAddSimulator:
         """Add simulator by name with default config (non-interactive)."""
         _setup_project(tmp_path)
         # Provide input for interactive_config prompts
-        user_input = "\n".join([
-            "local_executable",  # resolver_mode
-            "mpiemses3D",        # executable
-            "n",                 # customize modules?
-        ])
+        user_input = "\n".join(
+            [
+                "local_executable",  # resolver_mode
+                "mpiemses3D",  # executable
+                "n",  # customize modules?
+            ]
+        )
         result = runner.invoke(
             app,
             ["config", "add-simulator", "emses", "--path", str(tmp_path)],
@@ -76,12 +76,14 @@ class TestConfigAddSimulator:
     def test_add_simulator_interactive_selection(self, tmp_path: Path) -> None:
         """Add simulator via interactive selection by number."""
         _setup_project(tmp_path)
-        user_input = "\n".join([
-            "1",                 # select first available (beach)
-            "local_executable",  # resolver_mode
-            "beach",             # executable
-            "n",                 # customize modules?
-        ])
+        user_input = "\n".join(
+            [
+                "1",  # select first available (beach)
+                "local_executable",  # resolver_mode
+                "beach",  # executable
+                "n",  # customize modules?
+            ]
+        )
         result = runner.invoke(
             app,
             ["config", "add-simulator", "--path", str(tmp_path)],
@@ -112,11 +114,13 @@ class TestConfigAddLauncher:
     def test_add_launcher_srun(self, tmp_path: Path) -> None:
         """Add srun launcher profile."""
         _setup_project(tmp_path)
-        user_input = "\n".join([
-            "1",            # srun
-            "default",      # profile name
-            "--mpi=pmix",   # extra args
-        ])
+        user_input = "\n".join(
+            [
+                "1",  # srun
+                "default",  # profile name
+                "--mpi=pmix",  # extra args
+            ]
+        )
         result = runner.invoke(
             app,
             ["config", "add-launcher", "--path", str(tmp_path)],
@@ -144,13 +148,15 @@ class TestInteractiveInit:
 
     def test_interactive_init_select_simulators(self, tmp_path: Path) -> None:
         """Interactive init prompts for project name and simulators."""
-        user_input = "\n".join([
-            "my-project",   # project name
-            "emses",        # simulator selection
-            "n",            # customize settings?
-            "",             # launcher (skip)
-            "",             # extra line for safety
-        ])
+        user_input = "\n".join(
+            [
+                "my-project",  # project name
+                "emses",  # simulator selection
+                "n",  # customize settings?
+                "",  # launcher (skip)
+                "",  # extra line for safety
+            ]
+        )
         result = runner.invoke(
             app,
             ["init", "--path", str(tmp_path)],

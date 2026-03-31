@@ -271,8 +271,7 @@ def update_refs(
         adapter_cls = _get_adapter_class(adapter_name)
         if adapter_cls is None:
             typer.echo(
-                f"  Warning: no adapter '{adapter_name}' "
-                f"for '{sim_name}', skipping."
+                f"  Warning: no adapter '{adapter_name}' for '{sim_name}', skipping."
             )
             continue
 
@@ -288,8 +287,7 @@ def update_refs(
         else:
             # Default: index docs/ and README from each doc repo
             sim_sources[adapter_name] = {
-                dest: ["README.md", "docs/**/*.md"]
-                for _url, dest in doc_repos
+                dest: ["README.md", "docs/**/*.md"] for _url, dest in doc_repos
             }
 
     if not repos_to_update:
@@ -317,8 +315,7 @@ def update_refs(
         repo_path = refs_dir / dest
         if not repo_path.is_dir():
             typer.echo(
-                f"  refs/{dest}/ — not cloned, skipping"
-                " (run 'simctl init' first)"
+                f"  refs/{dest}/ — not cloned, skipping (run 'simctl init' first)"
             )
             continue
 

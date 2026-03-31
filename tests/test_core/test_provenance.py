@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -15,13 +15,22 @@ from simctl.core.provenance import (
 )
 
 
+def _git(tmp_path: Path, *args: str) -> None:
+    subprocess.run(
+        ["git", "-c", "user.email=test@test", "-c", "user.name=test", *args],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+
+
 class TestCollectGitProvenance:
     """Tests for collect_git_provenance()."""
 
     def test_collect_from_real_repo(self, tmp_path: Path) -> None:
         """Test collecting provenance from a real git repo."""
-        cmd = f"cd {tmp_path} && git init -q && git commit --allow-empty -m init -q"
-        os.system(cmd)
+        _git(tmp_path, "init", "-q")
+        _git(tmp_path, "commit", "--allow-empty", "-m", "init", "-q")
         info = collect_git_provenance(tmp_path)
         assert len(info.git_commit) == 40  # Full SHA
         assert info.git_dirty is False
@@ -29,10 +38,10 @@ class TestCollectGitProvenance:
 
     def test_dirty_repo(self, tmp_path: Path) -> None:
         """Test that dirty state is detected."""
-        cmd = f"cd {tmp_path} && git init -q && git commit --allow-empty -m init -q"
-        os.system(cmd)
+        _git(tmp_path, "init", "-q")
+        _git(tmp_path, "commit", "--allow-empty", "-m", "init", "-q")
         (tmp_path / "dirty.txt").write_text("uncommitted")
-        os.system(f"cd {tmp_path} && git add dirty.txt")
+        _git(tmp_path, "add", "dirty.txt")
         info = collect_git_provenance(tmp_path)
         assert info.git_dirty is True
 

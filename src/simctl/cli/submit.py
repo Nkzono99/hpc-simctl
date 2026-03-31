@@ -120,9 +120,7 @@ def _submit_single_run(
     if "production" in tags:
         sim_source = manifest.simulator_source
         if sim_source.get("git_dirty", False):
-            typer.echo(
-                "Warning: production run submitted with dirty git working tree"
-            )
+            typer.echo("Warning: production run submitted with dirty git working tree")
 
     # Determine working directory
     work_dir = run_dir / "work"
@@ -151,9 +149,7 @@ def _submit_single_run(
             "submitted_at": submitted_at,
         }
         # Append to attempts list (preserving existing history)
-        existing_attempts: list[dict[str, str]] = list(
-            manifest.job.get("attempts", [])
-        )
+        existing_attempts: list[dict[str, str]] = list(manifest.job.get("attempts", []))
         attempt_number = get_attempt_count(manifest.job) + 1
         attempt["attempt"] = str(attempt_number)
         existing_attempts.append(attempt)

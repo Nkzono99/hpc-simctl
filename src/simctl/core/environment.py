@@ -80,13 +80,15 @@ def load_environment(project_root: Path) -> EnvironmentInfo | None:
     partitions: list[PartitionInfo] = []
     for name, pdata in cluster.get("partitions", {}).items():
         if isinstance(pdata, dict):
-            partitions.append(PartitionInfo(
-                name=name,
-                max_nodes=pdata.get("max_nodes", 0),
-                max_walltime=pdata.get("max_walltime", ""),
-                gpu=pdata.get("gpu", False),
-                default=pdata.get("default", False),
-            ))
+            partitions.append(
+                PartitionInfo(
+                    name=name,
+                    max_nodes=pdata.get("max_nodes", 0),
+                    max_walltime=pdata.get("max_walltime", ""),
+                    gpu=pdata.get("gpu", False),
+                    default=pdata.get("default", False),
+                )
+            )
 
     modules: dict[str, list[str]] = {}
     for name, mlist in raw.get("modules", {}).items():
@@ -120,9 +122,7 @@ def detect_environment() -> EnvironmentInfo:
     # Detect cluster name from hostname or SLURM_CLUSTER_NAME
     import os
 
-    info.cluster_name = os.environ.get(
-        "SLURM_CLUSTER_NAME", ""
-    )
+    info.cluster_name = os.environ.get("SLURM_CLUSTER_NAME", "")
     if not info.cluster_name:
         result = subprocess.run(
             ["hostname", "-s"],
@@ -139,9 +139,7 @@ def detect_environment() -> EnvironmentInfo:
     return info
 
 
-def save_environment(
-    project_root: Path, info: EnvironmentInfo
-) -> Path:
+def save_environment(project_root: Path, info: EnvironmentInfo) -> Path:
     """Save environment info to .simctl/environment.toml."""
     if tomli_w is None:
         msg = "tomli_w is required to write environment.toml"
@@ -228,12 +226,14 @@ def _detect_slurm_partitions() -> list[PartitionInfo]:
             max_nodes = 0
         max_walltime = parts[2] if parts[2] != "infinite" else ""
 
-        partitions.append(PartitionInfo(
-            name=name,
-            max_nodes=max_nodes,
-            max_walltime=max_walltime,
-            default=is_default,
-        ))
+        partitions.append(
+            PartitionInfo(
+                name=name,
+                max_nodes=max_nodes,
+                max_walltime=max_walltime,
+                default=is_default,
+            )
+        )
 
     return partitions
 

@@ -217,7 +217,9 @@ def test_sync_completed(tmp_path: Path) -> None:
         patch("simctl.cli.status.Path.cwd", return_value=tmp_path),
         patch(
             "simctl.cli.status.query_job_status",
-            return_value=JobStatus(run_state=RunState.COMPLETED, slurm_state="COMPLETED"),
+            return_value=JobStatus(
+                run_state=RunState.COMPLETED, slurm_state="COMPLETED"
+            ),
         ),
     ):
         result = runner.invoke(app, ["sync", str(run_dir)])

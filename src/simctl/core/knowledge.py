@@ -147,9 +147,7 @@ def parse_insight(path: Path) -> Insight | None:
         # Handle list values: [a, b, c]
         if stripped.startswith("[") and stripped.endswith("]"):
             meta[key] = [
-                v.strip().strip("\"'")
-                for v in stripped[1:-1].split(",")
-                if v.strip()
+                v.strip().strip("\"'") for v in stripped[1:-1].split(",") if v.strip()
             ]
         else:
             meta[key] = stripped
@@ -261,9 +259,7 @@ def _resolve_link_path(project_root: Path, path_str: str) -> Path:
 def _is_git_url(s: str) -> bool:
     """Check if a string looks like a git URL."""
     return (
-        s.startswith("https://")
-        or s.startswith("http://")
-        or s.startswith("git@")
+        s.startswith("https://") or s.startswith("http://") or s.startswith("git@")
     ) and s.endswith(".git")
 
 

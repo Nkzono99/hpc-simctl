@@ -89,9 +89,7 @@ def archive(
 
 
 def purge_work(
-    run: str = typer.Argument(
-        None, help="Run directory or run_id (defaults to cwd)."
-    ),
+    run: str = typer.Argument(None, help="Run directory or run_id (defaults to cwd)."),
     yes: bool = typer.Option(False, "--yes", help="Skip confirmation prompt."),
 ) -> None:
     """Remove unnecessary files from a run's work/ directory."""

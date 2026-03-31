@@ -56,7 +56,7 @@ RECONCILIATION_TRANSITIONS: dict[RunState, frozenset[RunState]] = {
     RunState.SUBMITTED: frozenset(
         {
             RunState.RUNNING,
-            RunState.COMPLETED,   # skipped running
+            RunState.COMPLETED,  # skipped running
             RunState.FAILED,
             RunState.CANCELLED,
         }

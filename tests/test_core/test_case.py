@@ -43,9 +43,7 @@ class TestLoadCase:
             load_case(tmp_path)
 
     def test_missing_required_fields(self, tmp_path: Path) -> None:
-        (tmp_path / "case.toml").write_text(
-            '[case]\nname = "test"\nsimulator = "s"\n'
-        )
+        (tmp_path / "case.toml").write_text('[case]\nname = "test"\nsimulator = "s"\n')
         with pytest.raises(CaseConfigError, match=r"case\.launcher"):
             load_case(tmp_path)
 

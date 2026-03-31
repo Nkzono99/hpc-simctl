@@ -43,8 +43,6 @@ DOMAIN_DECOMP_SECTION = "mpi"
 DOMAIN_DECOMP_KEY = "nodes"
 
 
-
-
 def compute_mpi_processes(config: dict[str, Any]) -> int | None:
     """Compute the required MPI process count from domain decomposition.
 
@@ -345,32 +343,36 @@ class EmseAdapter(SimulatorAdapter):
         if dt is not None and cv is not None and emflag != 0:
             cfl_ratio = float(dt) * float(cv)
             if cfl_ratio >= 1.0:
-                issues.append(ValidationIssue(
-                    severity="error",
-                    message=(
-                        f"CFL condition violated: dt*cv = {cfl_ratio:.3f} >= 1.0. "
-                        f"Reduce dt below {1.0 / float(cv):.3f}."
-                    ),
-                    parameter="tmgrid.dt",
-                    constraint_name="cfl_condition",
-                    details={
-                        "dt": dt,
-                        "cv": cv,
-                        "cfl_ratio": cfl_ratio,
-                        "max_dt": 1.0 / float(cv),
-                    },
-                ))
+                issues.append(
+                    ValidationIssue(
+                        severity="error",
+                        message=(
+                            f"CFL condition violated: dt*cv = {cfl_ratio:.3f} >= 1.0. "
+                            f"Reduce dt below {1.0 / float(cv):.3f}."
+                        ),
+                        parameter="tmgrid.dt",
+                        constraint_name="cfl_condition",
+                        details={
+                            "dt": dt,
+                            "cv": cv,
+                            "cfl_ratio": cfl_ratio,
+                            "max_dt": 1.0 / float(cv),
+                        },
+                    )
+                )
             elif cfl_ratio > 0.8:
-                issues.append(ValidationIssue(
-                    severity="warning",
-                    message=(
-                        f"CFL ratio dt*cv = {cfl_ratio:.3f} is close to "
-                        f"stability limit (1.0). Consider reducing dt."
-                    ),
-                    parameter="tmgrid.dt",
-                    constraint_name="cfl_condition",
-                    details={"cfl_ratio": cfl_ratio},
-                ))
+                issues.append(
+                    ValidationIssue(
+                        severity="warning",
+                        message=(
+                            f"CFL ratio dt*cv = {cfl_ratio:.3f} is close to "
+                            f"stability limit (1.0). Consider reducing dt."
+                        ),
+                        parameter="tmgrid.dt",
+                        constraint_name="cfl_condition",
+                        details={"cfl_ratio": cfl_ratio},
+                    )
+                )
 
         # Debye length resolution check
         for i, sp in enumerate(species_list):
@@ -380,22 +382,24 @@ class EmseAdapter(SimulatorAdapter):
                 debye = float(vdthz) / float(wp)
                 # dx = 1.0 in normalized units; want debye >= ~0.5 dx
                 if debye < 0.5:
-                    issues.append(ValidationIssue(
-                        severity="warning",
-                        message=(
-                            f"Species {i}: Debye length ({debye:.3f} dx) "
-                            f"is under-resolved by grid (dx=1). "
-                            f"Increase grid resolution or reduce density."
-                        ),
-                        parameter=f"species.{i}.wp",
-                        constraint_name="debye_resolution",
-                        details={
-                            "species_index": i,
-                            "debye_length": debye,
-                            "wp": float(wp),
-                            "vdthz": float(vdthz),
-                        },
-                    ))
+                    issues.append(
+                        ValidationIssue(
+                            severity="warning",
+                            message=(
+                                f"Species {i}: Debye length ({debye:.3f} dx) "
+                                f"is under-resolved by grid (dx=1). "
+                                f"Increase grid resolution or reduce density."
+                            ),
+                            parameter=f"species.{i}.wp",
+                            constraint_name="debye_resolution",
+                            details={
+                                "species_index": i,
+                                "debye_length": debye,
+                                "wp": float(wp),
+                                "vdthz": float(vdthz),
+                            },
+                        )
+                    )
 
         # Domain decomposition consistency
         nodes = mpi_sec.get(DOMAIN_DECOMP_KEY)
@@ -410,21 +414,23 @@ class EmseAdapter(SimulatorAdapter):
                 if dim_val is not None and idx < len(nodes):
                     ndiv = int(nodes[idx])
                     if int(dim_val) % ndiv != 0:
-                        issues.append(ValidationIssue(
-                            severity="error",
-                            message=(
-                                f"Grid {dim_name}={dim_val} is not "
-                                f"divisible by MPI decomposition "
-                                f"nodes[{idx}]={ndiv}."
-                            ),
-                            parameter=f"tmgrid.{dim_name}",
-                            constraint_name="grid_divisibility",
-                            details={
-                                "dimension": dim_name,
-                                "grid_size": int(dim_val),
-                                "mpi_division": ndiv,
-                            },
-                        ))
+                        issues.append(
+                            ValidationIssue(
+                                severity="error",
+                                message=(
+                                    f"Grid {dim_name}={dim_val} is not "
+                                    f"divisible by MPI decomposition "
+                                    f"nodes[{idx}]={ndiv}."
+                                ),
+                                parameter=f"tmgrid.{dim_name}",
+                                constraint_name="grid_divisibility",
+                                details={
+                                    "dimension": dim_name,
+                                    "grid_size": int(dim_val),
+                                    "mpi_division": ndiv,
+                                },
+                            )
+                        )
 
         return issues
 
@@ -538,7 +544,10 @@ srun mpiemses3D plasma.toml
         if case_dir_str:
             case_dir = Path(case_dir_str)
             # Look in input/ subdirectory first, then case root for compat
-            for candidate in (case_dir / "input" / "plasma.toml", case_dir / "plasma.toml"):
+            for candidate in (
+                case_dir / "input" / "plasma.toml",
+                case_dir / "plasma.toml",
+            ):
                 if candidate.is_file():
                     with open(candidate, "rb") as f:
                         template_config = tomllib.load(f)

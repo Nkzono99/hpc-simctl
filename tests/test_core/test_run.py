@@ -106,11 +106,7 @@ class TestCreateRun:
         assert info.created_at != ""
 
     def test_auto_increment(self, tmp_path: Path) -> None:
-        info1 = create_run(
-            tmp_path, set(), target_date=date(2026, 3, 27)
-        )
-        info2 = create_run(
-            tmp_path, {info1.run_id}, target_date=date(2026, 3, 27)
-        )
+        info1 = create_run(tmp_path, set(), target_date=date(2026, 3, 27))
+        info2 = create_run(tmp_path, {info1.run_id}, target_date=date(2026, 3, 27))
         assert info1.run_id == "R20260327-0001"
         assert info2.run_id == "R20260327-0002"

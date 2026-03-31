@@ -98,4 +98,3 @@ def test_add_fact_supports_structured_fields_and_supersedes(tmp_path: Path) -> N
 
     visible = query_facts(project_root)
     assert [fact.id for fact in visible] == ["f002"]
-

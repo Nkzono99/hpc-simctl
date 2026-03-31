@@ -133,9 +133,7 @@ class TestRenderInputs:
             config = tomli.load(f)
         assert "outputs" in config["output"]["dir"]
 
-    def test_no_case_section_raises(
-        self, adapter: BeachAdapter, run_dir: Path
-    ) -> None:
+    def test_no_case_section_raises(self, adapter: BeachAdapter, run_dir: Path) -> None:
         with pytest.raises(ValueError, match="case"):
             adapter.render_inputs({}, run_dir)
 
@@ -188,12 +186,8 @@ class TestResolveRuntime:
 
 
 class TestBuildProgramCommand:
-    def test_basic_command(
-        self, adapter: BeachAdapter, run_dir: Path
-    ) -> None:
-        cmd = adapter.build_program_command(
-            {"executable": "/opt/beach"}, run_dir
-        )
+    def test_basic_command(self, adapter: BeachAdapter, run_dir: Path) -> None:
+        cmd = adapter.build_program_command({"executable": "/opt/beach"}, run_dir)
         assert cmd[0] == "/opt/beach"
         assert "beach.toml" in cmd[1]
 
@@ -204,14 +198,10 @@ class TestBuildProgramCommand:
 
 
 class TestDetectOutputs:
-    def test_no_work_dir(
-        self, adapter: BeachAdapter, tmp_path: Path
-    ) -> None:
+    def test_no_work_dir(self, adapter: BeachAdapter, tmp_path: Path) -> None:
         assert adapter.detect_outputs(tmp_path) == {}
 
-    def test_detects_summary(
-        self, adapter: BeachAdapter, run_dir: Path
-    ) -> None:
+    def test_detects_summary(self, adapter: BeachAdapter, run_dir: Path) -> None:
         out_dir = run_dir / "work" / "outputs"
         out_dir.mkdir(parents=True)
         (out_dir / "summary.txt").write_text("mesh_nelem=400\nbatches=100\n")
@@ -220,9 +210,7 @@ class TestDetectOutputs:
         assert "summary" in outputs
         assert "charges" in outputs
 
-    def test_detects_logs(
-        self, adapter: BeachAdapter, run_dir: Path
-    ) -> None:
+    def test_detects_logs(self, adapter: BeachAdapter, run_dir: Path) -> None:
         (run_dir / "work" / "stdout.123.log").write_text("output")
         outputs = adapter.detect_outputs(run_dir)
         assert "logs" in outputs
@@ -234,30 +222,20 @@ class TestDetectOutputs:
 
 
 class TestDetectStatus:
-    def test_unknown_empty(
-        self, adapter: BeachAdapter, run_dir: Path
-    ) -> None:
+    def test_unknown_empty(self, adapter: BeachAdapter, run_dir: Path) -> None:
         assert adapter.detect_status(run_dir) == "unknown"
 
-    def test_completed_with_summary(
-        self, adapter: BeachAdapter, run_dir: Path
-    ) -> None:
+    def test_completed_with_summary(self, adapter: BeachAdapter, run_dir: Path) -> None:
         out_dir = run_dir / "work" / "outputs"
         out_dir.mkdir(parents=True)
         (out_dir / "summary.txt").write_text("batches=100\n")
         assert adapter.detect_status(run_dir) == "completed"
 
-    def test_failed_on_error_log(
-        self, adapter: BeachAdapter, run_dir: Path
-    ) -> None:
-        (run_dir / "work" / "stderr.123.log").write_text(
-            "FATAL: out of memory"
-        )
+    def test_failed_on_error_log(self, adapter: BeachAdapter, run_dir: Path) -> None:
+        (run_dir / "work" / "stderr.123.log").write_text("FATAL: out of memory")
         assert adapter.detect_status(run_dir) == "failed"
 
-    def test_running_with_charges(
-        self, adapter: BeachAdapter, run_dir: Path
-    ) -> None:
+    def test_running_with_charges(self, adapter: BeachAdapter, run_dir: Path) -> None:
         out_dir = run_dir / "work" / "outputs"
         out_dir.mkdir(parents=True)
         (out_dir / "charges.csv").write_text("elem_idx,charge_C\n")
@@ -270,9 +248,7 @@ class TestDetectStatus:
 
 
 class TestSummarize:
-    def test_empty_summary(
-        self, adapter: BeachAdapter, run_dir: Path
-    ) -> None:
+    def test_empty_summary(self, adapter: BeachAdapter, run_dir: Path) -> None:
         summary = adapter.summarize(run_dir)
         assert summary["status"] == "unknown"
 
@@ -311,9 +287,7 @@ class TestCollectProvenance:
         assert prov["resolver_mode"] == "package"
         assert prov["exe_hash"] == ""
 
-    def test_provenance_with_file(
-        self, adapter: BeachAdapter, tmp_path: Path
-    ) -> None:
+    def test_provenance_with_file(self, adapter: BeachAdapter, tmp_path: Path) -> None:
         exe = tmp_path / "beach"
         exe.write_bytes(b"binary")
         prov = adapter.collect_provenance(

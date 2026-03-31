@@ -93,4 +93,3 @@ def test_add_fact_supports_superseding_fact(tmp_path: Path) -> None:
     facts = load_facts(tmp_path)
     assert [fact.id for fact in facts] == ["f001", "f002"]
     assert facts[1].supersedes == "f001"
-

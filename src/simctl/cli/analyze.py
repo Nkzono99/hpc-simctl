@@ -176,9 +176,7 @@ def summarize(
 
 
 def collect(
-    survey_dir: Path = typer.Argument(
-        None, help="Survey directory (defaults to cwd)."
-    ),
+    survey_dir: Path = typer.Argument(None, help="Survey directory (defaults to cwd)."),
 ) -> None:
     """Collect summaries from all runs in a survey into a CSV."""
     if survey_dir is None:

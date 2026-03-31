@@ -166,9 +166,7 @@ def _is_valid_walltime(walltime: str) -> bool:
     import re
 
     # D-HH:MM:SS or HH:MM:SS or H:MM:SS or MM:SS
-    return bool(re.match(
-        r"^(\d+-)?(\d{1,3}:)?\d{1,2}:\d{2}$", walltime
-    ))
+    return bool(re.match(r"^(\d+-)?(\d{1,3}:)?\d{1,2}:\d{2}$", walltime))
 
 
 def load_case(case_dir: Path) -> CaseData:
@@ -227,7 +225,11 @@ def load_case(case_dir: Path) -> CaseData:
 
     # Warn about unknown top-level keys
     known_sections = {
-        "case", "classification", "job", "params", "slurm",
+        "case",
+        "classification",
+        "job",
+        "params",
+        "slurm",
     }
     for key in raw:
         if key not in known_sections:

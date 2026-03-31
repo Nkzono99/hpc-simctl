@@ -104,38 +104,46 @@ def load_campaign(project_dir: Path) -> CampaignData | None:
     variables: list[Variable] = []
     for param_name, var_data in raw.get("variables", {}).items():
         if isinstance(var_data, dict):
-            variables.append(Variable(
-                name=param_name,
-                role=var_data.get("role", "independent"),
-                range=var_data.get("range"),
-                values=var_data.get("values"),
-                unit=var_data.get("unit", ""),
-                reason=var_data.get("reason", ""),
-            ))
+            variables.append(
+                Variable(
+                    name=param_name,
+                    role=var_data.get("role", "independent"),
+                    range=var_data.get("range"),
+                    values=var_data.get("values"),
+                    unit=var_data.get("unit", ""),
+                    reason=var_data.get("reason", ""),
+                )
+            )
         else:
             # Simple value: treated as fixed
-            variables.append(Variable(
-                name=param_name,
-                role="fixed",
-                values=[var_data],
-            ))
+            variables.append(
+                Variable(
+                    name=param_name,
+                    role="fixed",
+                    values=[var_data],
+                )
+            )
 
     # Parse observables
     observables: list[Observable] = []
     for obs_name, obs_data in raw.get("observables", {}).items():
         if isinstance(obs_data, dict):
-            observables.append(Observable(
-                name=obs_name,
-                source=obs_data.get("source", ""),
-                column=obs_data.get("column", ""),
-                description=obs_data.get("description", ""),
-                unit=obs_data.get("unit", ""),
-            ))
+            observables.append(
+                Observable(
+                    name=obs_name,
+                    source=obs_data.get("source", ""),
+                    column=obs_data.get("column", ""),
+                    description=obs_data.get("description", ""),
+                    unit=obs_data.get("unit", ""),
+                )
+            )
         else:
-            observables.append(Observable(
-                name=obs_name,
-                source=str(obs_data),
-            ))
+            observables.append(
+                Observable(
+                    name=obs_name,
+                    source=str(obs_data),
+                )
+            )
 
     return CampaignData(
         name=camp.get("name", ""),

@@ -80,9 +80,5 @@ class ParameterValidationError(SimctlError):
 
     def __init__(self, issues: list[object]) -> None:
         self.issues = issues
-        error_count = sum(
-            1 for i in issues if getattr(i, "severity", "") == "error"
-        )
-        super().__init__(
-            f"Parameter validation failed with {error_count} error(s)"
-        )
+        error_count = sum(1 for i in issues if getattr(i, "severity", "") == "error")
+        super().__init__(f"Parameter validation failed with {error_count} error(s)")

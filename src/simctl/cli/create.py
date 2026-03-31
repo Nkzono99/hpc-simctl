@@ -359,7 +359,10 @@ def _generate_run(
         SimctlError: On any domain error during generation.
     """
     # 1. Validate parameters (before creating directories)
-    case_section = {**case_data.raw.get("case", {}), "case_dir": str(case_data.case_dir)}
+    case_section = {
+        **case_data.raw.get("case", {}),
+        "case_dir": str(case_data.case_dir),
+    }
     validation_data = {"case": case_section, "params": params}
     issues = adapter.validate_params(validation_data)
     if issues:
