@@ -43,7 +43,7 @@ def _find_summarize_script(
         or manifest.origin.get("base_case")
     )
     if case_name:
-        case_script = project_root / "cases" / case_name / "summarize.py"
+        case_script = project_root / "cases" / str(case_name) / "summarize.py"
         if case_script.is_file():
             return case_script
 

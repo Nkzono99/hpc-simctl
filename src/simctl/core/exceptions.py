@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 
 class SimctlError(Exception):
     """Base exception for all simctl domain errors."""
@@ -78,7 +80,7 @@ class ParameterValidationError(SimctlError):
         issues: List of ValidationIssue instances.
     """
 
-    def __init__(self, issues: list[object]) -> None:
+    def __init__(self, issues: Sequence[object]) -> None:
         self.issues = issues
         error_count = sum(1 for i in issues if getattr(i, "severity", "") == "error")
         super().__init__(f"Parameter validation failed with {error_count} error(s)")

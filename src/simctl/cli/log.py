@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated, Any, Optional
 
 import typer
 
@@ -57,7 +57,7 @@ def _tail_file(path: Path, lines: int) -> list[str]:
         return []
 
 
-def _get_progress(run_dir: Path, manifest_data: dict) -> str | None:
+def _get_progress(run_dir: Path, manifest_data: dict[str, Any]) -> str | None:
     """Try to get progress info from the adapter."""
     adapter_name = manifest_data.get("simulator", {}).get("adapter", "")
     if not adapter_name:

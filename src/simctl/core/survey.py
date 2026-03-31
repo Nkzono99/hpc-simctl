@@ -145,9 +145,9 @@ def load_survey(survey_dir: Path) -> SurveyData:
     return SurveyData(
         id=survey_id,
         name=name,
-        base_case=base_case,
-        simulator=simulator,
-        launcher=launcher,
+        base_case=str(base_case),
+        simulator=str(simulator),
+        launcher=str(launcher),
         classification=classification,
         axes=axes,
         naming_template=naming_template,

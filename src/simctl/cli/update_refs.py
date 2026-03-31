@@ -10,6 +10,7 @@ from typing import Annotated, Optional
 
 import typer
 
+from simctl.adapters.base import SimulatorAdapter
 from simctl.core.exceptions import SimctlError
 from simctl.core.project import find_project_root, load_project
 
@@ -205,7 +206,7 @@ def _get_project_simulators() -> tuple[Path, dict[str, str]]:
     return root, mapping
 
 
-def _get_adapter_class(adapter_name: str) -> type | None:
+def _get_adapter_class(adapter_name: str) -> type[SimulatorAdapter] | None:
     """Get adapter class by adapter name (not simulator entry name)."""
     import simctl.adapters  # noqa: F401
     from simctl.adapters.registry import get_global_registry
