@@ -157,6 +157,46 @@ All checks passed.
 
 ---
 
+## ステップ 1.5: campaign.toml のセットアップ (AI エージェント活用)
+
+`simctl init` が生成する `campaign.toml` はスケルトン状態です。
+研究テーマ・仮説・変数・観測量を記入することで、AI エージェントがサーベイ設計や結果解析の文脈を理解できるようになります。
+
+### AI エージェントに記入させる (推奨)
+
+Claude Code などの AI エージェント環境では、テーマを自然言語で伝えるだけで campaign.toml を構造化できます。
+
+```bash
+# Claude Code の場合
+claude "campaign.tomlを整えて。テーマは月面平面に太陽風プラズマが吹きつけ、
+光電効果もある場合の表面電位変動を調べること。照射角を独立変数にする。"
+```
+
+エージェントは `.claude/skills/setup-campaign/SKILL.md` を参照し、以下を自動的に行います:
+
+1. `[campaign]` の description と hypothesis を記入
+2. `[variables]` にパラメータの role (independent / dependent / fixed) を設定
+3. `[observables]` に測定する物理量を定義
+
+### 手動で記入する場合
+
+```toml
+[campaign]
+name = "flat_surface"
+description = "月面平面における太陽風プラズマ-表面相互作用の研究"
+hypothesis = "太陽天頂角が大きくなると光電子放出量が減少し、表面電位が負方向に変化する"
+simulator = "emses"
+
+[variables]
+ray_zenith_angle_deg = { role = "independent", values = [0, 20, 40, 60, 80], unit = "deg", reason = "太陽照射角の影響を系統的に調べる" }
+surface_potential = { role = "dependent", unit = "V", reason = "表面電位が主要な観測量" }
+
+[observables]
+surface_potential = { source = "work/phisp*.h5", description = "表面電位分布", unit = "V" }
+```
+
+---
+
 ## ステップ 2: シミュレータと Launcher の設定
 
 ### simulators.toml
@@ -222,15 +262,30 @@ use_slurm_ntasks = true
 
 Case は run を生成するための再利用可能な雛形です。`cases/` ディレクトリ以下に配置します。
 
+### simctl new でテンプレート生成
+
+`simctl new` コマンドでケーステンプレートを自動生成できます。
+
+```bash
+# cases/<simulator>/ ディレクトリ内で実行
+cd cases/emses
+simctl new solar_wind_flat
+
+# survey.toml のスタブも同時に生成する場合
+simctl new solar_wind_flat --survey
+```
+
+`--survey` オプションを付けると、`runs/<case_name>/survey.toml` にスタブファイルも同時に生成されます。
+
 ### ディレクトリ構成
 
 ```
 cases/
-  cavity_base/
-    case.toml          # メタデータ・パラメータ定義
-    notes.md           # (任意) Case の説明メモ
-    input/             # テンプレート入力ファイル (run の input/ にコピーされる)
-      params.json
+  emses/
+    solar_wind_flat/
+      case.toml          # メタデータ・パラメータ定義
+      plasma.toml        # シミュレータ入力ファイル (Adapter が生成)
+      input/             # テンプレート入力ファイル (run の input/ にコピーされる)
 ```
 
 ### case.toml の例
@@ -375,7 +430,13 @@ status_dir = "status"
 
 ### survey.toml の作成
 
+`simctl new --survey` でケースと同時にスタブを生成するか、手動で作成します。
+
 ```bash
+# 方法 1: simctl new --survey で自動生成済みの場合
+# → runs/<case_name>/survey.toml が既に存在する
+
+# 方法 2: 手動作成
 mkdir -p runs/cavity/rectangular/u_aspect_scan
 ```
 

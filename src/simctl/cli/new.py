@@ -39,6 +39,13 @@ def new(
         Optional[Path],
         typer.Option("--dest", "-d", help="Destination directory (defaults to cwd)."),
     ] = None,
+    survey: Annotated[
+        bool,
+        typer.Option(
+            "--survey",
+            help="Also generate a survey.toml stub in runs/<case_name>/.",
+        ),
+    ] = False,
 ) -> None:
     """Create a new case template with simulator-specific boilerplate.
 
@@ -48,6 +55,7 @@ def new(
       cd cases/emses && simctl new flat_surface
       cd cases/beach && simctl new periodic
       simctl new mycase -s emses -d cases/emses
+      simctl new mycase -s emses --survey  # also generate survey.toml
     """
     target_dir = (dest or Path.cwd()).resolve()
 
@@ -144,3 +152,74 @@ def new(
     for f in created:
         typer.echo(f"    {f}")
     typer.echo(f"\nEdit {case_dir / 'case.toml'} to configure parameters and job settings.")
+
+    # Optionally generate survey.toml stub
+    if survey:
+        _generate_survey_stub(
+            case_name, sim_name, default_launcher, target_dir,
+        )
+
+
+def _generate_survey_stub(
+    case_name: str,
+    simulator: str,
+    launcher: str,
+    cases_sim_dir: Path,
+) -> None:
+    """Generate a survey.toml stub under runs/<case_name>/.
+
+    Args:
+        case_name: Name of the base case.
+        simulator: Simulator name.
+        launcher: Launcher profile name.
+        cases_sim_dir: The cases/<sim>/ directory (used to find project root).
+    """
+    # Find runs/ directory relative to project root
+    try:
+        project_root = find_project_root(cases_sim_dir)
+    except SimctlError:
+        typer.echo("  Warning: Could not find project root; skipping survey.toml.")
+        return
+
+    survey_dir = project_root / "runs" / case_name
+    survey_dir.mkdir(parents=True, exist_ok=True)
+
+    # Build the case reference path: <sim>/<case_name> for multi-sim layout
+    base_case_ref = f"{simulator}/{case_name}"
+
+    content = f"""\
+#:schema https://raw.githubusercontent.com/Nkzono99/hpc-simctl/main/schemas/survey.json
+[survey]
+name = "{case_name} sweep"
+base_case = "{base_case_ref}"
+simulator = "{simulator}"
+launcher = "{launcher}"
+
+[axes]
+# Define parameter axes for cartesian product expansion.
+# Each key is a dotted parameter path, and the value is a list.
+# Example:
+# "tmgrid.dt" = [0.5, 1.0, 2.0]
+# "species[2].ray_zenith_angle_deg" = [0, 30, 60, 90]
+
+[naming]
+# Template for run display names. Use parameter leaf names or underscore forms.
+# Example: display_name = "dt{{tmgrid_dt}}_angle{{ray_zenith_angle_deg}}"
+display_name = ""
+
+[job]
+# Override job settings from case.toml (optional).
+# partition = ""
+# nodes = 1
+# ntasks = 1
+# walltime = "01:00:00"
+"""
+    survey_file = survey_dir / "survey.toml"
+    if survey_file.exists():
+        typer.echo(f"\n  survey.toml already exists at {survey_dir}, skipping.")
+        return
+
+    survey_file.write_text(content, encoding="utf-8")
+    typer.echo(f"\nCreated survey stub:")
+    typer.echo(f"  Path: {survey_dir / 'survey.toml'}")
+    typer.echo(f"  Edit axes and naming, then run: cd {survey_dir} && simctl sweep")

@@ -99,17 +99,26 @@ def load_survey(survey_dir: Path) -> SurveyData:
         survey_id = f"S{date_str}-{dir_slug}"
 
     name = str(survey_section.get("name", ""))
+
+    # Validate required fields, collecting all errors at once
+    errors: list[str] = []
     base_case = survey_section.get("base_case")
     if not isinstance(base_case, str) or not base_case:
-        raise SurveyConfigError(f"Missing or empty 'survey.base_case' in {survey_file}")
+        errors.append("survey.base_case")
 
     simulator = survey_section.get("simulator")
     if not isinstance(simulator, str) or not simulator:
-        raise SurveyConfigError(f"Missing or empty 'survey.simulator' in {survey_file}")
+        errors.append("survey.simulator")
 
     launcher = survey_section.get("launcher")
     if not isinstance(launcher, str) or not launcher:
-        raise SurveyConfigError(f"Missing or empty 'survey.launcher' in {survey_file}")
+        errors.append("survey.launcher")
+
+    if errors:
+        missing = ", ".join(errors)
+        raise SurveyConfigError(
+            f"Missing or empty required fields in {survey_file}: {missing}"
+        )
 
     classification = _parse_classification(raw.get("classification", {}))
 
@@ -195,13 +204,22 @@ def generate_display_name(template: str, params: dict[str, Any]) -> str:
     for key, value in params.items():
         formatted = f"{value:g}" if isinstance(value, float) else str(value)
         fmt_params[key] = formatted
+
+        # Normalize brackets: "species[2].ray_zenith_angle_deg"
+        # → "species_2_ray_zenith_angle_deg" (underscore form)
+        # → "ray_zenith_angle_deg" (leaf)
+        normalized = key.replace("[", "_").replace("]", "")
+        if normalized != key:
+            fmt_params[normalized] = formatted
+
         # For dotted keys like "plasma.wc", also register the leaf name "wc"
         # and the underscore form "plasma_wc" for use in templates.
-        if "." in key:
-            leaf = key.rsplit(".", 1)[1]
+        effective = normalized if normalized != key else key
+        if "." in effective:
+            leaf = effective.rsplit(".", 1)[1]
             if leaf not in fmt_params:
                 fmt_params[leaf] = formatted
-            fmt_params[key.replace(".", "_")] = formatted
+            fmt_params[effective.replace(".", "_")] = formatted
 
     try:
         return template.format_map(fmt_params)
