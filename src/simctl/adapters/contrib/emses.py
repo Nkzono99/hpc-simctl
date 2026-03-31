@@ -762,7 +762,9 @@ srun mpiemses3D plasma.toml
             try:
                 nstep = self._get_expected_nstep(run_dir)
                 lines = [
-                    l for l in energy_file.read_text().strip().split("\n") if l.strip()
+                    line
+                    for line in energy_file.read_text().strip().split("\n")
+                    if line.strip()
                 ]
                 if lines and nstep:
                     last_parts = lines[-1].strip().split()
@@ -806,7 +808,9 @@ srun mpiemses3D plasma.toml
         if energy_file.is_file():
             try:
                 lines = [
-                    l for l in energy_file.read_text().strip().split("\n") if l.strip()
+                    line
+                    for line in energy_file.read_text().strip().split("\n")
+                    if line.strip()
                 ]
                 if lines:
                     summary["total_energy_lines"] = len(lines)

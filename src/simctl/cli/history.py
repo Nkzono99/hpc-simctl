@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 from typing import Annotated, Optional
 
@@ -66,13 +67,9 @@ def history(
         run_id = manifest.run.get("id", "???")
         status = manifest.run.get("status", "unknown")
         submitted_at = manifest.job.get("submitted_at", "")
-        display_name = manifest.run.get("display_name", "")
-
         rel_path = str(run_dir)
-        try:
+        with contextlib.suppress(ValueError):
             rel_path = str(run_dir.relative_to(search_dir.parent))
-        except ValueError:
-            pass
 
         entries.append((submitted_at, job_id, run_id, status, rel_path))
 

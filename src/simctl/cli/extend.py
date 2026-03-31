@@ -97,7 +97,8 @@ def extend(
         adapter_name = source_manifest.simulator.get("name", "")
 
     try:
-        from simctl.adapters.registry import get as get_adapter, load_from_config
+        from simctl.adapters.registry import get as get_adapter
+        from simctl.adapters.registry import load_from_config
 
         load_from_config(project.simulators)
         adapter_cls = get_adapter(adapter_name)

@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from simctl.core.site import (
     MOCK_SITE,
     STANDARD_SITE,
@@ -13,7 +11,6 @@ from simctl.core.site import (
     load_site_profile,
     save_site_profile,
 )
-
 
 # ---------------------------------------------------------------------------
 # SiteProfile dataclass

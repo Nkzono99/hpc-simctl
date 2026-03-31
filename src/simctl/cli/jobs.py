@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 from typing import Annotated, Optional
 
@@ -73,10 +74,8 @@ def jobs(
             submitted_at = submitted_at.split("T")[0]
 
         rel_path = str(run_dir)
-        try:
+        with contextlib.suppress(ValueError):
             rel_path = str(run_dir.relative_to(search_dir.parent))
-        except ValueError:
-            pass
 
         rows.append((job_id or "-", run_id, status, submitted_at, rel_path))
 

@@ -6,7 +6,6 @@ import pytest
 
 from simctl.core.state import RunState
 from simctl.slurm.query import (
-    PartitionInfo,
     SlurmQueryError,
     _parse_timelimit,
     map_slurm_state,

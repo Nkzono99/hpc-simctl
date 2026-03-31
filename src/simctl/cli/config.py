@@ -107,9 +107,8 @@ def add_simulator(
     ] = None,
 ) -> None:
     """Add a simulator to simulators.toml (interactive)."""
-    from simctl.adapters.registry import get_global_registry
-
     import simctl.adapters  # noqa: F401
+    from simctl.adapters.registry import get_global_registry
 
     project_dir = _find_project_dir(path)
     registry = get_global_registry()
@@ -140,20 +139,16 @@ def add_simulator(
 
     # Load existing config
     sim_path = project_dir / "simulators.toml"
-    if sim_path.exists():
-        existing = _load_toml(sim_path)
-    else:
-        existing = {"simulators": {}}
+    existing = _load_toml(sim_path) if sim_path.exists() else {"simulators": {}}
 
     if "simulators" not in existing:
         existing["simulators"] = {}
 
-    if simulator in existing["simulators"]:
-        if not typer.confirm(
-            f"'{simulator}' already exists. Overwrite?", default=False
-        ):
-            typer.echo("Cancelled.")
-            raise typer.Exit()
+    if simulator in existing["simulators"] and not typer.confirm(
+        f"'{simulator}' already exists. Overwrite?", default=False
+    ):
+        typer.echo("Cancelled.")
+        raise typer.Exit()
 
     # Interactive config
     adapter_cls = registry.get(simulator)
@@ -209,12 +204,11 @@ def add_launcher(
     if "launchers" not in existing:
         existing["launchers"] = {}
 
-    if launcher_name in existing["launchers"]:
-        if not typer.confirm(
-            f"'{launcher_name}' already exists. Overwrite?", default=False
-        ):
-            typer.echo("Cancelled.")
-            raise typer.Exit()
+    if launcher_name in existing["launchers"] and not typer.confirm(
+        f"'{launcher_name}' already exists. Overwrite?", default=False
+    ):
+        typer.echo("Cancelled.")
+        raise typer.Exit()
 
     existing["launchers"][launcher_name] = config
     _write_toml(launcher_path, existing)

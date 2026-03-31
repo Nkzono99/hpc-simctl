@@ -66,9 +66,8 @@ def _get_progress(run_dir: Path, manifest_data: dict) -> str | None:
         return None
 
     try:
-        from simctl.adapters.registry import get as get_adapter
-
         import simctl.adapters  # noqa: F401
+        from simctl.adapters.registry import get as get_adapter
 
         adapter_cls = get_adapter(adapter_name)
         adapter = adapter_cls()

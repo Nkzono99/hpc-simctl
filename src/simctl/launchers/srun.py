@@ -9,7 +9,7 @@ environment variable set by Slurm and does not emit an explicit
 from __future__ import annotations
 
 import shlex
-from typing import Any  # noqa: F401
+from typing import Any
 
 from simctl.launchers.base import Launcher, LauncherConfigError
 

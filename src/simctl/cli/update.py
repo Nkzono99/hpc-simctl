@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import subprocess
-import sys
 from pathlib import Path
 from typing import Annotated, Optional
 
@@ -31,9 +30,8 @@ def _find_venv_pip() -> str | None:
 
 def _collect_packages(simulator_names: list[str]) -> list[str]:
     """Collect pip packages for the given simulators."""
-    from simctl.adapters.registry import get_global_registry
-
     import simctl.adapters  # noqa: F401
+    from simctl.adapters.registry import get_global_registry
 
     registry = get_global_registry()
     seen: set[str] = set()

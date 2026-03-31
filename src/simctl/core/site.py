@@ -232,7 +232,7 @@ def _load_from_launchers_toml(path: Path) -> SiteProfile | None:
     with open(path, "rb") as f:
         raw = tomllib.load(f)
 
-    _SITE_KEYS = {
+    site_keys = {
         "resource_style",
         "modules",
         "stdout",
@@ -247,7 +247,7 @@ def _load_from_launchers_toml(path: Path) -> SiteProfile | None:
     for _name, profile in launchers.items():
         if not isinstance(profile, dict):
             continue
-        if not _SITE_KEYS.intersection(profile.keys()):
+        if not site_keys.intersection(profile.keys()):
             continue
 
         # Found site keys — extract them

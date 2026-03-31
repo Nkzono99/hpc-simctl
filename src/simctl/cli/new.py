@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 from typing import Annotated, Optional
 
@@ -70,9 +71,8 @@ def new(
 
     # Load adapter
     try:
-        from simctl.adapters.registry import get_global_registry
-
         import simctl.adapters  # noqa: F401
+        from simctl.adapters.registry import get_global_registry
 
         registry = get_global_registry()
         available = registry.list_adapters()
@@ -100,10 +100,8 @@ def new(
     default_launcher = "srun"
     site_resource_style = "standard"
     project_root: Path | None = None
-    try:
+    with contextlib.suppress(Exception):
         project_root = find_project_root(target_dir)
-    except Exception:
-        pass
 
     if project_root:
         try:
@@ -252,6 +250,6 @@ display_name = ""
         return
 
     survey_file.write_text(content, encoding="utf-8")
-    typer.echo(f"\nCreated survey stub:")
+    typer.echo("\nCreated survey stub:")
     typer.echo(f"  Path: {survey_dir / 'survey.toml'}")
     typer.echo(f"  Edit axes and naming, then run: cd {survey_dir} && simctl sweep")

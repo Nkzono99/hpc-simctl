@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import importlib.resources
-from dataclasses import dataclass, field
 import logging
 import shutil
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Any, Optional
 
@@ -151,10 +151,9 @@ def _build_simulators_toml(simulator_names: list[str]) -> str:
     Raises:
         typer.BadParameter: If a simulator name is not recognized.
     """
-    from simctl.adapters.registry import get_global_registry
-
     # Ensure built-in adapters are registered
     import simctl.adapters  # noqa: F401
+    from simctl.adapters.registry import get_global_registry
 
     registry = get_global_registry()
     available = registry.list_adapters()
@@ -192,9 +191,8 @@ def _build_simulators_toml(simulator_names: list[str]) -> str:
 
 def _collect_pip_packages(simulator_names: list[str]) -> list[str]:
     """Collect unique pip packages from adapters."""
-    from simctl.adapters.registry import get_global_registry
-
     import simctl.adapters  # noqa: F401
+    from simctl.adapters.registry import get_global_registry
 
     registry = get_global_registry()
     seen: set[str] = set()
@@ -213,9 +211,8 @@ def _collect_pip_packages(simulator_names: list[str]) -> list[str]:
 
 def _collect_doc_repos(simulator_names: list[str]) -> list[tuple[str, str]]:
     """Collect unique doc repos from adapters."""
-    from simctl.adapters.registry import get_global_registry
-
     import simctl.adapters  # noqa: F401
+    from simctl.adapters.registry import get_global_registry
 
     registry = get_global_registry()
     seen: set[str] = set()
@@ -275,9 +272,8 @@ def _clone_doc_repos(
 
 def _build_simulator_guides(simulator_names: list[str]) -> str:
     """Collect agent_guide() from adapters for the given simulators."""
-    from simctl.adapters.registry import get_global_registry
-
     import simctl.adapters  # noqa: F401
+    from simctl.adapters.registry import get_global_registry
 
     registry = get_global_registry()
     parts: list[str] = []
@@ -426,9 +422,8 @@ def _prompt_simulators() -> tuple[list[str], dict[str, dict[str, Any]]]:
     Returns:
         Tuple of (simulator_names, {name: config_dict}).
     """
-    from simctl.adapters.registry import get_global_registry
-
     import simctl.adapters  # noqa: F401
+    from simctl.adapters.registry import get_global_registry
 
     registry = get_global_registry()
     available = registry.list_adapters()
