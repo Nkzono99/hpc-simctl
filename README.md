@@ -401,4 +401,4 @@ uv run simctl --help
 
 ## ライセンス
 
-MIT
+Apache-2.0
