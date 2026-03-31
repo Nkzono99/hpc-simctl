@@ -90,13 +90,13 @@ class TestName:
 
 
 class TestKnowledgeSources:
-    def test_includes_simctl_bundle_patterns(self) -> None:
+    def test_includes_cookbook_patterns(self) -> None:
         sources = BeachAdapter.knowledge_sources()
         assert "beach" in sources
         patterns = sources["beach"]
-        assert "simctl/index.toml" in patterns
-        assert "simctl/**/*.toml" in patterns
-        assert "simctl/**/*.md" in patterns
+        assert "cookbook/index.toml" in patterns
+        assert "cookbook/**/*.toml" in patterns
+        assert "cookbook/**/*.md" in patterns
 
 
 # ===================================================================

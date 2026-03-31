@@ -1,43 +1,37 @@
-# Simulator Repo `simctl/` Knowledge Bundle Spec
+# Simulator Cookbook Spec
 
-シミュレーションリポジトリ側で、`simctl` と AI Agent が参照できる
-simulator-specific knowledge source を提供するための規約。
+シミュレーションリポジトリ側で、AI Agent や管理ツールが参照できる
+ツール非依存の入力例・設定カタログを提供するための規約。
 
-目的は、単なる README 参照ではなく、
+## 目的
 
-- 典型的な入力例
-- 用途別プリセット
-- パラメータ生成のためのベースライン
-- 部分設定の再利用
-- 数値安定性や既知制約
+- 典型的な入力例を構造化して提供する
+- 用途別プリセットとして再利用可能にする
+- パラメータ生成の出発点を Agent に与える
+- 部分設定 (fragment) の合成を可能にする
+- ツール固有の知識ではなく、simulator 固有の知識として管理する
 
-を、ファイルシステム上の軽量な構造で提供することにある。
+## 原則
 
-この knowledge bundle は source repo 側で管理し、
-project 側の `campaign.toml` や `insights` とは分離する。
-
-## 位置づけ
-
-- **source repo 側**: simulator-specific knowledge source
-- **simctl project 側**: campaign-specific working knowledge
-
-`simctl update-refs` は `refs/` にクローンした source repo を更新し、
-この bundle を `.simctl/knowledge/` のインデックス対象として扱う。
+- **ツール非依存**: 特定の管理ツールに依存しない。どの AI Agent やワークフローツールからでも参照できる
+- **自己記述的**: cookbook 自体が構造と使い方を説明する (`COOKBOOK.md`)
+- **軽量**: 大きな DB ではなく、構造化ディレクトリ + 薄い目録
+- **example が主役**: 完全な入力例を中心に、fragment は補助
+- **人間可読 + 機械可読**: メタデータは TOML、補足は Markdown
 
 ## ディレクトリ構成
 
-推奨構成:
-
 ```text
 repo/
-  simctl/
-    index.toml
+  cookbook/
+    COOKBOOK.md              # この cookbook の管理ガイド (Agent 向け)
+    index.toml              # 全 entry の目録
     examples/
       electrostatic/
         sheath-basic/
-          meta.toml
-          input.toml
-          notes.md
+          meta.toml         # entry メタデータ
+          input.toml        # 完全な入力ファイル
+          notes.md          # 人間向け補足
       electromagnetic/
         alfven-wave/
           meta.toml
@@ -46,45 +40,40 @@ repo/
       boundary/
         absorbing-open/
           meta.toml
-          fragment.toml
+          fragment.toml     # 部分設定
       diagnostics/
         quick-look/
           meta.toml
           fragment.toml
-    constraints/
-      physics.toml
-      numerics.toml
-      notes.md
 ```
 
 ## 必須要件
 
-- `simctl/index.toml` は必須
+- `cookbook/COOKBOOK.md` は必須
+- `cookbook/index.toml` は必須
 - 各 example / fragment ディレクトリは `meta.toml` を持つ
-- 各 bundle は `schema_version` を持つ
+- `index.toml` と `meta.toml` は `schema_version` を持つ
 - 各 entry は repo 内で安定な `id` を持つ
-- `path` は `simctl/` からの相対ではなく、`index.toml` から見た相対パスで表す
 
-## 設計原則
+## `COOKBOOK.md`
 
-- 大きな DB ではなく、構造化ディレクトリ + 薄い目録に留める
-- index は検索エンジンではなく、Agent が全体像を掴むための目録
-- 完全な入力例を主役にし、fragment と constraint は補助にする
-- 人間向け補足は Markdown、機械可読メタデータは TOML に分ける
-- 破壊的変更を避けるため `schema_version` を明示する
+cookbook ディレクトリのルートに置く。2 つの役割がある:
+
+1. **この cookbook の概要**: どんな simulator の、どんな入力例が入っているか
+2. **管理ガイド**: repo 側の Agent や開発者が entry を追加・更新する手順
+
+後述の「COOKBOOK.md テンプレート」節を参照。
 
 ## `index.toml`
 
-`index.toml` は bundle 全体の目録。Agent はまずこれを読む想定。
-
-最小例:
+bundle 全体の目録。Agent はまずこれを読む。
 
 ```toml
-[bundle]
+[cookbook]
 schema_version = "0.1"
-simulator = "emses"
-title = "MPIEMSES3D simctl knowledge bundle"
-description = "Examples, fragments, and constraints for agent-assisted setup"
+software = "MPIEMSES3D"
+title = "MPIEMSES3D Cookbook"
+description = "Input examples and reusable fragments for MPIEMSES3D"
 
 [[entries]]
 id = "electrostatic-sheath-basic"
@@ -94,7 +83,6 @@ title = "Basic electrostatic sheath"
 summary = "Minimal stable sheath setup for quick testing"
 tags = ["electrostatic", "sheath", "1d", "baseline"]
 recommended_for = ["sanity-check", "parameter-sweep-base"]
-difficulty = "low"
 
 [[entries]]
 id = "quick-look-diagnostics"
@@ -104,87 +92,58 @@ title = "Quick-look diagnostics"
 summary = "Minimal diagnostics fragment for cheap smoke tests"
 tags = ["diagnostics", "smoke-test"]
 recommended_for = ["baseline", "debug"]
-difficulty = "low"
-
-[[entries]]
-id = "numerics-constraints"
-kind = "constraint_set"
-path = "constraints/numerics.toml"
-title = "Numerical constraints"
-summary = "Known numerical stability and resolution guidance"
-tags = ["numerics", "stability"]
-recommended_for = ["parameter-generation", "validation"]
-difficulty = "medium"
 ```
 
-### `[bundle]`
+### `[cookbook]`
 
-必須項目:
-
-- `schema_version`
-- `simulator`
-
-推奨項目:
-
-- `title`
-- `description`
-- `repo_url`
-- `maintainers`
+| フィールド | 必須 | 説明 |
+|---|---|---|
+| `schema_version` | yes | この仕様のバージョン |
+| `software` | yes | 対象ソフトウェア名 |
+| `title` | no | cookbook のタイトル |
+| `description` | no | 概要 |
 
 ### `[[entries]]`
 
-必須項目:
-
-- `id`: 安定な識別子
-- `kind`: `example`, `fragment`, `constraint_set`, `note`
-- `path`: entry の実体への相対パス
-- `title`
-
-推奨項目:
-
-- `summary`
-- `tags`
-- `recommended_for`
-- `difficulty`
-- `priority`
+| フィールド | 必須 | 説明 |
+|---|---|---|
+| `id` | yes | 安定な識別子 (rename しない) |
+| `kind` | yes | `example` / `fragment` / `note` |
+| `path` | yes | index.toml からの相対パス |
+| `title` | yes | 表示名 |
+| `summary` | no | 一文の説明 |
+| `tags` | no | 検索用タグ |
+| `recommended_for` | no | 推奨用途 |
 
 ### `kind`
 
-- `example`: 完全な入力例。Agent の第一候補になる
-- `fragment`: 部分設定。example に合成して使う
-- `constraint_set`: 数値条件、推奨範囲、既知の危険条件
-- `note`: 追加の説明資料
+| kind | 説明 |
+|---|---|
+| `example` | 完全な入力例。Agent の第一候補 |
+| `fragment` | 部分設定。example に合成して使う |
+| `note` | 追加の説明資料 |
 
-### 語彙の推奨
+### `recommended_for` 推奨語彙
 
-`recommended_for` はなるべく語彙を揃える:
+語彙は自由だが、以下を揃えると横断検索しやすい:
 
 - `sanity-check`
 - `baseline`
 - `parameter-sweep-base`
-- `parameter-generation`
 - `small-test`
 - `debug`
 - `production-template`
 
-`difficulty` は以下に限定する:
+## `meta.toml`
 
-- `low`
-- `medium`
-- `high`
-
-## example / fragment の `meta.toml`
-
-入力ファイル本体だけでは意図が分かりにくいので、
-各 entry に `meta.toml` を置く。
-
-例:
+各 entry ディレクトリに置く。entry の用途と使い方を記述する。
 
 ```toml
-id = "cavity-flow-2d"
+schema_version = "0.1"
+id = "electrostatic-sheath-basic"
 kind = "example"
-title = "2D cavity under flowing plasma"
-summary = "Baseline example for cavity charging under plasma flow"
+title = "Basic electrostatic sheath"
+summary = "Minimal 1D sheath. Stable for moderate density."
 
 [files]
 input = ["input.toml"]
@@ -192,178 +151,209 @@ notes = ["notes.md"]
 
 [applicability]
 model = "electrostatic"
-geometry = "2d-cavity"
-flow = true
-photoelectron = false
+geometry = "1d"
+boundary = "absorbing"
 
 [recommended]
-use_for = ["baseline", "small-test", "parameter-generation"]
-vary_first = ["flow_velocity", "cavity_width", "nx", "dt"]
+use_for = ["baseline", "small-test", "parameter-sweep-base"]
+vary_first = ["tmgrid.dt", "tmgrid.nx", "species.0.density"]
+keep_fixed = ["boundary.type"]
 avoid_if = ["strongly electromagnetic phenomena"]
-
-[stability]
-confidence = "medium"
-known_good = true
-notes = "Stable for moderate flow speed and current default grid"
 ```
 
 ### 必須項目
 
+- `schema_version`
 - `id`
 - `kind`
 - `title`
 
-### 推奨項目
-
-- `summary`
-- `[files]`
-- `[applicability]`
-- `[recommended]`
-- `[stability]`
-
 ### `[files]`
 
-推奨フィールド:
+| フィールド | 説明 |
+|---|---|
+| `input` | 完全入力例または fragment ファイル一覧 |
+| `notes` | 人間向け補足 |
+| `related` | 参照したい追加ファイル |
 
-- `input`: 完全入力例または fragment ファイル一覧
-- `notes`: 人間向け補足
-- `related`: 参照したい追加ファイル
-
-ファイル名は自由だが、最初の運用では以下を推奨:
-
-- example: `input.toml`
+ファイル名は自由。推奨:
+- example: `input.toml` (またはシミュレータ固有名 `plasma.toml` 等)
 - fragment: `fragment.toml`
 - notes: `notes.md`
 
-シミュレータ固有のファイル名を併記してもよい。
-たとえば EMSES なら `plasma.toml` を直接置いてもよい。
-
 ### `[applicability]`
 
-想定するモデル・用途を表す。
-語彙は simulator ごとに増えてよいが、同一 repo 内では揃える。
+想定するモデル・用途。語彙は simulator ごとに自由だが repo 内では揃える。
 
-例:
+よく使うフィールド:
 
 - `model`
 - `geometry`
 - `boundary`
 - `flow`
 - `collisions`
-- `photoelectron`
 - `magnetized`
 
 ### `[recommended]`
 
-Agent が parameter generation する際の補助情報。
+Agent がパラメータ生成に使う補助情報。
 
-推奨フィールド:
-
-- `use_for`
-- `vary_first`
-- `keep_fixed`
-- `avoid_if`
-- `clone_from`
-
-### `[stability]`
-
-「この例がどの程度そのまま使えるか」を示す。
-
-推奨フィールド:
-
-- `confidence`: `low`, `medium`, `high`
-- `known_good`: `true` / `false`
-- `notes`
-- `validated_with`
-
-## `constraints/`
-
-`constraints/` には「典型的なよくある失敗」と
-「推奨範囲」を集約する。
-
-最小例:
-
-```toml
-schema_version = "0.1"
-
-[[constraints]]
-id = "cfl-dt-upper-bound"
-title = "CFL upper bound for dt"
-kind = "numerical"
-severity = "error"
-summary = "dt must stay below the CFL-like stability threshold"
-related_params = ["tmgrid.dt", "tmgrid.nx", "plasma.cv"]
-guidance = "Reduce dt first before increasing other parameters"
-
-[[constraints]]
-id = "debye-length-resolution"
-title = "Debye length resolution guidance"
-kind = "physics"
-severity = "warning"
-summary = "Grid spacing should resolve Debye length"
-related_params = ["tmgrid.nx", "plasma.wp", "plasma.te"]
-guidance = "Increase resolution or limit plasma density"
-```
-
-推奨フィールド:
-
-- `id`
-- `title`
-- `kind`
-- `severity`
-- `summary`
-- `related_params`
-- `guidance`
-- `formula`
-- `notes`
+| フィールド | 説明 |
+|---|---|
+| `use_for` | 推奨用途 |
+| `vary_first` | 最初に振るべきパラメータ (dot 記法) |
+| `keep_fixed` | 固定すべきパラメータ |
+| `avoid_if` | この例を使うべきでない状況 |
+| `clone_from` | ベースにした他 entry の id |
 
 ## Agent の想定読取順序
 
-Agent は次の順序で読むのを推奨する。
-
-1. `simctl/index.toml` で全体像と候補を把握
-2. 選んだ entry の `meta.toml` で用途と適用条件を確認
-3. `input.toml` / `fragment.toml` などの実ファイルを読む
-4. `constraints/*.toml` と `notes.md` を見て危険設定を避ける
+1. `cookbook/COOKBOOK.md` で cookbook の概要を把握
+2. `cookbook/index.toml` で全 entry を一覧し、候補を選ぶ
+3. 選んだ entry の `meta.toml` で用途と適用条件を確認
+4. `input.toml` / `fragment.toml` の実ファイルを読む
+5. `notes.md` で注意事項を確認
 
 ## ID と互換性
 
 - `id` は rename しない
 - 内容を更新しても `id` は維持する
 - 破壊的な意味変更をするときは新しい `id` を作る
-- `schema_version` が変わるときは、下位互換性の有無を `index.toml` の説明に書く
-
-## simctl 側の期待
-
-simulator repo 側でこの bundle を提供する場合、
-adapter の `knowledge_sources()` は少なくとも次を拾うことを推奨:
-
-- `simctl/index.toml`
-- `simctl/**/*.toml`
-- `simctl/**/*.md`
-- 必要なら `simctl/**/input.*`
-
-これにより `simctl update-refs` 後の `.simctl/knowledge/{simulator}.md`
-から Agent が bundle の所在を追いやすくなる。
+- `schema_version` が変わるときは下位互換性の有無を `COOKBOOK.md` に書く
 
 ## 最小導入セット
 
 最初の導入では次で十分:
 
-1. `simctl/index.toml`
-2. 2〜5 個の representative examples
-3. 各 example の `meta.toml`
-4. 1 つ以上の `constraints/*.toml`
+1. `cookbook/COOKBOOK.md`
+2. `cookbook/index.toml`
+3. 2〜5 個の representative examples
+4. 各 example の `meta.toml`
 
 fragment は後から足してよい。
 
 ## 非目標
 
-この規約は、初期段階では以下を目的にしない。
-
 - 中央集約型データベース
 - 厳密な検索言語
 - 全 simulator 共通の完全語彙統制
-- simctl 本体による自動マージや自動生成の完全実装
+- 制約チェック (利用側ツールの責務)
+- バリデーションルールの定義
 
-まずは「Agent が source repo の知識を自然に使えること」を優先する。
+制約・バリデーションは cookbook の外で管理する。
+cookbook は「何をどう使うか」だけに集中する。
+
+---
+
+## COOKBOOK.md テンプレート
+
+以下は simulator repo の `cookbook/COOKBOOK.md` に置くテンプレート。
+`{...}` はリポジトリに合わせて書き換える。
+
+````markdown
+# {Software Name} Cookbook
+
+{Software Name} の入力例・設定フラグメント集。
+AI Agent や開発者が入力ファイルを生成する際の出発点として使う。
+
+## 構成
+
+```
+cookbook/
+  COOKBOOK.md        # このファイル
+  index.toml        # 全 entry の目録
+  examples/         # 完全な入力例
+  fragments/        # 再利用可能な部分設定
+```
+
+## 使い方
+
+1. `index.toml` を読んで、目的に合う entry を探す
+2. entry の `meta.toml` で用途と適用条件を確認する
+3. `input.toml` (または `fragment.toml`) を読む
+4. `notes.md` があれば注意事項を確認する
+5. 必要に応じて example をコピーし、パラメータを変更して使う
+
+## entry の追加手順
+
+### 1. ディレクトリを作る
+
+example の場合:
+```bash
+mkdir -p cookbook/examples/{category}/{entry-name}
+```
+
+fragment の場合:
+```bash
+mkdir -p cookbook/fragments/{category}/{entry-name}
+```
+
+### 2. meta.toml を書く
+
+```toml
+schema_version = "0.1"
+id = "{category}-{entry-name}"
+kind = "example"  # or "fragment"
+title = "{人間向けタイトル}"
+summary = "{一文の説明}"
+
+[files]
+input = ["{入力ファイル名}"]
+notes = ["notes.md"]
+
+[applicability]
+# この entry が想定する条件を書く
+# model = "..."
+# geometry = "..."
+
+[recommended]
+use_for = ["baseline"]
+vary_first = ["{最初に振るべきパラメータ}"]
+```
+
+### 3. 入力ファイルを置く
+
+- example: そのまま実行できる完全な入力ファイルを `input.toml` として置く
+  - simulator 固有の名前 ({simulator の入力ファイル名}) でもよい
+- fragment: 他の入力に合成して使う部分設定を `fragment.toml` として置く
+
+### 4. notes.md を書く (任意)
+
+- この entry の意図、背景、注意事項を書く
+- パラメータの選定理由があれば書く
+- 既知の制限があれば書く
+
+### 5. index.toml に登録する
+
+```toml
+[[entries]]
+id = "{meta.toml の id と一致させる}"
+kind = "example"
+path = "examples/{category}/{entry-name}"
+title = "{meta.toml の title と一致させる}"
+summary = "{一文の説明}"
+tags = ["{関連するタグ}"]
+recommended_for = ["{推奨用途}"]
+```
+
+## entry の更新
+
+- `id` は変えない
+- 内容を改善するときは `meta.toml` と入力ファイルを直接更新する
+- 破壊的な変更 (互換性のないパラメータ変更等) は新しい `id` で別 entry を作る
+
+## 品質基準
+
+- example は **そのまま実行できる** こと
+- `meta.toml` の `[recommended].vary_first` には、実際に振って意味のあるパラメータだけを書く
+- `tags` は既存 entry と語彙を揃える (`index.toml` の既存タグを確認)
+- fragment は **単体では実行できない** ことを `notes.md` に明記する
+
+## タグ一覧
+
+{このリポジトリで使われているタグを列挙する。新しいタグを追加したらここも更新する。}
+
+## 仕様
+
+この cookbook は [Simulator Cookbook Spec](https://github.com/Nkzono99/hpc-simctl/blob/main/docs/simulator-kb-spec.md) に準拠する。
+````

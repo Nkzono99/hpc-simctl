@@ -177,9 +177,10 @@ class BeachAdapter(SimulatorAdapter):
                 "docs/**/*.md",
                 "schemas/*.json",
                 "examples/**/*.toml",
-                "simctl/index.toml",
-                "simctl/**/*.toml",
-                "simctl/**/*.md",
+                "cookbook/COOKBOOK.md",
+                "cookbook/index.toml",
+                "cookbook/**/*.toml",
+                "cookbook/**/*.md",
             ],
         }
 
