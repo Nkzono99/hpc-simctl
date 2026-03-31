@@ -2,7 +2,7 @@
 # https://web.kudpc.kyoto-u.ac.jp/manual/ja
 
 [site]
-name = "cmaphor"
+name = "camphor"
 resource_style = "rsc"
 modules = [
     "intel/2023.2",

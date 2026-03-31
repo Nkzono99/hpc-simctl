@@ -464,14 +464,16 @@ class _BundledSiteProfile:
     plus an optional ``[launcher]`` section for launcher defaults.
 
     Attributes:
-        name: Site name (file stem, e.g. "cmaphor").
+        name: Site name (file stem, e.g. "camphor").
         launcher: Launcher-only configuration dict for launchers.toml.
         source_path: Path to the bundled .toml file (copied as site.toml).
+        docs_path: Path to companion .md documentation (may not exist).
     """
 
     name: str
     launcher: dict[str, Any]
     source_path: Path
+    docs_path: Path | None = None
 
 
 # Legacy alias for backward compatibility with code that references the old name.
@@ -496,10 +498,12 @@ def _load_site_profiles() -> dict[str, _BundledSiteProfile]:
         if "site" not in data and "launcher" not in data:
             continue
         launcher_data = dict(data.get("launcher", {}))
+        docs_file = toml_file.with_suffix(".md")
         profiles[toml_file.stem] = _BundledSiteProfile(
             name=toml_file.stem,
             launcher=launcher_data,
             source_path=toml_file,
+            docs_path=docs_file if docs_file.is_file() else None,
         )
     return profiles
 
@@ -937,6 +941,15 @@ def init(
                     existing["simulators"] = sims
                     with open(sim_file, "wb") as f:
                         tomli_w.dump(existing, f)
+
+    # SITE.md — copy companion docs from bundled site profile
+    if site_profile and site_profile.docs_path:
+        site_md = project_dir / "SITE.md"
+        if site_md.exists():
+            skipped.append("SITE.md")
+        else:
+            shutil.copy2(site_profile.docs_path, site_md)
+            created.append("SITE.md")
 
     # campaign.toml
     campaign_content = _build_campaign_toml(project_name, sim_names)

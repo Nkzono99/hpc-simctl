@@ -37,7 +37,7 @@
           "resource_style": {
             "type": "string",
             "enum": ["standard", "rsc"],
-            "description": "SBATCH resource specification style. 'rsc' uses --rsc p=N:t=T:c=C (cmaphor)",
+            "description": "SBATCH resource specification style. 'rsc' uses --rsc p=N:t=T:c=C (camphor)",
             "default": "standard"
           },
           "modules": {

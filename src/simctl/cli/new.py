@@ -97,8 +97,9 @@ def new(
 
     case_dir.mkdir(parents=True)
 
-    # Resolve default launcher name from project config
+    # Resolve default launcher name and site profile from project config
     default_launcher = "srun"
+    site_resource_style = "standard"
     try:
         project_root = find_project_root(target_dir)
         if project_root:
@@ -108,8 +109,13 @@ def new(
             launcher_names = list(project.launchers.keys())
             if launcher_names:
                 default_launcher = launcher_names[0]
+
+            from simctl.core.site import load_site_profile
+
+            site = load_site_profile(project_root)
+            site_resource_style = site.resource_style
     except Exception:
-        pass  # Fall back to "srun"
+        pass  # Fall back to defaults
 
     # Look for rich template files in refs/<repo>/
     ref_templates: dict[str, Path] = {}
@@ -141,6 +147,14 @@ def new(
             content = content.replace(
                 'launcher = "default"', f'launcher = "{default_launcher}"', 1
             )
+            # Replace job fields based on site resource style
+            if site_resource_style == "rsc":
+                content = content.replace(
+                    'partition = ""\nnodes = 1\nntasks = 1\n'
+                    'walltime = "01:00:00"\n',
+                    'partition = ""\nprocesses = 1\nthreads = 1\n'
+                    'cores = 1\nwalltime = "01:00:00"\n',
+                )
         # Override with rich template from refs/ if available
         if filename in ref_templates:
             content = ref_templates[filename].read_text(encoding="utf-8")
@@ -157,6 +171,7 @@ def new(
     if survey:
         _generate_survey_stub(
             case_name, sim_name, default_launcher, target_dir,
+            resource_style=site_resource_style,
         )
 
 
@@ -165,6 +180,7 @@ def _generate_survey_stub(
     simulator: str,
     launcher: str,
     cases_sim_dir: Path,
+    resource_style: str = "standard",
 ) -> None:
     """Generate a survey.toml stub under runs/<case_name>/.
 
@@ -173,6 +189,7 @@ def _generate_survey_stub(
         simulator: Simulator name.
         launcher: Launcher profile name.
         cases_sim_dir: The cases/<sim>/ directory (used to find project root).
+        resource_style: Site resource style ("standard" or "rsc").
     """
     # Find runs/ directory relative to project root
     try:
@@ -186,6 +203,22 @@ def _generate_survey_stub(
 
     # Build the case reference path: <sim>/<case_name> for multi-sim layout
     base_case_ref = f"{simulator}/{case_name}"
+
+    if resource_style == "rsc":
+        job_comment = (
+            '# partition = ""\n'
+            "# processes = 1\n"
+            "# threads = 1\n"
+            "# cores = 1\n"
+            '# walltime = "01:00:00"'
+        )
+    else:
+        job_comment = (
+            '# partition = ""\n'
+            "# nodes = 1\n"
+            "# ntasks = 1\n"
+            '# walltime = "01:00:00"'
+        )
 
     content = f"""\
 #:schema https://raw.githubusercontent.com/Nkzono99/hpc-simctl/main/schemas/survey.json
@@ -209,10 +242,7 @@ display_name = ""
 
 [job]
 # Override job settings from case.toml (optional).
-# partition = ""
-# nodes = 1
-# ntasks = 1
-# walltime = "01:00:00"
+{job_comment}
 """
     survey_file = survey_dir / "survey.toml"
     if survey_file.exists():

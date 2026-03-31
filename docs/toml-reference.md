@@ -71,10 +71,10 @@ type = "srun"
 use_slurm_ntasks = true
 ```
 
-### cmaphor site profile
+### camphor site profile
 
 ```toml
-[launchers.cmaphor]
+[launchers.camphor]
 type = "srun"
 use_slurm_ntasks = true
 resource_style = "rsc"
@@ -117,7 +117,7 @@ modules = ["openmpi/4.1"]
 ### resource_style
 
 - **`standard`**: Emits `#SBATCH --ntasks=N`, `#SBATCH --nodes=N`, etc.
-- **`rsc`**: Emits `#SBATCH --rsc p=N:t=T:c=C` (cmaphor/FUJITSU-style). `p` = processes (from `ntasks`), `t` = threads per process, `c` = cores per thread.
+- **`rsc`**: Emits `#SBATCH --rsc p=N:t=T:c=C` (camphor/FUJITSU-style). `p` = processes (from `ntasks`), `t` = threads per process, `c` = cores per thread.
 
 ---
 

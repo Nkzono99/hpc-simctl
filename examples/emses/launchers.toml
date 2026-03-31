@@ -1,4 +1,4 @@
-[launchers.cmaphor]
+[launchers.camphor]
 type = "srun"
 use_slurm_ntasks = true
 resource_style = "rsc"
