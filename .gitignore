@@ -208,6 +208,7 @@ __marimo__/
 
 # Claude Code
 .claude/settings.local.json
+.claude/agent-memory/
 
 # HPC simulation heavy run outputs
 runs/**/work/outputs/
