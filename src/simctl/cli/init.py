@@ -36,7 +36,7 @@ _LAUNCHERS_FILE = "launchers.toml"
 _CAMPAIGN_FILE = "campaign.toml"
 _CLAUDE_MD = "CLAUDE.md"
 _AGENTS_MD = "AGENTS.md"
-_SKILLS_MD = "SKILLS.md"
+_SKILLS_DIR = ".claude/skills"
 _VSCODE_DIR = ".vscode"
 _VSCODE_SETTINGS = "settings.json"
 
@@ -306,20 +306,40 @@ def _build_agents_md(project_name: str, simulator_names: list[str]) -> str:
     return _build_agent_md("AGENTS.md", project_name, simulator_names)
 
 
-def _build_skills_md(project_name: str, simulator_names: list[str]) -> str:
-    """Build SKILLS.md content."""
+def _build_skills(
+    project_name: str, simulator_names: list[str]
+) -> dict[str, str]:
+    """Build individual SKILL.md contents for .claude/skills/.
+
+    Returns:
+        Mapping of ``<skill-name>/SKILL.md`` relative path to rendered content.
+    """
     pip_pkgs = _collect_pip_packages(simulator_names) if simulator_names else []
     if pip_pkgs:
         pip_install_line = f"uv pip install {' '.join(pip_pkgs)}"
     else:
         pip_install_line = "# uv pip install <必要なパッケージ>"
 
-    env = _get_jinja_env()
-    template = env.get_template("skills.md")
-    return template.render(
-        project_name=project_name,
-        pip_install_line=pip_install_line,
-    )
+    skills_dir = Path(__file__).resolve().parent.parent / "templates" / "skills"
+    results: dict[str, str] = {}
+    for skill_path in sorted(skills_dir.iterdir()):
+        if not skill_path.is_dir():
+            continue
+        skill_md = skill_path / "SKILL.md"
+        if not skill_md.exists():
+            continue
+        content = skill_md.read_text(encoding="utf-8")
+        # Apply Jinja2 substitutions only if template variables are present
+        if "{{" in content:
+            env = _get_jinja_env()
+            template = env.from_string(content)
+            content = template.render(
+                project_name=project_name,
+                pip_install_line=pip_install_line,
+            )
+        rel = f"{skill_path.name}/SKILL.md"
+        results[rel] = content
+    return results
 
 
 def _get_data_path() -> Path:
@@ -935,12 +955,18 @@ def init(
     else:
         skipped.append(_AGENTS_MD)
 
-    # SKILLS.md
-    skills_content = _build_skills_md(project_name, sim_names)
-    if _write_if_missing(project_dir / _SKILLS_MD, skills_content):
-        created.append(_SKILLS_MD)
-    else:
-        skipped.append(_SKILLS_MD)
+    # .claude/skills/<name>/SKILL.md
+    skills = _build_skills(project_name, sim_names)
+    skills_base = project_dir / _SKILLS_DIR
+    skills_base.mkdir(parents=True, exist_ok=True)
+    for rel_path, content in skills.items():
+        skill_file = skills_base / rel_path
+        skill_file.parent.mkdir(parents=True, exist_ok=True)
+        display = f"{_SKILLS_DIR}/{rel_path}"
+        if _write_if_missing(skill_file, content):
+            created.append(display)
+        else:
+            skipped.append(display)
 
     # .vscode/settings.json
     vscode_dir = project_dir / _VSCODE_DIR

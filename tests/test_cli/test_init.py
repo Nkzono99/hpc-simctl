@@ -39,7 +39,7 @@ class TestInit:
         assert (tmp_path / ".git").is_dir()
         assert (tmp_path / "CLAUDE.md").exists()
         assert (tmp_path / "AGENTS.md").exists()
-        assert (tmp_path / "SKILLS.md").exists()
+        assert (tmp_path / ".claude" / "skills").is_dir()
         assert (tmp_path / ".vscode" / "settings.json").exists()
 
     def test_init_simproject_content(self, tmp_path: Path) -> None:
@@ -146,7 +146,7 @@ class TestInit:
         assert "plasma.toml" in content
         assert "BEACH" in content
         assert "beach.toml" in content
-        assert "simctl context --json" in content
+        assert "simctl context" in content
         assert "campaign.toml" in content
 
     def test_init_claude_md_without_simulators(self, tmp_path: Path) -> None:
@@ -164,23 +164,29 @@ class TestInit:
         assert not agents_path.is_symlink()
         content = agents_path.read_text(encoding="utf-8")
         assert "simctl" in content
-        assert "simctl context --json" in content
-        assert "plan を JSON で明示" in content
+        assert "simctl context" in content
+        assert "plan を出す" in content
         assert "simctl run --all" in content
 
-    def test_init_skills_md(self, tmp_path: Path) -> None:
-        """SKILLS.md contains skill definitions."""
+    def test_init_skills(self, tmp_path: Path) -> None:
+        """Individual SKILL.md files are created under .claude/skills/."""
         runner.invoke(app, ["init", "-y", "--path", str(tmp_path)])
-        content = (tmp_path / "SKILLS.md").read_text(encoding="utf-8")
-        assert "/setup-env" in content
-        assert "uv venv" in content
-        assert "/survey-design" in content
-        assert "/check-status" in content
+        skills_dir = tmp_path / ".claude" / "skills"
+        assert (skills_dir / "setup-env" / "SKILL.md").exists()
+        assert (skills_dir / "survey-design" / "SKILL.md").exists()
+        assert (skills_dir / "check-status" / "SKILL.md").exists()
+        assert (skills_dir / "simctl-reference" / "SKILL.md").exists()
+        setup_content = (skills_dir / "setup-env" / "SKILL.md").read_text(
+            encoding="utf-8"
+        )
+        assert "uv venv" in setup_content
 
-    def test_init_skills_md_with_packages(self, tmp_path: Path) -> None:
-        """SKILLS.md includes pip packages when simulators specified."""
+    def test_init_skills_with_packages(self, tmp_path: Path) -> None:
+        """Setup-env skill includes pip packages when simulators specified."""
         runner.invoke(app, ["init", "emses", "-y", "--path", str(tmp_path)])
-        content = (tmp_path / "SKILLS.md").read_text(encoding="utf-8")
+        content = (
+            tmp_path / ".claude" / "skills" / "setup-env" / "SKILL.md"
+        ).read_text(encoding="utf-8")
         assert "emout" in content
         assert "h5py" in content
 
