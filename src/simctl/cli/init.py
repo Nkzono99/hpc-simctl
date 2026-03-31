@@ -53,8 +53,9 @@ tools/
 # Reference repos (cloned by simctl init)
 refs/
 
-# Auto-generated knowledge indexes
-.simctl/
+# Auto-generated knowledge indexes (insights/ and facts.toml are tracked)
+.simctl/knowledge/
+.simctl/environment.toml
 
 # heavy run outputs
 runs/**/work/outputs/
