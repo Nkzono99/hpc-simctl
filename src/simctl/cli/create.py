@@ -152,6 +152,10 @@ def _build_job_config(job: Any) -> dict[str, Any]:
             config["processes"] = job.processes
             config["threads"] = job.threads
             config["cores"] = job.cores
+            if job.memory:
+                config["memory"] = job.memory
+            if job.gpus:
+                config["gpus"] = job.gpus
         else:
             config["nodes"] = job.nodes
             config["ntasks"] = job.ntasks
@@ -173,6 +177,10 @@ def _build_job_config(job: Any) -> dict[str, Any]:
         result["processes"] = job.get("processes", 1)
         result["threads"] = job.get("threads", 1)
         result["cores"] = job.get("cores", 1)
+        if job.get("memory"):
+            result["memory"] = job["memory"]
+        if job.get("gpus"):
+            result["gpus"] = job["gpus"]
     else:
         result["nodes"] = job.get("nodes", 1)
         result["ntasks"] = job.get("ntasks", 1)
@@ -212,6 +220,10 @@ def _build_manifest_job(job: Any) -> dict[str, Any]:
         result["processes"] = job.processes
         result["threads"] = job.threads
         result["cores"] = job.cores
+        if job.memory:
+            result["memory"] = job.memory
+        if job.gpus:
+            result["gpus"] = job.gpus
     else:
         result["nodes"] = job.nodes
         result["ntasks"] = job.ntasks

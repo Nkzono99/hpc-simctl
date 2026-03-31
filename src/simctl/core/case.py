@@ -54,6 +54,9 @@ class JobData:
         processes: Number of MPI processes (rsc mode, ``p``).
         threads: Threads per process (rsc mode, ``t``). Must be <= cores.
         cores: Cores per process (rsc mode, ``c``). Must be >= threads.
+        memory: Memory per process (rsc mode, ``m``), e.g. ``"8G"``.
+            Empty string means not specified.
+        gpus: Number of GPUs per node (rsc mode, ``g``). 0 means not specified.
         modules: Module names to load before execution.
         pre_commands: Shell commands to run before the main execution.
         post_commands: Shell commands to run after the main execution.
@@ -67,6 +70,8 @@ class JobData:
     processes: int = 1
     threads: int = 1
     cores: int = 1
+    memory: str = ""
+    gpus: int = 0
     modules: list[str] = field(default_factory=list)
     pre_commands: list[str] = field(default_factory=list)
     post_commands: list[str] = field(default_factory=list)
@@ -148,6 +153,8 @@ def _parse_job(data: dict[str, Any]) -> JobData:
         processes=int(data.get("processes", 1)),
         threads=int(data.get("threads", 1)),
         cores=int(data.get("cores", 1)),
+        memory=str(data.get("memory", "")),
+        gpus=int(data.get("gpus", 0)),
         modules=[str(m) for m in modules],
         pre_commands=[str(c) for c in pre_commands],
         post_commands=[str(c) for c in post_commands],

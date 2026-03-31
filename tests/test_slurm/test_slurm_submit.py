@@ -112,6 +112,37 @@ class TestSbatchSubmit:
         with pytest.raises(SlurmSubmitError, match="Could not parse job ID"):
             sbatch_submit(job_sh, tmp_path, runner=runner)
 
+    def test_afterok_dependency(self, tmp_path: Path) -> None:
+        """afterok parameter adds --dependency=afterok:<id> to sbatch."""
+        job_sh = tmp_path / "job.sh"
+        job_sh.write_text("#!/bin/bash\necho hello")
+        work_dir = tmp_path / "work"
+        work_dir.mkdir()
+
+        calls, runner = _make_runner(stdout="Submitted batch job 99999\n")
+        job_id = sbatch_submit(job_sh, work_dir, afterok="12345", runner=runner)
+
+        assert job_id == "99999"
+        assert "--dependency=afterok:12345" in calls[0]
+
+    def test_afterok_with_extra_args(self, tmp_path: Path) -> None:
+        """afterok and extra_args both appear in the command."""
+        job_sh = tmp_path / "job.sh"
+        job_sh.write_text("#!/bin/bash")
+        work_dir = tmp_path / "work"
+        work_dir.mkdir()
+
+        calls, runner = _make_runner(stdout="Submitted batch job 11111\n")
+        sbatch_submit(
+            job_sh, work_dir,
+            afterok="54321",
+            extra_args=["--partition=debug"],
+            runner=runner,
+        )
+        cmd = calls[0]
+        assert "--dependency=afterok:54321" in cmd
+        assert "--partition=debug" in cmd
+
     def test_slurm_not_found_propagates(self, tmp_path: Path) -> None:
         job_sh = tmp_path / "job.sh"
         job_sh.write_text("#!/bin/bash")

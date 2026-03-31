@@ -301,6 +301,65 @@ class TestRscModeJobScript:
         content = path.read_text()
         assert "#SBATCH --rsc p=200:t=1:c=4" in content
 
+    def test_rsc_with_memory(self, run_dir: Path) -> None:
+        """memory (m=) appears in --rsc directive when specified."""
+        config: dict[str, object] = {
+            "partition": "gr10451a",
+            "ntasks": 4,
+            "threads_per_process": 8,
+            "cores_per_thread": 8,
+            "memory": "8G",
+            "walltime": "24:00:00",
+        }
+        path = generate_job_script(
+            run_dir, config, "srun ./solver", resource_style="rsc",
+        )
+        content = path.read_text()
+        assert "#SBATCH --rsc p=4:t=8:c=8:m=8G" in content
+
+    def test_rsc_with_gpus(self, run_dir: Path) -> None:
+        """GPU (g=) appears in --rsc directive when specified."""
+        config: dict[str, object] = {
+            "partition": "gr10451a",
+            "ntasks": 4,
+            "threads_per_process": 1,
+            "cores_per_thread": 1,
+            "gpus": 2,
+            "walltime": "24:00:00",
+        }
+        path = generate_job_script(
+            run_dir, config, "srun ./solver", resource_style="rsc",
+        )
+        content = path.read_text()
+        assert "#SBATCH --rsc p=4:t=1:c=1:g=2" in content
+
+    def test_rsc_with_memory_and_gpus(self, run_dir: Path) -> None:
+        """Both m= and g= appear when both specified."""
+        config: dict[str, object] = {
+            "partition": "gr10451a",
+            "ntasks": 8,
+            "threads_per_process": 4,
+            "cores_per_thread": 4,
+            "memory": "16G",
+            "gpus": 1,
+            "walltime": "48:00:00",
+        }
+        path = generate_job_script(
+            run_dir, config, "srun ./solver", resource_style="rsc",
+        )
+        content = path.read_text()
+        assert "#SBATCH --rsc p=8:t=4:c=4:m=16G:g=1" in content
+
+    def test_rsc_no_memory_no_gpus(
+        self, run_dir: Path, rsc_job_config: dict[str, object]
+    ) -> None:
+        """Without memory/gpus, --rsc stays p:t:c only."""
+        path = generate_job_script(
+            run_dir, rsc_job_config, "srun ./solver", resource_style="rsc",
+        )
+        content = path.read_text()
+        assert "#SBATCH --rsc p=800:t=1:c=1\n" in content
+
     def test_rsc_with_modules(
         self, run_dir: Path, rsc_job_config: dict[str, object]
     ) -> None:

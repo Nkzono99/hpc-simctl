@@ -7,6 +7,8 @@ simctl ``RunState`` values.  All subprocess calls go through an injectable
 
 from __future__ import annotations
 
+import re
+from collections import OrderedDict
 from dataclasses import dataclass
 
 from simctl.core.state import RunState
@@ -61,6 +63,25 @@ class SlurmQueryError(RuntimeError):
 
 
 @dataclass(frozen=True)
+class PartitionInfo:
+    """Information about a Slurm partition from ``sinfo``.
+
+    Attributes:
+        name: Partition name.
+        avail: Availability status (e.g. ``"up"``).
+        timelimit: Raw time limit string from sinfo (e.g. ``"5-00:00:00"``).
+        timelimit_hours: Time limit in hours (for easy comparison).
+        nodes_total: Total node count in the partition.
+    """
+
+    name: str
+    avail: str
+    timelimit: str
+    timelimit_hours: float
+    nodes_total: int = 0
+
+
+@dataclass(frozen=True)
 class JobStatus:
     """Result of a Slurm job status query.
 
@@ -104,6 +125,94 @@ def map_slurm_state(slurm_state: str) -> RunState:
         return _SLURM_STATE_MAP[key]
     except KeyError:
         raise SlurmQueryError(f"Unknown Slurm job state: {slurm_state!r}") from None
+
+
+# ---------------------------------------------------------------------------
+# sinfo (partition queries)
+# ---------------------------------------------------------------------------
+
+_TIMELIMIT_RE = re.compile(r"(?:(\d+)-)?(\d+):(\d+):(\d+)")
+
+
+def _parse_timelimit(timelimit: str) -> float:
+    """Parse a Slurm time limit string to hours.
+
+    Supports formats like ``5-00:00:00``, ``120:00:00``, ``infinite``.
+
+    Args:
+        timelimit: Raw time limit string from sinfo.
+
+    Returns:
+        Time limit in hours, or ``float('inf')`` for unlimited.
+    """
+    if timelimit.lower() in ("infinite", "n/a"):
+        return float("inf")
+    m = _TIMELIMIT_RE.match(timelimit.strip())
+    if not m:
+        return float("inf")
+    day_str, hour_str, min_str, sec_str = m.groups()
+    day = int(day_str) if day_str else 0
+    hour = int(hour_str)
+    minutes = int(min_str)
+    sec = int(sec_str)
+    return 24.0 * day + hour + minutes / 60.0 + sec / 3600.0
+
+
+def sinfo_partitions(
+    *,
+    runner: CommandRunner | None = None,
+) -> OrderedDict[str, PartitionInfo]:
+    """Query ``sinfo`` for available partitions and their limits.
+
+    Args:
+        runner: Optional command runner for testing.
+
+    Returns:
+        Ordered dict mapping partition name to :class:`PartitionInfo`.
+
+    Raises:
+        SlurmNotFoundError: If ``sinfo`` is not on PATH.
+        SlurmQueryError: If sinfo returns an error.
+    """
+    run = runner or _default_runner
+    cmd = [
+        "sinfo",
+        "--noheader",
+        "--format=%P|%a|%l|%D",
+    ]
+
+    try:
+        result: CommandResult = run(cmd)
+    except SlurmNotFoundError:
+        raise
+
+    if result.returncode != 0:
+        raise SlurmQueryError(
+            f"sinfo failed (exit {result.returncode}):\n{result.stderr.strip()}"
+        )
+
+    partitions: OrderedDict[str, PartitionInfo] = OrderedDict()
+    for line in result.stdout.strip().splitlines():
+        parts = line.strip().split("|")
+        if len(parts) < 4:
+            continue
+        name = parts[0].rstrip("*")  # default partition has trailing '*'
+        avail = parts[1]
+        timelimit = parts[2]
+        try:
+            nodes_total = int(parts[3])
+        except ValueError:
+            nodes_total = 0
+
+        partitions[name] = PartitionInfo(
+            name=name,
+            avail=avail,
+            timelimit=timelimit,
+            timelimit_hours=_parse_timelimit(timelimit),
+            nodes_total=nodes_total,
+        )
+
+    return partitions
 
 
 # ---------------------------------------------------------------------------

@@ -6,10 +6,13 @@ import pytest
 
 from simctl.core.state import RunState
 from simctl.slurm.query import (
+    PartitionInfo,
     SlurmQueryError,
+    _parse_timelimit,
     map_slurm_state,
     query_job_status,
     sacct_status,
+    sinfo_partitions,
     squeue_status,
 )
 from simctl.slurm.submit import CommandResult, SlurmNotFoundError
@@ -264,3 +267,74 @@ class TestQueryJobStatus:
 
         with pytest.raises(SlurmNotFoundError):
             query_job_status("12345", runner=runner)
+
+
+# ---------------------------------------------------------------------------
+# _parse_timelimit
+# ---------------------------------------------------------------------------
+
+
+class TestParseTimelimit:
+    """Tests for Slurm time limit parsing."""
+
+    def test_days_hours_minutes_seconds(self) -> None:
+        assert _parse_timelimit("5-00:00:00") == 120.0
+
+    def test_hours_minutes_seconds(self) -> None:
+        assert _parse_timelimit("120:00:00") == 120.0
+
+    def test_one_day(self) -> None:
+        assert _parse_timelimit("1-00:00:00") == 24.0
+
+    def test_mixed(self) -> None:
+        result = _parse_timelimit("1-12:30:00")
+        assert abs(result - 36.5) < 0.01
+
+    def test_infinite(self) -> None:
+        assert _parse_timelimit("infinite") == float("inf")
+
+    def test_na(self) -> None:
+        assert _parse_timelimit("n/a") == float("inf")
+
+
+# ---------------------------------------------------------------------------
+# sinfo_partitions
+# ---------------------------------------------------------------------------
+
+
+class TestSinfoPartitions:
+    """Tests for sinfo partition query."""
+
+    def test_parses_multiple_partitions(self) -> None:
+        stdout = (
+            "gr10451a|up|5-00:00:00|16\n"
+            "gr10451b*|up|1-00:00:00|8\n"
+            "debug|up|01:00:00|2\n"
+        )
+        result = sinfo_partitions(runner=_runner(stdout=stdout))
+        assert len(result) == 3
+        assert "gr10451a" in result
+        assert "gr10451b" in result  # trailing * stripped
+        assert "debug" in result
+
+        assert result["gr10451a"].timelimit_hours == 120.0
+        assert result["gr10451b"].timelimit_hours == 24.0
+        assert result["gr10451a"].nodes_total == 16
+        assert result["debug"].avail == "up"
+
+    def test_empty_output(self) -> None:
+        result = sinfo_partitions(runner=_runner(stdout=""))
+        assert len(result) == 0
+
+    def test_error_raises(self) -> None:
+        with pytest.raises(SlurmQueryError, match="sinfo failed"):
+            sinfo_partitions(
+                runner=_runner(returncode=1, stderr="Connection refused"),
+            )
+
+    def test_slurm_not_found(self) -> None:
+        def runner(cmd: list[str]) -> CommandResult:
+            raise SlurmNotFoundError("sinfo not found")
+
+        with pytest.raises(SlurmNotFoundError):
+            sinfo_partitions(runner=runner)

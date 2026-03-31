@@ -112,6 +112,7 @@ def sbatch_submit(
     working_dir: Path,
     *,
     extra_args: list[str] | None = None,
+    afterok: str | None = None,
     runner: CommandRunner | None = None,
 ) -> str:
     """Submit a job script via ``sbatch``.
@@ -122,6 +123,8 @@ def sbatch_submit(
             the run directory's ``work/`` subdirectory).
         extra_args: Additional sbatch arguments (e.g.
             ``["--partition=gr10451a"]``).  These override script directives.
+        afterok: If set, add ``--dependency=afterok:<job_id>`` so this job
+            starts only after the specified job completes successfully.
         runner: Optional callable that executes a command list and returns
             a ``CommandResult``.  Defaults to the real subprocess runner.
             Inject a mock here for testing.
@@ -140,6 +143,8 @@ def sbatch_submit(
 
     run = runner or _default_runner
     cmd = ["sbatch", f"--chdir={working_dir}"]
+    if afterok:
+        cmd.append(f"--dependency=afterok:{afterok}")
     if extra_args:
         cmd.extend(extra_args)
     cmd.append(str(job_script))

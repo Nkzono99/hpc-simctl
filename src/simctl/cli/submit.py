@@ -66,6 +66,7 @@ def _submit_single_run(
     *,
     quiet: bool = False,
     sbatch_extra: list[str] | None = None,
+    afterok: str | None = None,
 ) -> str | None:
     """Submit a single run and return the job_id, or None on skip/error.
 
@@ -130,7 +131,9 @@ def _submit_single_run(
 
     # Submit via sbatch
     try:
-        job_id = sbatch_submit(job_script, work_dir, extra_args=sbatch_extra or None)
+        job_id = sbatch_submit(
+            job_script, work_dir, extra_args=sbatch_extra or None, afterok=afterok
+        )
     except SlurmNotFoundError as e:
         typer.echo(f"Error: {e}")
         return None
@@ -201,6 +204,13 @@ def run_cmd(
         Optional[str],
         typer.Option("-qn", "--queue-name", help="Override partition/queue name."),
     ] = None,
+    afterok_id: Annotated[
+        Optional[str],
+        typer.Option(
+            "--afterok",
+            help="Start job only after the given job ID completes successfully.",
+        ),
+    ] = None,
 ) -> None:
     """Submit a run or all runs via sbatch.
 
@@ -208,6 +218,7 @@ def run_cmd(
       cd runs/experiment/R0001 && simctl run
       cd runs/mag_scan && simctl run --all
       simctl run -qn gr10451a
+      simctl run --afterok 12345
     """
     sbatch_extra: list[str] = []
     if queue_name:
@@ -215,17 +226,24 @@ def run_cmd(
 
     if all_runs:
         target = Path(run) if run else None
-        _submit_all_cwd(target, dry_run=dry_run, sbatch_extra=sbatch_extra)
+        _submit_all_cwd(
+            target, dry_run=dry_run, sbatch_extra=sbatch_extra, afterok=afterok_id
+        )
     elif run is None:
-        _submit_single_cwd(dry_run=dry_run, sbatch_extra=sbatch_extra)
+        _submit_single_cwd(
+            dry_run=dry_run, sbatch_extra=sbatch_extra, afterok=afterok_id
+        )
     else:
-        _submit_single(run, dry_run=dry_run, sbatch_extra=sbatch_extra)
+        _submit_single(
+            run, dry_run=dry_run, sbatch_extra=sbatch_extra, afterok=afterok_id
+        )
 
 
 def _submit_single_cwd(
     *,
     dry_run: bool = False,
     sbatch_extra: list[str] | None = None,
+    afterok: str | None = None,
 ) -> None:
     """Submit the run in the current directory."""
     cwd = Path.cwd().resolve()
@@ -254,7 +272,7 @@ def _submit_single_cwd(
         typer.echo(f"  Exists: {job_script.exists()}")
         return
 
-    result = _submit_single_run(run_dir, sbatch_extra=sbatch_extra)
+    result = _submit_single_run(run_dir, sbatch_extra=sbatch_extra, afterok=afterok)
     if result is None:
         raise typer.Exit(code=1)
 
@@ -264,10 +282,13 @@ def _submit_all_cwd(
     *,
     dry_run: bool = False,
     sbatch_extra: list[str] | None = None,
+    afterok: str | None = None,
 ) -> None:
     """Submit all runs in the given directory or cwd."""
     target_dir = (target or Path.cwd()).resolve()
-    _submit_all(None, target_dir, dry_run=dry_run, sbatch_extra=sbatch_extra)
+    _submit_all(
+        None, target_dir, dry_run=dry_run, sbatch_extra=sbatch_extra, afterok=afterok
+    )
 
 
 def _submit_single(
@@ -275,6 +296,7 @@ def _submit_single(
     *,
     dry_run: bool = False,
     sbatch_extra: list[str] | None = None,
+    afterok: str | None = None,
 ) -> None:
     """Handle single-run submission."""
     if run_arg is None:
@@ -290,7 +312,7 @@ def _submit_single(
         typer.echo(f"  Exists: {job_script.exists()}")
         return
 
-    result = _submit_single_run(run_dir, sbatch_extra=sbatch_extra)
+    result = _submit_single_run(run_dir, sbatch_extra=sbatch_extra, afterok=afterok)
     if result is None:
         raise typer.Exit(code=1)
 
@@ -301,6 +323,7 @@ def _submit_all(
     *,
     dry_run: bool = False,
     sbatch_extra: list[str] | None = None,
+    afterok: str | None = None,
 ) -> None:
     """Handle batch submission of all runs in a directory.
 
@@ -358,7 +381,9 @@ def _submit_all(
             skipped += 1
             continue
 
-        job_id = _submit_single_run(rd, quiet=True, sbatch_extra=sbatch_extra)
+        job_id = _submit_single_run(
+            rd, quiet=True, sbatch_extra=sbatch_extra, afterok=afterok
+        )
         if job_id is not None:
             run_id = manifest.run.get("id", rd.name)
             typer.echo(f"  Submitted {run_id}: job_id={job_id}")

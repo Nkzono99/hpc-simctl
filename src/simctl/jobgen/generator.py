@@ -166,11 +166,18 @@ def _render_script(
         lines.append(f"#SBATCH -p {partition}")
 
     if resource_style == "rsc":
-        # cmaphor-style: --rsc p=N:t=T:c=C
+        # Camphor-style: --rsc p=N:t=T:c=C[:m=MEM][:g=GPU]
         ntasks = job_config.get("ntasks", 1)
         threads = job_config.get("threads_per_process", 1)
         cores = job_config.get("cores_per_thread", 1)
-        lines.append(f"#SBATCH --rsc p={ntasks}:t={threads}:c={cores}")
+        rsc_parts = f"p={ntasks}:t={threads}:c={cores}"
+        memory = job_config.get("memory", "")
+        if memory:
+            rsc_parts += f":m={memory}"
+        gpus = job_config.get("gpus", 0)
+        if gpus:
+            rsc_parts += f":g={gpus}"
+        lines.append(f"#SBATCH --rsc {rsc_parts}")
     else:
         # Standard Slurm directives
         if "nodes" in job_config:
