@@ -93,15 +93,11 @@ class SimulatorAdapter(ABC):
             Dict mapping filename to content string.
             Must include ``"case.toml"``.
         """
+        from simctl.templates import render
+
         name = getattr(cls, "adapter_name", "generic")
         return {
-            "case.toml": (
-                f'[case]\nname = ""\nsimulator = "{name}"\n'
-                f'launcher = "default"\ndescription = ""\n\n'
-                f"[params]\n\n[job]\n"
-                f'partition = ""\nnodes = 1\nntasks = 1\n'
-                f'walltime = "01:00:00"\n'
-            ),
+            "case.toml": render("adapters/generic/case.toml.j2", name=name),
         }
 
     @classmethod

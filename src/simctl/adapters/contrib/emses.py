@@ -128,34 +128,11 @@ class EmseAdapter(SimulatorAdapter):
     @classmethod
     def case_template(cls) -> dict[str, str]:
         """Return template files for a new EMSES case."""
+        from simctl.templates import load_static
+
         return {
-            "case.toml": (
-                '[case]\nname = ""\nsimulator = "emses"\n'
-                'launcher = "default"\ndescription = ""\n\n'
-                "[params]\n"
-                '# "tmgrid.nx" = 64\n'
-                '# "tmgrid.ny" = 64\n'
-                '# "tmgrid.nz" = 64\n'
-                '# "tmgrid.dt" = 1.0\n'
-                '# "jobcon.nstep" = 10000\n\n'
-                "[job]\n"
-                'partition = ""\nnodes = 1\nntasks = 1\n'
-                'walltime = "01:00:00"\n'
-            ),
-            "plasma.toml": (
-                "# EMSES plasma configuration\n"
-                "# See EMSES documentation for full parameter reference\n\n"
-                "[jobcon]\n"
-                "nstep = 10000\n\n"
-                "[tmgrid]\n"
-                "nx = 64\nny = 64\nnz = 64\n"
-                "dt = 1.0\n\n"
-                "[[species]]\n"
-                'name = "electron"\n'
-                "# charge, mass, temperature, density, etc.\n\n"
-                "[emfield]\n"
-                "# External field configuration\n"
-            ),
+            "case.toml": load_static("adapters/emses/case.toml"),
+            "plasma.toml": load_static("adapters/emses/plasma.toml"),
         }
 
     @classmethod
@@ -464,47 +441,9 @@ class EmseAdapter(SimulatorAdapter):
     @classmethod
     def agent_guide(cls) -> str:
         """Return AI agent guide for EMSES."""
-        return """\
-### EMSES (Electromagnetic Particle-in-Cell Simulator)
+        from simctl.templates import load_static
 
-#### 概要
-EMSES は 3D 電磁粒子シミュレーション (PIC) コード。
-MPI 並列で実行し、電磁場と荷電粒子の自己無撞着な時間発展を計算する。
-
-#### 入力ファイル
-- **`input/plasma.toml`** — メイン設定ファイル (TOML 形式)
-  - `[jobcon]`: `nstep` (総ステップ数) が最重要パラメータ
-  - `[tmgrid]`: `nx`, `ny`, `nz` (グリッド数), `dt` (時間刻み)
-  - `[[species]]`: 粒子種の定義 (質量比, 温度, 密度 etc.)
-  - `[emfield]`: 外部磁場・電場の設定
-  - `[[ptcond.objects]]`: 境界条件・導体オブジェクト
-
-#### 出力ファイル (`work/` 以下)
-- `*.h5` — HDF5 形式の電磁場データ (ex, ey, ez, bx, by, bz, etc.)
-- `energy` — エネルギー時系列 (ASCII)。最終行のステップ番号で完了判定
-- `SNAPSHOT1/esdat*.h5` — リスタート用スナップショット
-- 各種診断ファイル: `ewave`, `chgacm1`, `influx`, `icur` 等
-
-#### 完了判定
-- `work/energy` の最終行のステップ番号 ≥ `nstep` → completed
-- stderr に "error", "segmentation fault", "killed" → failed
-
-#### パラメータサーベイでよく変えるパラメータ
-- `tmgrid.dt`, `tmgrid.nx/ny/nz`
-- `species[0].temperature`, `species[0].density`
-- `emfield.ex0`, `emfield.bx0` (外部場)
-- `jobcon.nstep`
-
-#### ドキュメント・参考
-- EMSES ソースリポジトリの README / docs/
-- `plasma.toml` のスキーマは `format_version = 2` (structured TOML)
-- パラメータの dot 記法例: `tmgrid.nx=128`, `species.0.temperature=1.0e6`
-
-#### 実行コマンド
-```
-srun mpiemses3D plasma.toml
-```
-"""
+        return load_static("adapters/emses/agent_guide.md")
 
     @property
     def name(self) -> str:

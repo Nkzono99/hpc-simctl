@@ -220,30 +220,16 @@ def _generate_survey_stub(
             '# partition = ""\n# nodes = 1\n# ntasks = 1\n# walltime = "01:00:00"'
         )
 
-    content = f"""\
-#:schema https://raw.githubusercontent.com/Nkzono99/hpc-simctl/main/schemas/survey.json
-[survey]
-name = "{case_name} sweep"
-base_case = "{base_case_ref}"
-simulator = "{simulator}"
-launcher = "{launcher}"
+    from simctl.templates import render
 
-[axes]
-# Define parameter axes for cartesian product expansion.
-# Each key is a dotted parameter path, and the value is a list.
-# Example:
-# "tmgrid.dt" = [0.5, 1.0, 2.0]
-# "species[2].ray_zenith_angle_deg" = [0, 30, 60, 90]
-
-[naming]
-# Template for run display names. Use parameter leaf names or underscore forms.
-# Example: display_name = "dt{{tmgrid_dt}}_angle{{ray_zenith_angle_deg}}"
-display_name = ""
-
-[job]
-# Override job settings from case.toml (optional).
-{job_comment}
-"""
+    content = render(
+        "survey.toml.j2",
+        case_name=case_name,
+        base_case_ref=base_case_ref,
+        simulator=simulator,
+        launcher=launcher,
+        job_comment=job_comment,
+    )
     survey_file = survey_dir / "survey.toml"
     if survey_file.exists():
         typer.echo(f"\n  survey.toml already exists at {survey_dir}, skipping.")

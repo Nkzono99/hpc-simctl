@@ -1,0 +1,10 @@
+#:schema {{ schema_base_url }}/campaign.json
+[campaign]
+name = "{{ project_name }}"
+description = ""
+hypothesis = ""
+{% if simulator %}simulator = "{{ simulator }}"
+{% endif %}
+[variables]
+
+[observables]

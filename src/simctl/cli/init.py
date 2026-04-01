@@ -11,7 +11,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Any, Optional
 
-import jinja2
 import typer
 
 from simctl.core.discovery import validate_uniqueness
@@ -45,119 +44,6 @@ _VSCODE_SETTINGS = "settings.json"
 _SCHEMA_BASE_URL = "https://raw.githubusercontent.com/Nkzono99/hpc-simctl/main/schemas"
 _DEFAULT_SIMCTL_REPO = "https://github.com/Nkzono99/hpc-simctl.git"
 
-_GITIGNORE_CONTENT = """\
-# Python venv
-.venv/
-
-# simctl tool (cloned by simctl init)
-tools/
-
-# Reference repos (cloned by simctl init)
-refs/
-
-# Auto-generated knowledge indexes (insights/, facts.toml, links.toml are tracked)
-.simctl/knowledge/
-.simctl/environment.toml
-.simctl/shared/
-
-# heavy run outputs
-runs/**/work/outputs/
-runs/**/work/restart/
-runs/**/work/tmp/
-
-# logs
-runs/**/work/*.out
-runs/**/work/*.err
-runs/**/work/*.log
-
-# analysis cache
-runs/**/analysis/cache/
-runs/**/analysis/.ipynb_checkpoints/
-
-# Personal agent overrides (not shared)
-CLAUDE.local.md
-.claude/settings.local.json
-"""
-
-_VSCODE_SETTINGS_CONTENT = """\
-{
-    "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
-    "python.terminal.activateEnvironment": false,
-    "terminal.integrated.env.linux": {
-        "VIRTUAL_ENV": "${workspaceFolder}/.venv",
-        "PATH": "${workspaceFolder}/.venv/bin:${env:PATH}",
-        "VIRTUAL_ENV_DISABLE_PROMPT": "1"
-    }
-}
-"""
-
-_CLAUDE_SETTINGS_CONTENT = """\
-{
-  "permissions": {
-    "allow": [
-      "Bash(simctl *)",
-      "Bash(uv run pytest*)",
-      "Bash(uv run ruff*)",
-      "Bash(uv run mypy*)",
-      "Bash(source .venv/bin/activate*)",
-      "Bash(cat runs/*/work/*.out*)",
-      "Bash(cat runs/*/work/*.err*)",
-      "Bash(git status*)",
-      "Bash(git log*)",
-      "Bash(git diff*)"
-    ],
-    "deny": [
-      "Bash(rm -rf *)",
-      "Bash(git push --force*)",
-      "Bash(git reset --hard*)"
-    ]
-  }
-}
-"""
-
-_RULE_SIMCTL_WORKFLOW = """\
-# simctl ワークフロールール
-
-## ファイル操作の制約
-- run ディレクトリ (`Rxxxx/`) は手で作らない
-- `manifest.toml` は手動編集しない
-- `Rxxxx/input/*` は直接作らない
-- `Rxxxx/submit/job.sh` は手書きしない
-- run は必ず `simctl create` または `simctl sweep` で生成する
-- `work/` と `.simctl/knowledge/` の自動生成物は手で整形しない
-- `runs/**/input/*` を緊急修正した場合は、同じ修正を上流へ戻す
-- `tools/hpc-simctl/` は参照用。通常は編集しない
-
-## venv
-- **simctl コマンド実行前に `.venv/` を activate する**
-
-## case 作成
-- **case は `simctl new` で生成する** (case.toml を手書きしない)
-
-## 知見の記録
-- 実験の知見・結果は Agent の memory ではなく `/learn` で保存する
-- 保存先: `.simctl/insights/`, `.simctl/facts.toml`
-- `high` confidence は複数 run の再現か deterministic 確認がある場合だけ使う
-"""
-
-_RULE_PLAN_BEFORE_ACT = """\
-# 実行前ルール
-
-複数ファイル編集または高コスト操作の前には、短い plan を出す。
-
-```json
-{
-  "goal": "what you want to achieve",
-  "edits": ["file1.toml", "file2.toml"],
-  "commands": ["simctl sweep ...", "simctl run --all ..."],
-  "checkpoints": ["Confirm survey size before bulk submit"]
-}
-```
-
-- 高コスト操作では run 数・queue・retry 理由を書く
-- plan にない高コスト操作をいきなり実行しない
-- approval が必要な操作は、plan を出したところで止まる
-"""
 
 
 def _write_if_missing(path: Path, content: str) -> bool:
@@ -191,8 +77,6 @@ def _mkdir_if_missing(path: Path) -> bool:
     return True
 
 
-_FACTS_DEFAULT = "# Structured facts\nfacts = []\n"
-_LINKS_DEFAULT = "# Project links\n[projects]\n\n[shared]\n"
 
 
 def _create_simctl_skeleton(project_dir: Path, created: list[str]) -> None:
@@ -207,9 +91,13 @@ def _create_simctl_skeleton(project_dir: Path, created: list[str]) -> None:
         created.append(".simctl/")
     if _mkdir_if_missing(simctl_dir / "insights"):
         created.append(".simctl/insights/")
-    if _write_if_missing(simctl_dir / "facts.toml", _FACTS_DEFAULT):
+    from simctl.templates import load_static
+
+    if _write_if_missing(simctl_dir / "facts.toml", load_static("scaffold/facts.toml")):
         created.append(".simctl/facts.toml")
-    if _write_if_missing(simctl_dir / "links.toml", _LINKS_DEFAULT):
+    if _write_if_missing(
+        simctl_dir / "links.toml", load_static("scaffold/links.toml")
+    ):
         created.append(".simctl/links.toml")
     # Knowledge integration directories
     if _mkdir_if_missing(simctl_dir / "knowledge"):
@@ -367,18 +255,9 @@ def _build_simulator_guides(simulator_names: list[str]) -> str:
 
 def _build_cookbook_rule() -> str:
     """Load the cookbook rule template for .claude/rules/."""
-    templates_dir = Path(__file__).resolve().parent.parent / "templates"
-    return (templates_dir / "rules" / "cookbook.md").read_text(encoding="utf-8")
+    from simctl.templates import load_static
 
-
-def _get_jinja_env() -> jinja2.Environment:
-    """Return a Jinja2 environment that loads from simctl/templates/."""
-    templates_dir = Path(__file__).resolve().parent.parent / "templates"
-    return jinja2.Environment(
-        loader=jinja2.FileSystemLoader(str(templates_dir)),
-        keep_trailing_newline=True,
-        undefined=jinja2.StrictUndefined,
-    )
+    return load_static("rules/cookbook.md")
 
 
 def _discover_agent_docs(
@@ -417,7 +296,9 @@ def _build_agent_md(
     """Build shared agent instructions for CLAUDE.md / AGENTS.md."""
     doc_repos = _collect_doc_repos(simulator_names) if simulator_names else []
 
-    env = _get_jinja_env()
+    from simctl.templates import get_jinja_env
+
+    env = get_jinja_env()
     template = env.get_template("agent.md")
     return template.render(
         doc_name=doc_name,
@@ -480,7 +361,9 @@ def _build_skills(project_name: str, simulator_names: list[str]) -> dict[str, st
         content = skill_md.read_text(encoding="utf-8")
         # Apply Jinja2 substitutions only if template variables are present
         if "{{" in content:
-            env = _get_jinja_env()
+            from simctl.templates import get_jinja_env
+
+            env = get_jinja_env()
             template = env.from_string(content)
             content = template.render(
                 project_name=project_name,
@@ -950,25 +833,14 @@ def _build_launchers_toml(launchers: dict[str, dict[str, Any]]) -> str:
 
 def _build_campaign_toml(project_name: str, simulator_names: list[str]) -> str:
     """Build a minimal campaign.toml skeleton."""
-    lines = [
-        f"#:schema {_SCHEMA_BASE_URL}/campaign.json",
-        "[campaign]",
-        f'name = "{project_name}"',
-        'description = ""',
-        'hypothesis = ""',
-    ]
-    if simulator_names:
-        lines.append(f'simulator = "{simulator_names[0]}"')
-    lines.extend(
-        [
-            "",
-            "[variables]",
-            "",
-            "[observables]",
-            "",
-        ]
+    from simctl.templates import render
+
+    return render(
+        "scaffold/campaign.toml.j2",
+        schema_base_url=_SCHEMA_BASE_URL,
+        project_name=project_name,
+        simulator=simulator_names[0] if simulator_names else "",
     )
-    return "\n".join(lines)
 
 
 def _venv_pip_executable(venv_dir: Path) -> Path:
@@ -1136,10 +1008,14 @@ def _create_subdirectory_claude_md(
     the subdirectory, providing focused context without bloating the root
     CLAUDE.md.
     """
+    from simctl.templates import load_static
+
     # cases/CLAUDE.md
     cases_md = project_dir / "cases" / "CLAUDE.md"
     if cases_md.parent.exists():
-        if _write_if_missing(cases_md, _CASES_CLAUDE_MD):
+        if _write_if_missing(
+            cases_md, load_static("scaffold/cases_claude.md")
+        ):
             created.append("cases/CLAUDE.md")
         else:
             skipped.append("cases/CLAUDE.md")
@@ -1147,58 +1023,12 @@ def _create_subdirectory_claude_md(
     # runs/CLAUDE.md
     runs_md = project_dir / "runs" / "CLAUDE.md"
     if runs_md.parent.exists():
-        if _write_if_missing(runs_md, _RUNS_CLAUDE_MD):
+        if _write_if_missing(
+            runs_md, load_static("scaffold/runs_claude.md")
+        ):
             created.append("runs/CLAUDE.md")
         else:
             skipped.append("runs/CLAUDE.md")
-
-
-_CASES_CLAUDE_MD = """\
-# cases/ ディレクトリ
-
-ここには simulation case の定義を置く。
-
-## 構造
-
-```
-cases/<simulator>/<case-name>/
-  case.toml          # パラメータ定義
-  survey.toml        # (optional) パラメータ掃引定義
-  templates/         # 入力テンプレート
-```
-
-## ルール
-
-- case は `simctl new <name>` で生成する (手書きしない)
-- survey 付きは `simctl new <name> --survey`
-- case.toml の編集は自由だが、フォーマットは `simctl-reference` スキルを参照
-- テンプレートの Jinja2 変数は case.toml の `[parameters]` から展開される
-"""
-
-_RUNS_CLAUDE_MD = """\
-# runs/ ディレクトリ
-
-ここには simulation run が格納される。すべて `simctl create` / `simctl sweep` で生成。
-
-## 構造
-
-```
-runs/<path>/Rxxxx/
-  manifest.toml      # 正本 (状態・由来・provenance)
-  input/             # 入力ファイル (自動生成)
-  submit/            # job.sh 等 (自動生成)
-  work/              # 実行時出力 (.gitignore 対象)
-  analysis/          # 解析結果
-```
-
-## ルール
-
-- run ディレクトリ (`Rxxxx/`) を手で作らない
-- `manifest.toml` を手動編集しない
-- `input/*`, `submit/job.sh` を直接作らない
-- 状態確認は `simctl status`、同期は `simctl sync`
-- 解析は `simctl summarize` / `simctl collect`
-"""
 
 
 def init(
@@ -1387,7 +1217,11 @@ def init(
         skipped.extend(refs_skipped)
 
     # .gitignore
-    if _write_if_missing(project_dir / ".gitignore", _GITIGNORE_CONTENT):
+    from simctl.templates import load_static
+
+    if _write_if_missing(
+        project_dir / ".gitignore", load_static("scaffold/gitignore.txt")
+    ):
         created.append(".gitignore")
     else:
         skipped.append(".gitignore")
@@ -1476,7 +1310,9 @@ def init(
     # .claude/settings.json (team-shared permissions)
     claude_settings_path = project_dir / _CLAUDE_SETTINGS
     claude_settings_path.parent.mkdir(parents=True, exist_ok=True)
-    if _write_if_missing(claude_settings_path, _CLAUDE_SETTINGS_CONTENT):
+    if _write_if_missing(
+        claude_settings_path, load_static("scaffold/claude_settings.json")
+    ):
         created.append(_CLAUDE_SETTINGS)
     else:
         skipped.append(_CLAUDE_SETTINGS)
@@ -1485,8 +1321,8 @@ def init(
     rules_base = project_dir / _RULES_DIR
     rules_base.mkdir(parents=True, exist_ok=True)
     rules_to_write: list[tuple[str, str]] = [
-        ("simctl-workflow.md", _RULE_SIMCTL_WORKFLOW),
-        ("plan-before-act.md", _RULE_PLAN_BEFORE_ACT),
+        ("simctl-workflow.md", load_static("scaffold/rules/simctl-workflow.md")),
+        ("plan-before-act.md", load_static("scaffold/rules/plan-before-act.md")),
     ]
     # Add cookbook rule if any simulator has a cookbook
     if doc_repos:
@@ -1510,7 +1346,9 @@ def init(
         skipped.append(f"{_VSCODE_DIR}/{_VSCODE_SETTINGS}")
     else:
         vscode_dir.mkdir(exist_ok=True)
-        vscode_settings.write_text(_VSCODE_SETTINGS_CONTENT, encoding="utf-8")
+        vscode_settings.write_text(
+            load_static("scaffold/vscode_settings.json"), encoding="utf-8"
+        )
         created.append(f"{_VSCODE_DIR}/{_VSCODE_SETTINGS}")
 
     # git init

@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(simctl *)",
+      "Bash(uv run pytest*)",
+      "Bash(uv run ruff*)",
+      "Bash(uv run mypy*)",
+      "Bash(source .venv/bin/activate*)",
+      "Bash(cat runs/*/work/*.out*)",
+      "Bash(cat runs/*/work/*.err*)",
+      "Bash(git status*)",
+      "Bash(git log*)",
+      "Bash(git diff*)"
+    ],
+    "deny": [
+      "Bash(rm -rf *)",
+      "Bash(git push --force*)",
+      "Bash(git reset --hard*)"
+    ]
+  }
+}

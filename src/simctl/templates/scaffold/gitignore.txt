@@ -1,0 +1,31 @@
+# Python venv
+.venv/
+
+# simctl tool (cloned by simctl init)
+tools/
+
+# Reference repos (cloned by simctl init)
+refs/
+
+# Auto-generated knowledge indexes (insights/, facts.toml, links.toml are tracked)
+.simctl/knowledge/
+.simctl/environment.toml
+.simctl/shared/
+
+# heavy run outputs
+runs/**/work/outputs/
+runs/**/work/restart/
+runs/**/work/tmp/
+
+# logs
+runs/**/work/*.out
+runs/**/work/*.err
+runs/**/work/*.log
+
+# analysis cache
+runs/**/analysis/cache/
+runs/**/analysis/.ipynb_checkpoints/
+
+# Personal agent overrides (not shared)
+CLAUDE.local.md
+.claude/settings.local.json
