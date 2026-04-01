@@ -154,7 +154,8 @@ class TestInteractiveInit:
                 "emses",  # simulator selection
                 "n",  # customize settings?
                 "",  # launcher (skip)
-                "n",  # attach knowledge repos?
+                "",  # skip knowledge repo selection
+                "",  # skip manual knowledge source entry
                 "",  # extra line for safety
             ]
         )

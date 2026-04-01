@@ -588,9 +588,10 @@ def _search_knowledge_repos() -> list[tuple[str, str]]:
     candidates: list[tuple[str, str]] = []
     for repo in repos:
         name = repo.get("nameWithOwner", "")
-        # Match *shared_knowledge* pattern (case-insensitive)
+        # Match *shared_knowledge* or *shared-knowledge* (case-insensitive)
         repo_name = name.rsplit("/", 1)[-1] if "/" in name else name
-        if "shared_knowledge" in repo_name.lower():
+        lower = repo_name.lower()
+        if "shared_knowledge" in lower or "shared-knowledge" in lower:
             ssh_url = repo.get("sshUrl", "")
             if ssh_url:
                 candidates.append((name, ssh_url))
@@ -603,20 +604,17 @@ def _prompt_knowledge_sources(
 ) -> list[Any]:
     """Interactively prompt the user to attach knowledge sources.
 
-    Searches GitHub for repos matching ``*shared_knowledge*`` and
-    offers them as candidates. Also allows manual URL entry.
+    Searches GitHub for repos matching ``*shared_knowledge*`` or
+    ``*shared-knowledge*`` first, then presents them as candidates.
+    Also allows manual URL entry.
 
     Returns:
         List of KnowledgeSource to attach.
     """
     from simctl.core.knowledge_source import KnowledgeSource
 
-    want = typer.confirm("\nAttach shared knowledge repositories?", default=False)
-    if not want:
-        return []
-
-    # Search for candidates
-    typer.echo("  Searching GitHub for *shared_knowledge* repos...")
+    # Search first, then ask
+    typer.echo("\n  Searching GitHub for shared knowledge repos...")
     candidates = _search_knowledge_repos()
 
     selected_sources: list[KnowledgeSource] = []
@@ -627,7 +625,8 @@ def _prompt_knowledge_sources(
             typer.echo(f"    {i}. {full_name}")
 
         selection = typer.prompt(
-            "\n  Select repos (comma-separated numbers, Enter to skip)",
+            "\n  Select repos to attach "
+            "(comma-separated numbers, Enter to skip)",
             default="",
         )
 
@@ -652,7 +651,7 @@ def _prompt_knowledge_sources(
                 else:
                     typer.echo(f"    Warning: ignoring invalid number '{token}'")
     else:
-        typer.echo("  No *shared_knowledge* repos found on GitHub.")
+        typer.echo("  No shared knowledge repos found on GitHub.")
 
     # Allow manual entry
     while True:
