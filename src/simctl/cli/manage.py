@@ -7,9 +7,9 @@ from pathlib import Path
 
 import typer
 
+from simctl.cli.run_lookup import resolve_run_or_cwd
 from simctl.core.actions import ActionStatus
 from simctl.core.actions import archive_run as archive_run_action
-from simctl.core.discovery import resolve_run
 from simctl.core.exceptions import InvalidStateTransitionError, SimctlError
 from simctl.core.manifest import read_manifest
 from simctl.core.state import RunState, update_state
@@ -35,28 +35,12 @@ def _format_size(size_bytes: int) -> str:
         value /= 1024
     return f"{value:.1f} PB"
 
-
-def _resolve_run_or_cwd(run: str | None) -> Path:
-    """Resolve a run argument or fall back to cwd."""
-    if run is None:
-        cwd = Path.cwd().resolve()
-        if (cwd / "manifest.toml").exists():
-            return cwd
-        typer.echo("Error: No manifest.toml in cwd. Specify a run.", err=True)
-        raise typer.Exit(code=1)
-    try:
-        return resolve_run(run, Path.cwd())
-    except SimctlError as e:
-        typer.echo(f"Error: {e}", err=True)
-        raise typer.Exit(code=1) from None
-
-
 def archive(
     run: str = typer.Argument(None, help="Run directory or run_id (defaults to cwd)."),
     yes: bool = typer.Option(False, "--yes", help="Skip confirmation prompt."),
 ) -> None:
     """Archive a completed run."""
-    run_dir = _resolve_run_or_cwd(run)
+    run_dir = resolve_run_or_cwd(run, search_dir=Path.cwd())
 
     try:
         manifest = read_manifest(run_dir)
@@ -94,7 +78,7 @@ def purge_work(
     yes: bool = typer.Option(False, "--yes", help="Skip confirmation prompt."),
 ) -> None:
     """Remove unnecessary files from a run's work/ directory."""
-    run_dir = _resolve_run_or_cwd(run)
+    run_dir = resolve_run_or_cwd(run, search_dir=Path.cwd())
 
     try:
         manifest = read_manifest(run_dir)

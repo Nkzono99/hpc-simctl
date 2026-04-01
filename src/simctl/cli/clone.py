@@ -8,7 +8,8 @@ from typing import Optional
 
 import typer
 
-from simctl.core.discovery import collect_existing_run_ids, resolve_run
+from simctl.cli.run_lookup import resolve_run_or_cwd
+from simctl.core.discovery import collect_existing_run_ids
 from simctl.core.exceptions import SimctlError
 from simctl.core.manifest import ManifestData, read_manifest, write_manifest
 from simctl.core.run import next_run_id
@@ -25,20 +26,8 @@ def clone(
     ),
 ) -> None:
     """Clone a run, optionally modifying parameters."""
-    if run is None:
-        cwd = Path.cwd().resolve()
-        if (cwd / "manifest.toml").exists():
-            source_dir = cwd
-        else:
-            typer.echo("Error: No manifest.toml in cwd. Specify a run.", err=True)
-            raise typer.Exit(code=1)
-    else:
-        search_dir = Path.cwd()
-        try:
-            source_dir = resolve_run(run, search_dir)
-        except SimctlError as e:
-            typer.echo(f"Error: {e}", err=True)
-            raise typer.Exit(code=1) from None
+    search_dir = Path.cwd()
+    source_dir = resolve_run_or_cwd(run, search_dir=search_dir)
 
     try:
         source_manifest = read_manifest(source_dir)

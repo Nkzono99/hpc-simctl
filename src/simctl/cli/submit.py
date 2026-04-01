@@ -8,36 +8,18 @@ from typing import Annotated, Optional
 
 import typer
 
+from simctl.cli.run_lookup import resolve_project_run_dir
 from simctl.core.actions import ActionStatus
 from simctl.core.actions import submit_run as submit_run_action
-from simctl.core.discovery import discover_runs, resolve_run
+from simctl.core.discovery import discover_runs
 from simctl.core.exceptions import (
     ManifestNotFoundError,
-    RunNotFoundError,
     SimctlError,
 )
 from simctl.core.manifest import read_manifest
 from simctl.core.state import RunState
 
 logger = logging.getLogger(__name__)
-
-
-def _find_project_runs_dir() -> Path:
-    """Walk up from cwd to find a directory containing simproject.toml.
-
-    Returns:
-        The ``runs/`` directory under the project root.
-
-    Raises:
-        typer.Exit: If no project root is found.
-    """
-    cwd = Path.cwd()
-    for parent in [cwd, *cwd.parents]:
-        if (parent / "simproject.toml").exists():
-            return parent / "runs"
-    typer.echo("Error: Could not find simproject.toml in any parent directory.")
-    raise typer.Exit(code=1)
-
 
 def _resolve_run_dir(identifier: str) -> Path:
     """Resolve a run identifier (path or run_id) to a run directory.
@@ -51,12 +33,7 @@ def _resolve_run_dir(identifier: str) -> Path:
     Raises:
         typer.Exit: If the run cannot be found.
     """
-    try:
-        runs_dir = _find_project_runs_dir()
-        return resolve_run(identifier, runs_dir)
-    except RunNotFoundError as e:
-        typer.echo(f"Error: {e}")
-        raise typer.Exit(code=1) from None
+    return resolve_project_run_dir(identifier, start=Path.cwd())
 
 
 def _submit_single_run(

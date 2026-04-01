@@ -8,26 +8,12 @@ from typing import Annotated, Any, Optional
 
 import typer
 
-from simctl.core.discovery import collect_existing_run_ids, resolve_run
+from simctl.cli.run_lookup import resolve_run_or_cwd
+from simctl.core.discovery import collect_existing_run_ids
 from simctl.core.exceptions import SimctlError
 from simctl.core.manifest import ManifestData, read_manifest, write_manifest
 from simctl.core.project import find_project_root, load_project
 from simctl.core.run import create_run
-
-
-def _resolve_run_or_cwd(run: str | None) -> Path:
-    """Resolve run argument or fall back to cwd."""
-    if run is None:
-        cwd = Path.cwd().resolve()
-        if (cwd / "manifest.toml").exists():
-            return cwd
-        typer.echo("Error: No manifest.toml in cwd. Specify a run.", err=True)
-        raise typer.Exit(code=1)
-    try:
-        return resolve_run(run, Path.cwd())
-    except SimctlError as e:
-        typer.echo(f"Error: {e}", err=True)
-        raise typer.Exit(code=1) from None
 
 
 def extend(
@@ -60,7 +46,7 @@ def extend(
       simctl extend R0001 --nstep 200000 # continue with more steps
       simctl extend --run                # continue and submit
     """
-    source_dir = _resolve_run_or_cwd(run)
+    source_dir = resolve_run_or_cwd(run, search_dir=Path.cwd())
 
     # Read source manifest
     try:

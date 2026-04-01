@@ -7,13 +7,13 @@ from pathlib import Path
 
 import typer
 
+from simctl.cli.run_lookup import resolve_run_or_cwd
 from simctl.core.analysis import (
     collect_survey_summaries,
     generate_run_summary,
     load_survey_plot_table,
     render_survey_plot,
 )
-from simctl.core.discovery import resolve_run
 from simctl.core.exceptions import SimctlError
 from simctl.core.manifest import read_manifest
 
@@ -22,20 +22,7 @@ def summarize(
     run: str = typer.Argument(None, help="Run directory or run_id (defaults to cwd)."),
 ) -> None:
     """Generate or update analysis/summary.json for a run."""
-    if run is None:
-        cwd = Path.cwd().resolve()
-        if (cwd / "manifest.toml").exists():
-            run_dir = cwd
-        else:
-            typer.echo("Error: No manifest.toml in cwd. Specify a run.", err=True)
-            raise typer.Exit(code=1)
-    else:
-        search_dir = Path.cwd()
-        try:
-            run_dir = resolve_run(run, search_dir)
-        except SimctlError as e:
-            typer.echo(f"Error: {e}", err=True)
-            raise typer.Exit(code=1) from None
+    run_dir = resolve_run_or_cwd(run, search_dir=Path.cwd())
 
     try:
         result = generate_run_summary(run_dir)

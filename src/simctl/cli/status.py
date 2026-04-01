@@ -7,53 +7,15 @@ from typing import Annotated, Optional
 
 import typer
 
+from simctl.cli.run_lookup import resolve_project_run_dir, resolve_run_or_cwd
 from simctl.core.actions import ActionStatus
 from simctl.core.actions import sync_run as sync_run_action
-from simctl.core.discovery import resolve_run
 from simctl.core.exceptions import (
     ManifestNotFoundError,
-    RunNotFoundError,
 )
 from simctl.core.manifest import read_manifest
 from simctl.slurm.query import SlurmQueryError, query_job_status
 from simctl.slurm.submit import SlurmNotFoundError
-
-
-def _find_project_runs_dir() -> Path:
-    """Walk up from cwd to find a directory containing simproject.toml.
-
-    Returns:
-        The ``runs/`` directory under the project root.
-
-    Raises:
-        typer.Exit: If no project root is found.
-    """
-    cwd = Path.cwd()
-    for parent in [cwd, *cwd.parents]:
-        if (parent / "simproject.toml").exists():
-            return parent / "runs"
-    typer.echo("Error: Could not find simproject.toml in any parent directory.")
-    raise typer.Exit(code=1)
-
-
-def _resolve_run_dir(identifier: str) -> Path:
-    """Resolve a run identifier to a directory path.
-
-    Args:
-        identifier: A run directory path or run_id string.
-
-    Returns:
-        Absolute path to the run directory.
-
-    Raises:
-        typer.Exit: If the run cannot be found.
-    """
-    try:
-        runs_dir = _find_project_runs_dir()
-        return resolve_run(identifier, runs_dir)
-    except RunNotFoundError as e:
-        typer.echo(f"Error: {e}")
-        raise typer.Exit(code=1) from None
 
 
 def status(
@@ -68,15 +30,12 @@ def status(
     recorded, also queries Slurm for the live job state. Does NOT
     update the manifest (use ``simctl sync`` for that).
     """
-    if run is None:
-        cwd = Path.cwd().resolve()
-        if (cwd / "manifest.toml").exists():
-            run_dir = cwd
-        else:
-            typer.echo("Error: No manifest.toml in cwd. Specify a run.")
-            raise typer.Exit(code=1)
-    else:
-        run_dir = _resolve_run_dir(run)
+    cwd = Path.cwd()
+    run_dir = (
+        resolve_run_or_cwd(None, search_dir=cwd)
+        if run is None
+        else resolve_project_run_dir(run, start=cwd)
+    )
 
     try:
         manifest = read_manifest(run_dir)
@@ -125,15 +84,12 @@ def sync(
     Queries Slurm for the current job state and updates both
     manifest.toml and status/state.json if the state has changed.
     """
-    if run is None:
-        cwd = Path.cwd().resolve()
-        if (cwd / "manifest.toml").exists():
-            run_dir = cwd
-        else:
-            typer.echo("Error: No manifest.toml in cwd. Specify a run.")
-            raise typer.Exit(code=1)
-    else:
-        run_dir = _resolve_run_dir(run)
+    cwd = Path.cwd()
+    run_dir = (
+        resolve_run_or_cwd(None, search_dir=cwd)
+        if run is None
+        else resolve_project_run_dir(run, start=cwd)
+    )
 
     result = sync_run_action(run_dir)
     if result.status is not ActionStatus.SUCCESS:
