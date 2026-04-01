@@ -9,12 +9,14 @@ from typer.testing import CliRunner
 
 from simctl.cli.main import app
 from simctl.core.knowledge import load_facts, query_facts
+from simctl.core.knowledge_source import load_knowledge_config
 
 runner = CliRunner()
 
 
-def _create_project(tmp_path: Path) -> Path:
-    (tmp_path / "simproject.toml").write_text('[project]\nname = "test-project"\n')
+def _create_project(tmp_path: Path, extra_toml: str = "") -> Path:
+    content = f'[project]\nname = "test-project"\n{extra_toml}'
+    (tmp_path / "simproject.toml").write_text(content)
     return tmp_path
 
 
@@ -98,3 +100,208 @@ def test_add_fact_supports_structured_fields_and_supersedes(tmp_path: Path) -> N
 
     visible = query_facts(project_root)
     assert [fact.id for fact in visible] == ["f002"]
+
+
+# ---------- Knowledge source CLI tests ----------
+
+
+def test_attach_path_source(tmp_path: Path) -> None:
+    project_root = _create_project(tmp_path)
+    kb_dir = tmp_path / "my-kb"
+    kb_dir.mkdir()
+    (kb_dir / "README.md").write_text("# KB\n")
+    (kb_dir / "profiles").mkdir()
+    (kb_dir / "profiles" / "common.md").write_text("# Common\n")
+
+    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+        result = runner.invoke(
+            app,
+            [
+                "knowledge", "attach", "path", "my-kb",
+                str(kb_dir), "--no-sync",
+            ],
+        )
+
+    assert result.exit_code == 0
+    assert "Attached [path] my-kb" in result.output
+
+    config = load_knowledge_config(project_root)
+    assert config is not None
+    assert len(config.sources) == 1
+    assert config.sources[0].name == "my-kb"
+    assert config.sources[0].source_type == "path"
+
+
+def test_attach_git_source_with_profiles(tmp_path: Path) -> None:
+    project_root = _create_project(tmp_path)
+
+    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+        result = runner.invoke(
+            app,
+            [
+                "knowledge", "attach", "git", "lab-kb",
+                "https://github.com/lab/kb.git",
+                "--profiles", "common,emses",
+                "--no-sync",
+            ],
+        )
+
+    assert result.exit_code == 0
+    config = load_knowledge_config(project_root)
+    assert config is not None
+    assert config.sources[0].profiles == ["common", "emses"]
+
+
+def test_attach_invalid_type(tmp_path: Path) -> None:
+    project_root = _create_project(tmp_path)
+
+    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+        result = runner.invoke(
+            app,
+            ["knowledge", "attach", "invalid", "kb", "some-url", "--no-sync"],
+        )
+
+    assert result.exit_code == 1
+    assert "Invalid source type" in result.output
+
+
+def test_detach_source(tmp_path: Path) -> None:
+    toml = """
+[knowledge]
+enabled = true
+
+[[knowledge.sources]]
+name = "test-kb"
+type = "path"
+path = "/some/path"
+mount = "refs/knowledge/test-kb"
+"""
+    project_root = _create_project(tmp_path, toml)
+
+    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+        result = runner.invoke(
+            app,
+            ["knowledge", "detach", "test-kb", "--keep-files"],
+        )
+
+    assert result.exit_code == 0
+    assert "Detached: test-kb" in result.output
+    config = load_knowledge_config(project_root)
+    assert config is not None
+    assert len(config.sources) == 0
+
+
+def test_detach_not_found(tmp_path: Path) -> None:
+    project_root = _create_project(tmp_path, "\n[knowledge]\nsources = []\n")
+
+    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+        result = runner.invoke(
+            app,
+            ["knowledge", "detach", "nonexistent"],
+        )
+
+    assert result.exit_code == 1
+    assert "Source not found" in result.output
+
+
+def test_render_generates_imports(tmp_path: Path) -> None:
+    toml = """
+[knowledge]
+enabled = true
+
+[[knowledge.sources]]
+name = "kb"
+type = "path"
+path = "."
+mount = "refs/knowledge/kb"
+profiles = ["common"]
+"""
+    project_root = _create_project(tmp_path, toml)
+
+    # Create the mounted source with profiles
+    mount = project_root / "refs" / "knowledge" / "kb" / "profiles"
+    mount.mkdir(parents=True)
+    (mount / "common.md").write_text("# Common\n")
+
+    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+        result = runner.invoke(app, ["knowledge", "render"])
+
+    assert result.exit_code == 0
+    assert "Rendered:" in result.output
+
+    imports = project_root / ".simctl" / "knowledge" / "enabled" / "imports.md"
+    assert imports.is_file()
+    assert "@refs/knowledge/kb/profiles/common.md" in imports.read_text()
+
+
+def test_render_no_knowledge_section(tmp_path: Path) -> None:
+    project_root = _create_project(tmp_path)
+
+    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+        result = runner.invoke(app, ["knowledge", "render"])
+
+    assert result.exit_code == 1
+    assert "No [knowledge] section" in result.output
+
+
+def test_status_no_config(tmp_path: Path) -> None:
+    project_root = _create_project(tmp_path)
+
+    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+        result = runner.invoke(app, ["knowledge", "status"])
+
+    assert result.exit_code == 0
+    assert "not configured" in result.output
+
+
+def test_status_with_sources(tmp_path: Path) -> None:
+    toml = """
+[knowledge]
+enabled = true
+
+[[knowledge.sources]]
+name = "kb"
+type = "path"
+path = "."
+mount = "refs/knowledge/kb"
+profiles = ["common"]
+"""
+    project_root = _create_project(tmp_path, toml)
+
+    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+        result = runner.invoke(app, ["knowledge", "status"])
+
+    assert result.exit_code == 0
+    assert "enabled" in result.output
+    assert "kb" in result.output
+
+
+def test_list_sources_flag(tmp_path: Path) -> None:
+    toml = """
+[knowledge]
+enabled = true
+
+[[knowledge.sources]]
+name = "kb"
+type = "git"
+url = "https://github.com/lab/kb.git"
+mount = "refs/knowledge/kb"
+"""
+    project_root = _create_project(tmp_path, toml)
+
+    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+        result = runner.invoke(app, ["knowledge", "list", "--sources"])
+
+    assert result.exit_code == 0
+    assert "kb" in result.output
+    assert "git" in result.output
+
+
+def test_list_sources_no_config(tmp_path: Path) -> None:
+    project_root = _create_project(tmp_path)
+
+    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+        result = runner.invoke(app, ["knowledge", "list", "--sources"])
+
+    assert result.exit_code == 0
+    assert "No knowledge sources" in result.output

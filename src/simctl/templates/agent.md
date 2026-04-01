@@ -184,6 +184,12 @@ Agent 自身の memory に保存してはいけない。
 @{{ path }}
 {% endfor %}
 {% endif %}
+{% if knowledge_imports_path %}
+
+## 外部知識ソース (@import)
+
+@{{ knowledge_imports_path }}
+{% endif %}
 {% if simulator_guides %}
 
 ## シミュレータ固有知識

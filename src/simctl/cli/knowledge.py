@@ -7,7 +7,7 @@ from typing import Annotated, Optional
 
 import typer
 
-from simctl.core.exceptions import SimctlError
+from simctl.core.exceptions import KnowledgeSourceError, SimctlError
 from simctl.core.knowledge import (
     FACT_TYPES,
     INSIGHT_TYPES,
@@ -23,6 +23,17 @@ from simctl.core.knowledge import (
     save_fact,
     sync_insights,
     write_insight,
+)
+from simctl.core.knowledge_source import (
+    KnowledgeSource,
+    discover_profiles,
+    load_knowledge_config,
+    remove_knowledge_source,
+    render_imports,
+    save_knowledge_source,
+    sync_all_sources,
+    sync_source,
+    validate_source_structure,
 )
 from simctl.core.project import find_project_root
 
@@ -137,14 +148,27 @@ def list_cmd(
         Optional[str],
         typer.Option("--tag", help="Filter by tag."),
     ] = None,
+    sources: Annotated[
+        bool,
+        typer.Option(
+            "--sources",
+            help="Show knowledge sources instead of insights.",
+        ),
+    ] = False,
 ) -> None:
-    """List knowledge insights.
+    """List knowledge insights or sources.
 
     Examples:
       simctl knowledge list
+      simctl knowledge list --sources
       simctl knowledge list -s emses -t constraint
     """
     root = _find_root()
+
+    if sources:
+        _list_sources(root)
+        return
+
     insights = list_insights(
         root,
         simulator=simulator or "",
@@ -161,6 +185,28 @@ def list_cmd(
         sim_badge = f"({ins.simulator})" if ins.simulator else ""
         tags_str = " " + ", ".join(f"#{t}" for t in ins.tags) if ins.tags else ""
         typer.echo(f"  {ins.name} {type_badge} {sim_badge}{tags_str}")
+
+
+def _list_sources(root: Path) -> None:
+    """Display knowledge sources and their status."""
+    config = load_knowledge_config(root)
+    if config is None or not config.sources:
+        typer.echo("No knowledge sources configured.")
+        return
+
+    for src in config.sources:
+        mount_path = root / src.mount
+        mounted = mount_path.is_dir()
+        status = "OK" if mounted else "NOT MOUNTED"
+
+        available = discover_profiles(mount_path) if mounted else []
+        enabled_str = ", ".join(src.profiles) if src.profiles else "(none)"
+        available_str = ", ".join(available) if available else "(none)"
+
+        typer.echo(f"  {src.name} [{src.source_type}] ({status})")
+        typer.echo(f"    mount: {src.mount}")
+        typer.echo(f"    available profiles: {available_str}")
+        typer.echo(f"    enabled profiles:   {enabled_str}")
 
 
 @knowledge_app.command("show")
@@ -188,6 +234,10 @@ def show(
 
 @knowledge_app.command("sync")
 def sync(
+    source_name: Annotated[
+        Optional[str],
+        typer.Argument(help="Sync only this knowledge source (optional)."),
+    ] = None,
     simulator: Annotated[
         Optional[str],
         typer.Option(
@@ -197,30 +247,63 @@ def sync(
         ),
     ] = None,
 ) -> None:
-    """Import insights from linked projects.
+    """Sync knowledge sources and import insights from linked projects.
 
-    Reads .simctl/links.toml and copies new insights from linked
-    projects into this project's .simctl/insights/.
+    When a source name is given, only that source is synced.
+    Otherwise, all knowledge sources are synced, then insight
+    links are imported.
 
     Examples:
       simctl knowledge sync
+      simctl knowledge sync shared-lab-knowledge
       simctl knowledge sync -s emses
     """
     root = _find_root()
+
+    # Sync knowledge sources
+    config = load_knowledge_config(root)
+    if config is not None and config.sources:
+        if source_name:
+            # Sync single source
+            matched = [s for s in config.sources if s.name == source_name]
+            if not matched:
+                typer.echo(f"Source not found: {source_name}", err=True)
+                raise typer.Exit(code=1)
+            for src in matched:
+                try:
+                    status = sync_source(root, src)
+                    typer.echo(f"  [{src.source_type}] {src.name}: {status}")
+                except KnowledgeSourceError as e:
+                    typer.echo(f"  [{src.source_type}] {src.name}: error - {e}")
+        else:
+            # Sync all sources
+            typer.echo("Syncing knowledge sources...")
+            results = sync_all_sources(root, config)
+            for name, status in results:
+                typer.echo(f"  {name}: {status}")
+
+        # Re-render imports after source sync
+        try:
+            render_imports(root, config)
+            typer.echo("Rendered imports.md")
+        except Exception as e:
+            typer.echo(f"Warning: failed to render imports: {e}", err=True)
+
+    # Sync insights from project links (existing behavior)
     links = load_links(root)
-
-    if not links:
-        typer.echo("No links configured. Create .simctl/links.toml to link projects.")
-        return
-
-    typer.echo("Syncing from linked projects...")
-    for link in links:
-        exists = link.path.is_dir()
-        status = "" if exists else " (not found)"
-        typer.echo(f"  [{link.link_type}] {link.name}: {link.path}{status}")
-
-    imported, skipped = sync_insights(root, simulator=simulator or "")
-    typer.echo(f"\nImported: {imported}, Skipped (exists): {skipped}")
+    if links:
+        if not source_name:
+            typer.echo("Syncing insights from linked projects...")
+            for link in links:
+                exists = link.path.is_dir()
+                status_str = "" if exists else " (not found)"
+                typer.echo(
+                    f"  [{link.link_type}] {link.name}: {link.path}{status_str}"
+                )
+            imported, skipped = sync_insights(root, simulator=simulator or "")
+            typer.echo(f"Imported: {imported}, Skipped (exists): {skipped}")
+    elif config is None or not config.sources:
+        typer.echo("No knowledge sources or links configured.")
 
 
 @knowledge_app.command("links")
@@ -514,3 +597,216 @@ def facts_cmd(
         conf_badge = f"[{f.confidence}]"
         scope_str = f" ({f.scope})" if f.scope else ""
         typer.echo(f"  {f.id} {conf_badge}{scope_str}: {f.claim}")
+
+
+# ---------- Knowledge source commands ----------
+
+
+@knowledge_app.command("attach")
+def attach(
+    source_type: Annotated[
+        str,
+        typer.Argument(help="Source type: git or path."),
+    ],
+    name: Annotated[
+        str,
+        typer.Argument(help="Source name (identifier)."),
+    ],
+    url_or_path: Annotated[
+        str,
+        typer.Argument(help="Git URL or filesystem path."),
+    ],
+    ref: Annotated[
+        str,
+        typer.Option("--ref", help="Git ref to checkout (git sources only)."),
+    ] = "main",
+    mount: Annotated[
+        Optional[str],
+        typer.Option("--mount", help="Override mount path."),
+    ] = None,
+    profiles: Annotated[
+        Optional[str],
+        typer.Option("--profiles", help="Comma-separated profile names to enable."),
+    ] = None,
+    no_sync: Annotated[
+        bool,
+        typer.Option("--no-sync", help="Skip initial sync."),
+    ] = False,
+) -> None:
+    """Attach an external knowledge source to this project.
+
+    Examples:
+      simctl knowledge attach git shared-kb git@github.com:lab/kb.git
+      simctl knowledge attach path personal-kb ../hpc-knowledge
+      simctl knowledge attach git lab-kb \\
+        https://github.com/lab/kb.git --profiles common,emses
+    """
+    if source_type not in ("git", "path"):
+        msg = f"Invalid source type: {source_type}. Must be 'git' or 'path'."
+        typer.echo(msg, err=True)
+        raise typer.Exit(code=1)
+
+    root = _find_root()
+    mount_path = mount or f"refs/knowledge/{name}"
+    profile_list = (
+        [p.strip() for p in profiles.split(",") if p.strip()] if profiles else []
+    )
+
+    source = KnowledgeSource(
+        name=name,
+        source_type=source_type,
+        url=url_or_path,
+        ref=ref if source_type == "git" else "main",
+        mount=mount_path,
+        profiles=profile_list,
+    )
+
+    try:
+        save_knowledge_source(root, source)
+    except KnowledgeSourceError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1) from None
+
+    typer.echo(f"Attached [{source_type}] {name}: {url_or_path}")
+    typer.echo(f"  mount: {mount_path}")
+    if profile_list:
+        typer.echo(f"  profiles: {', '.join(profile_list)}")
+
+    if not no_sync:
+        typer.echo("Syncing...")
+        try:
+            status = sync_source(root, source)
+            typer.echo(f"  {name}: {status}")
+        except KnowledgeSourceError as e:
+            typer.echo(f"  Sync failed: {e}", err=True)
+
+        # Validate structure
+        source_dir = root / mount_path
+        if source_dir.is_dir():
+            issues = validate_source_structure(source_dir)
+            if issues:
+                typer.echo("Validation warnings:")
+                for issue in issues:
+                    typer.echo(f"  - {issue}")
+
+
+@knowledge_app.command("detach")
+def detach(
+    name: Annotated[
+        str,
+        typer.Argument(help="Source name to remove."),
+    ],
+    keep_files: Annotated[
+        bool,
+        typer.Option("--keep-files", help="Keep mounted files."),
+    ] = False,
+) -> None:
+    """Detach a knowledge source from this project.
+
+    Examples:
+      simctl knowledge detach shared-kb
+      simctl knowledge detach shared-kb --keep-files
+    """
+    root = _find_root()
+
+    # Find mount path before removing
+    config = load_knowledge_config(root)
+    mount_path: Path | None = None
+    if config:
+        for src in config.sources:
+            if src.name == name:
+                mount_path = root / src.mount
+                break
+
+    try:
+        removed = remove_knowledge_source(root, name)
+    except KnowledgeSourceError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1) from None
+
+    if not removed:
+        typer.echo(f"Source not found: {name}", err=True)
+        raise typer.Exit(code=1)
+
+    typer.echo(f"Detached: {name}")
+
+    if not keep_files and mount_path and mount_path.exists():
+        import shutil
+
+        if mount_path.is_symlink():
+            mount_path.unlink()
+        else:
+            shutil.rmtree(mount_path)
+        typer.echo(f"  Removed: {mount_path.relative_to(root)}")
+
+
+@knowledge_app.command("render")
+def render() -> None:
+    """Render imports.md from enabled knowledge profiles.
+
+    Generates .simctl/knowledge/enabled/imports.md containing
+    @import directives for each enabled profile.
+
+    Examples:
+      simctl knowledge render
+    """
+    root = _find_root()
+    config = load_knowledge_config(root)
+
+    if config is None:
+        typer.echo("No [knowledge] section in simproject.toml.")
+        raise typer.Exit(code=1)
+
+    imports_path = render_imports(root, config)
+    rel = imports_path.relative_to(root)
+    typer.echo(f"Rendered: {rel}")
+
+    content = imports_path.read_text().strip()
+    if content:
+        for line in content.split("\n"):
+            if line.startswith("@"):
+                typer.echo(f"  {line}")
+
+
+@knowledge_app.command("status")
+def status_cmd() -> None:
+    """Show knowledge integration status.
+
+    Examples:
+      simctl knowledge status
+    """
+    root = _find_root()
+    config = load_knowledge_config(root)
+
+    if config is None:
+        typer.echo("Knowledge integration: not configured")
+        typer.echo(
+            "  Add [knowledge] section to simproject.toml"
+            " or use 'simctl knowledge attach'."
+        )
+        return
+
+    typer.echo(f"Knowledge integration: {'enabled' if config.enabled else 'disabled'}")
+    typer.echo(f"  mount_dir: {config.mount_dir}")
+    typer.echo(f"  derived_dir: {config.derived_dir}")
+    typer.echo(f"  sources: {len(config.sources)}")
+
+    for src in config.sources:
+        mount_path = root / src.mount
+        mounted = mount_path.is_dir()
+        status = "mounted" if mounted else "not mounted"
+        typer.echo(f"\n  [{src.source_type}] {src.name} ({status})")
+        typer.echo(f"    url: {src.url}")
+        typer.echo(f"    mount: {src.mount}")
+        if mounted:
+            available = discover_profiles(mount_path)
+            typer.echo(f"    available profiles: {', '.join(available) or '(none)'}")
+        enabled = ", ".join(src.profiles) if src.profiles else "(none)"
+        typer.echo(f"    enabled profiles: {enabled}")
+
+    # Check imports.md status
+    imports_path = root / config.derived_dir / "enabled" / "imports.md"
+    if imports_path.is_file():
+        typer.echo(f"\n  imports.md: {imports_path.relative_to(root)} (exists)")
+    else:
+        typer.echo("\n  imports.md: not generated (run 'simctl knowledge render')")

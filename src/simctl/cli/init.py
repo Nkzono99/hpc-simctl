@@ -122,7 +122,7 @@ _LINKS_DEFAULT = "# Project links\n[projects]\n\n[shared]\n"
 
 
 def _create_simctl_skeleton(project_dir: Path, created: list[str]) -> None:
-    """Create .simctl/ skeleton (insights/, facts.toml, links.toml).
+    """Create .simctl/ skeleton (insights/, facts.toml, links.toml, knowledge/).
 
     Args:
         project_dir: Project root directory.
@@ -137,6 +137,11 @@ def _create_simctl_skeleton(project_dir: Path, created: list[str]) -> None:
         created.append(".simctl/facts.toml")
     if _write_if_missing(simctl_dir / "links.toml", _LINKS_DEFAULT):
         created.append(".simctl/links.toml")
+    # Knowledge integration directories
+    if _mkdir_if_missing(simctl_dir / "knowledge"):
+        created.append(".simctl/knowledge/")
+    if _mkdir_if_missing(simctl_dir / "knowledge" / "enabled"):
+        created.append(".simctl/knowledge/enabled/")
 
 
 def _build_simulators_toml(simulator_names: list[str]) -> str:
@@ -328,6 +333,7 @@ def _build_agent_md(
     simulator_names: list[str],
     *,
     agent_doc_imports: list[str] | None = None,
+    knowledge_imports_path: str = "",
 ) -> str:
     """Build shared agent instructions for CLAUDE.md / AGENTS.md."""
     simulator_guides = ""
@@ -344,6 +350,7 @@ def _build_agent_md(
         simulator_guides=simulator_guides,
         doc_repos=doc_repos,
         agent_doc_imports=agent_doc_imports or [],
+        knowledge_imports_path=knowledge_imports_path,
     )
 
 
@@ -352,11 +359,13 @@ def _build_claude_md(
     simulator_names: list[str],
     *,
     agent_doc_imports: list[str] | None = None,
+    knowledge_imports_path: str = "",
 ) -> str:
     """Build CLAUDE.md content."""
     return _build_agent_md(
         "CLAUDE.md", project_name, simulator_names,
         agent_doc_imports=agent_doc_imports,
+        knowledge_imports_path=knowledge_imports_path,
     )
 
 
@@ -365,11 +374,13 @@ def _build_agents_md(
     simulator_names: list[str],
     *,
     agent_doc_imports: list[str] | None = None,
+    knowledge_imports_path: str = "",
 ) -> str:
     """Build AGENTS.md content."""
     return _build_agent_md(
         "AGENTS.md", project_name, simulator_names,
         agent_doc_imports=agent_doc_imports,
+        knowledge_imports_path=knowledge_imports_path,
     )
 
 
@@ -459,6 +470,166 @@ def _copy_docs(project_dir: Path) -> tuple[list[str], list[str]]:
                     created.append(rel)
 
     return created, skipped
+
+
+def _search_knowledge_repos() -> list[tuple[str, str]]:
+    """Search GitHub for shared knowledge repos using ``gh``.
+
+    Looks for repos matching ``*shared_knowledge*`` in the
+    authenticated user's repositories.
+
+    Returns:
+        List of (full_name, clone_url) tuples.
+    """
+    result = subprocess.run(
+        [
+            "gh", "repo", "list",
+            "--limit", "50",
+            "--json", "nameWithOwner,sshUrl,description",
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    if result.returncode != 0:
+        return []
+
+    import json
+
+    try:
+        repos = json.loads(result.stdout)
+    except (json.JSONDecodeError, TypeError):
+        return []
+
+    candidates: list[tuple[str, str]] = []
+    for repo in repos:
+        name = repo.get("nameWithOwner", "")
+        # Match *shared_knowledge* pattern (case-insensitive)
+        repo_name = name.rsplit("/", 1)[-1] if "/" in name else name
+        if "shared_knowledge" in repo_name.lower():
+            ssh_url = repo.get("sshUrl", "")
+            if ssh_url:
+                candidates.append((name, ssh_url))
+
+    return candidates
+
+
+def _prompt_knowledge_sources(
+    project_dir: Path,
+) -> list[Any]:
+    """Interactively prompt the user to attach knowledge sources.
+
+    Searches GitHub for repos matching ``*shared_knowledge*`` and
+    offers them as candidates. Also allows manual URL entry.
+
+    Returns:
+        List of KnowledgeSource to attach.
+    """
+    from simctl.core.knowledge_source import KnowledgeSource
+
+    want = typer.confirm(
+        "\nAttach shared knowledge repositories?", default=False
+    )
+    if not want:
+        return []
+
+    # Search for candidates
+    typer.echo("  Searching GitHub for *shared_knowledge* repos...")
+    candidates = _search_knowledge_repos()
+
+    selected_sources: list[KnowledgeSource] = []
+
+    if candidates:
+        typer.echo("\n  Found knowledge repositories:")
+        for i, (full_name, _url) in enumerate(candidates, 1):
+            typer.echo(f"    {i}. {full_name}")
+
+        selection = typer.prompt(
+            "\n  Select repos (comma-separated numbers, "
+            "Enter to skip)",
+            default="",
+        )
+
+        for token in selection.split(","):
+            token = token.strip()
+            if not token:
+                continue
+            if token.isdigit():
+                idx = int(token) - 1
+                if 0 <= idx < len(candidates):
+                    full_name, url = candidates[idx]
+                    repo_name = full_name.rsplit("/", 1)[-1]
+                    selected_sources.append(
+                        KnowledgeSource(
+                            name=repo_name,
+                            source_type="git",
+                            url=url,
+                            ref="main",
+                            mount=f"refs/knowledge/{repo_name}",
+                        )
+                    )
+                else:
+                    typer.echo(
+                        f"    Warning: ignoring invalid number '{token}'"
+                    )
+    else:
+        typer.echo("  No *shared_knowledge* repos found on GitHub.")
+
+    # Allow manual entry
+    while True:
+        manual = typer.prompt(
+            "\n  Add a knowledge source manually? "
+            "(git URL, local path, or Enter to finish)",
+            default="",
+        )
+        if not manual.strip():
+            break
+
+        manual = manual.strip()
+        # Detect type
+        is_git = (
+            manual.startswith("https://")
+            or manual.startswith("http://")
+            or manual.startswith("git@")
+        )
+        if is_git:
+            # Extract name from URL
+            stem = manual.rsplit("/", 1)[-1].rsplit(":", 1)[-1]
+            if stem.endswith(".git"):
+                stem = stem[:-4]
+            source_name = typer.prompt("    Source name", default=stem)
+            selected_sources.append(
+                KnowledgeSource(
+                    name=source_name,
+                    source_type="git",
+                    url=manual,
+                    ref="main",
+                    mount=f"refs/knowledge/{source_name}",
+                )
+            )
+        else:
+            # Local path
+            p = Path(manual).expanduser()
+            source_name = typer.prompt(
+                "    Source name", default=p.name
+            )
+            selected_sources.append(
+                KnowledgeSource(
+                    name=source_name,
+                    source_type="path",
+                    url=manual,
+                    mount=f"refs/knowledge/{source_name}",
+                )
+            )
+        typer.echo(f"    Added: {source_name}")
+
+    if selected_sources:
+        typer.echo(
+            f"\n  {len(selected_sources)} knowledge source(s) selected."
+        )
+    return selected_sources
 
 
 def _prompt_simulators() -> tuple[list[str], dict[str, dict[str, Any]]]:
@@ -1077,13 +1248,45 @@ def init(
     else:
         skipped.append(".gitignore")
 
+    # Interactive knowledge source selection
+    if interactive:
+        knowledge_sources = _prompt_knowledge_sources(project_dir)
+        if knowledge_sources:
+            from simctl.core.knowledge_source import save_knowledge_source
+
+            for ks in knowledge_sources:
+                save_knowledge_source(project_dir, ks)
+
     # Discover agent docs from refs/ and tools/hpc-simctl/docs/
     doc_repos = _collect_doc_repos(sim_names) if sim_names else []
     agent_doc_imports = _discover_agent_docs(project_dir, doc_repos)
 
+    # Knowledge integration: sync sources and render imports if configured
+    knowledge_imports_path = ""
+    from simctl.core.knowledge_source import (
+        load_knowledge_config as _load_kc,
+    )
+    from simctl.core.knowledge_source import (
+        render_imports as _render_imports,
+    )
+    from simctl.core.knowledge_source import (
+        sync_all_sources as _sync_all,
+    )
+    kc = _load_kc(project_dir)
+    if kc is not None and kc.sources:
+        typer.echo("Syncing knowledge sources...")
+        for name, status in _sync_all(project_dir, kc):
+            typer.echo(f"  {name}: {status}")
+        _render_imports(project_dir, kc)
+    if kc is not None and kc.generate_claude_imports:
+        imports_file = project_dir / kc.derived_dir / "enabled" / "imports.md"
+        if imports_file.is_file():
+            knowledge_imports_path = f"{kc.derived_dir}/enabled/imports.md"
+
     # CLAUDE.md (use sim_names from earlier — may come from args or interactive)
     claude_content = _build_claude_md(
         project_name, sim_names, agent_doc_imports=agent_doc_imports,
+        knowledge_imports_path=knowledge_imports_path,
     )
     if _write_if_missing(project_dir / _CLAUDE_MD, claude_content):
         created.append(_CLAUDE_MD)
@@ -1093,6 +1296,7 @@ def init(
     # AGENTS.md
     agents_content = _build_agents_md(
         project_name, sim_names, agent_doc_imports=agent_doc_imports,
+        knowledge_imports_path=knowledge_imports_path,
     )
     if _write_if_missing(project_dir / _AGENTS_MD, agents_content):
         created.append(_AGENTS_MD)

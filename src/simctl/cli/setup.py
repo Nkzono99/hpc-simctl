@@ -71,6 +71,7 @@ def setup(
 
     # 2. Read simulator names from project config
     sim_names: list[str] = []
+    project = None
     try:
         from simctl.core.project import load_project
 
@@ -99,6 +100,31 @@ def setup(
     from simctl.cli.init import _create_simctl_skeleton
 
     _create_simctl_skeleton(project_dir, created)
+
+    # 6. Knowledge integration: sync sources and render imports
+    if project is not None and project.knowledge is not None:
+        kc = project.knowledge
+        if kc.auto_sync_on_setup and kc.sources:
+            from simctl.core.knowledge_source import (
+                render_imports,
+                sync_all_sources,
+                validate_source_structure,
+            )
+
+            typer.echo("Syncing knowledge sources...")
+            for name, status in sync_all_sources(project_dir, kc):
+                typer.echo(f"  {name}: {status}")
+
+            # Validate (warnings only)
+            for src in kc.sources:
+                src_path = project_dir / src.mount
+                if src_path.is_dir():
+                    issues = validate_source_structure(src_path)
+                    for issue in issues:
+                        typer.echo(f"  Warning ({src.name}): {issue}")
+
+            render_imports(project_dir, kc)
+            typer.echo("  Rendered knowledge imports")
 
     # Print results
     typer.echo(f"\nProject '{project_dir.name}' is ready.")

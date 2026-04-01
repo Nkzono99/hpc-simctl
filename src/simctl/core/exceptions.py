@@ -73,6 +73,13 @@ class ProvenanceError(SimctlError):
     """Raised when provenance information cannot be collected."""
 
 
+class KnowledgeSourceError(SimctlError):
+    """Raised when a knowledge source operation fails.
+
+    Covers sync failures, validation errors, and configuration issues.
+    """
+
+
 class ParameterValidationError(SimctlError):
     """Raised when parameter validation finds errors.
 

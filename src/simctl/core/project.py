@@ -17,6 +17,7 @@ else:
     import tomli as tomllib
 
 from simctl.core.exceptions import ProjectConfigError, ProjectNotFoundError
+from simctl.core.knowledge_source import KnowledgeConfig, load_knowledge_config
 
 _PROJECT_FILE = "simproject.toml"
 _SIMULATORS_FILE = "simulators.toml"
@@ -41,6 +42,7 @@ class ProjectConfig:
     root_dir: Path
     simulators: dict[str, dict[str, Any]] = field(default_factory=dict)
     launchers: dict[str, dict[str, Any]] = field(default_factory=dict)
+    knowledge: KnowledgeConfig | None = None
     raw: dict[str, Any] = field(default_factory=dict)
 
 
@@ -120,12 +122,18 @@ def load_project(project_dir: Path) -> ProjectConfig:
         if isinstance(launcher_section, dict):
             launchers = launcher_section
 
+    # Load optional [knowledge] section
+    knowledge: KnowledgeConfig | None = None
+    if "knowledge" in raw:
+        knowledge = load_knowledge_config(project_dir)
+
     return ProjectConfig(
         name=name,
         description=description,
         root_dir=project_dir,
         simulators=simulators,
         launchers=launchers,
+        knowledge=knowledge,
         raw=raw,
     )
 
