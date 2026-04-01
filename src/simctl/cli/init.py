@@ -296,10 +296,38 @@ def _get_jinja_env() -> jinja2.Environment:
     )
 
 
+def _discover_agent_docs(
+    project_dir: Path, doc_repos: list[tuple[str, str]]
+) -> list[str]:
+    """Discover docs/agent-*.md files in cloned refs.
+
+    Returns:
+        List of relative paths like ``refs/MPIEMSES3D/docs/agent-user-guide.md``.
+    """
+    refs_dir = project_dir / "refs"
+    paths: list[str] = []
+    for _url, dest in doc_repos:
+        docs_dir = refs_dir / dest / "docs"
+        if not docs_dir.is_dir():
+            continue
+        for md in sorted(docs_dir.glob("agent-*.md")):
+            if md.is_file():
+                paths.append(f"refs/{dest}/docs/{md.name}")
+    # Also check simctl's own agent docs in tools/hpc-simctl/docs/
+    simctl_docs = project_dir / "tools" / "hpc-simctl" / "docs"
+    if simctl_docs.is_dir():
+        for md in sorted(simctl_docs.glob("agent-*.md")):
+            if md.is_file():
+                paths.append(f"tools/hpc-simctl/docs/{md.name}")
+    return paths
+
+
 def _build_agent_md(
     doc_name: str,
     project_name: str,
     simulator_names: list[str],
+    *,
+    agent_doc_imports: list[str] | None = None,
 ) -> str:
     """Build shared agent instructions for CLAUDE.md / AGENTS.md."""
     simulator_guides = ""
@@ -315,17 +343,34 @@ def _build_agent_md(
         project_name=project_name,
         simulator_guides=simulator_guides,
         doc_repos=doc_repos,
+        agent_doc_imports=agent_doc_imports or [],
     )
 
 
-def _build_claude_md(project_name: str, simulator_names: list[str]) -> str:
+def _build_claude_md(
+    project_name: str,
+    simulator_names: list[str],
+    *,
+    agent_doc_imports: list[str] | None = None,
+) -> str:
     """Build CLAUDE.md content."""
-    return _build_agent_md("CLAUDE.md", project_name, simulator_names)
+    return _build_agent_md(
+        "CLAUDE.md", project_name, simulator_names,
+        agent_doc_imports=agent_doc_imports,
+    )
 
 
-def _build_agents_md(project_name: str, simulator_names: list[str]) -> str:
+def _build_agents_md(
+    project_name: str,
+    simulator_names: list[str],
+    *,
+    agent_doc_imports: list[str] | None = None,
+) -> str:
     """Build AGENTS.md content."""
-    return _build_agent_md("AGENTS.md", project_name, simulator_names)
+    return _build_agent_md(
+        "AGENTS.md", project_name, simulator_names,
+        agent_doc_imports=agent_doc_imports,
+    )
 
 
 def _build_skills(project_name: str, simulator_names: list[str]) -> dict[str, str]:
@@ -1032,15 +1077,23 @@ def init(
     else:
         skipped.append(".gitignore")
 
+    # Discover agent docs from refs/ and tools/hpc-simctl/docs/
+    doc_repos = _collect_doc_repos(sim_names) if sim_names else []
+    agent_doc_imports = _discover_agent_docs(project_dir, doc_repos)
+
     # CLAUDE.md (use sim_names from earlier — may come from args or interactive)
-    claude_content = _build_claude_md(project_name, sim_names)
+    claude_content = _build_claude_md(
+        project_name, sim_names, agent_doc_imports=agent_doc_imports,
+    )
     if _write_if_missing(project_dir / _CLAUDE_MD, claude_content):
         created.append(_CLAUDE_MD)
     else:
         skipped.append(_CLAUDE_MD)
 
     # AGENTS.md
-    agents_content = _build_agents_md(project_name, sim_names)
+    agents_content = _build_agents_md(
+        project_name, sim_names, agent_doc_imports=agent_doc_imports,
+    )
     if _write_if_missing(project_dir / _AGENTS_MD, agents_content):
         created.append(_AGENTS_MD)
     else:

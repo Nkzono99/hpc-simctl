@@ -176,6 +176,14 @@ Agent 自身の memory に保存してはいけない。
 - `refs/{{ dest }}/` — cookbook: `refs/{{ dest }}/cookbook/`, docs: `refs/{{ dest }}/docs/`
 {% endfor %}
 {% endif %}
+{% if agent_doc_imports %}
+
+## Agent ガイド (@import)
+
+{% for path in agent_doc_imports -%}
+@{{ path }}
+{% endfor %}
+{% endif %}
 {% if simulator_guides %}
 
 ## シミュレータ固有知識
