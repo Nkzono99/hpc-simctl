@@ -7,17 +7,18 @@ description: Archive completed runs and purge unnecessary work files. Use for ho
 
 ```bash
 # 状態を確認
-simctl list $ARGUMENTS
+simctl runs list $ARGUMENTS
 
 # completed run をアーカイブ
 cd <run_dir>
-simctl archive
+simctl runs archive
 
 # work/ の不要ファイルを削除
-simctl purge-work
+simctl runs purge-work
 ```
 
 ## 注意
 
 - `archive` / `purge-work` は確認が必要な操作
 - 実行前に対象と理由を報告する
+

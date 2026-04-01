@@ -9,7 +9,7 @@ hpc-simctl の知識層は 4 つのドメインで構成される:
 | ドメイン | 内容 | 管理場所 | 更新契機 |
 |----------|------|----------|---------|
 | **シミュレータ知識** | パラメータスキーマ、物理的制約、安定性条件 | `refs/`, `.simctl/knowledge/` | `simctl update-refs` |
-| **外部共有知識** | ラボ共通の解析手法・知識、シミュレータ汎用知識 | `refs/knowledge/` | `simctl knowledge sync` |
+| **外部共有知識** | ラボ共通の解析手法・知識、シミュレータ汎用知識 | `refs/knowledge/` | `simctl knowledge source sync` |
 | **実行環境知識** | クラスタ構成、パーティション、モジュール | `.simctl/environment.toml` | `simctl doctor` |
 | **研究意図** | 仮説、実験設計、変数定義、観測量 | `campaign.toml` | ユーザーが記述 |
 
@@ -117,7 +117,7 @@ EmseAdapter.parameter_schema()
 - **BEACH**: 時間刻み安定性、電荷中性、正値チェック
 
 ```
-$ simctl create flat_surface
+$ simctl runs create flat_surface
   Warning: CFL ratio dt*cv = 0.95 is close to stability limit (1.0).
   Error: Grid nx=64 is not divisible by MPI decomposition nodes[0]=5.
 Error creating run: Parameter validation failed with 1 error(s)
@@ -258,22 +258,22 @@ mount = "refs/knowledge/personal-knowledge"
 
 ```bash
 # 外部知識ソースの接続
-simctl knowledge attach git shared-kb git@github.com:lab/hpc-shared-knowledge.git
-simctl knowledge attach path local-kb ../hpc-knowledge
+simctl knowledge source attach git shared-kb git@github.com:lab/hpc-shared-knowledge.git
+simctl knowledge source attach path local-kb ../hpc-knowledge
 
 # 同期 (git clone/pull + imports.md 再生成)
-simctl knowledge sync                    # 全ソース
-simctl knowledge sync shared-kb          # 特定ソースのみ
+simctl knowledge source sync                    # 全ソース
+simctl knowledge source sync shared-kb          # 特定ソースのみ
 
 # imports.md をレンダリング
-simctl knowledge render
+simctl knowledge source render
 
 # 状態確認
-simctl knowledge status
-simctl knowledge list --sources
+simctl knowledge source status
+simctl knowledge source list
 
 # 切断
-simctl knowledge detach shared-kb
+simctl knowledge source detach shared-kb
 ```
 
 ### 共有知識リポジトリの構造
@@ -294,7 +294,7 @@ repo/
 
 ### CLAUDE.md 連携
 
-`simctl knowledge render` が `.simctl/knowledge/enabled/imports.md` を生成する。
+`simctl knowledge source render` が `.simctl/knowledge/enabled/imports.md` を生成する。
 このファイルは有効な profile への `@import` 参照を含み、
 project の `CLAUDE.md` から `@.simctl/knowledge/enabled/imports.md` で一括参照できる。
 
@@ -367,8 +367,8 @@ simctl knowledge facts --scope emses -c high
 simctl knowledge show emses_cfl_limit
 
 # リンク先からインポート
-simctl knowledge sync
-simctl knowledge sync -s emses
+simctl knowledge source sync
+simctl knowledge source sync -s emses
 ```
 
 ### SKILL による操作
@@ -416,7 +416,7 @@ knowledge-base = ".simctl/shared/knowledge-base"
 ### sync の流れ
 
 ```
-simctl knowledge sync
+simctl knowledge source sync
   → .simctl/links.toml を読む
   → 各リンク先の .simctl/insights/ を走査
   → 自プロジェクトにない insight をコピー
@@ -434,13 +434,13 @@ simctl knowledge sync
 2. PLAN: parameter_schema() + validate_params() を活用
    → 物理的に妥当なパラメータセットを設計
 
-3. EXECUTE: simctl create + simctl run
+3. EXECUTE: simctl runs create + simctl runs submit
    → survey.toml → run 生成 → job 投入
 
-4. MONITOR: simctl status + simctl log
+4. MONITOR: simctl runs status + simctl runs log
    → 実行状況の追跡
 
-5. ANALYZE: simctl summarize + simctl collect
+5. ANALYZE: simctl analyze summarize + simctl analyze collect
    → 結果の集計・要約
 
 6. LEARN: simctl knowledge save
@@ -449,3 +449,5 @@ simctl knowledge sync
 7. ITERATE: 知見に基づいてパラメータを改善
    → 次の実験サイクルへ
 ```
+
+

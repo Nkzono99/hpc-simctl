@@ -1,4 +1,4 @@
-"""Tests for simctl status and sync CLI commands."""
+"""Tests for simctl runs status and runs sync CLI commands."""
 
 from __future__ import annotations
 
@@ -65,7 +65,7 @@ def test_status_shows_run_info(tmp_path: Path) -> None:
             return_value=JobStatus(run_state=RunState.RUNNING, slurm_state="RUNNING"),
         ),
     ):
-        result = runner.invoke(app, ["status", str(run_dir)])
+            result = runner.invoke(app, ["runs", "status", str(run_dir)])
 
     assert result.exit_code == 0
     assert "R20260327-0001" in result.output
@@ -81,7 +81,7 @@ def test_status_no_job_id(tmp_path: Path) -> None:
     _create_run(run_dir, status="created", job_id="")
 
     with patch("simctl.cli.status.Path.cwd", return_value=tmp_path):
-        result = runner.invoke(app, ["status", str(run_dir)])
+        result = runner.invoke(app, ["runs", "status", str(run_dir)])
 
     assert result.exit_code == 0
     assert "not submitted" in result.output
@@ -102,7 +102,7 @@ def test_status_slurm_unavailable(tmp_path: Path) -> None:
             side_effect=SlurmNotFoundError("squeue not found"),
         ),
     ):
-        result = runner.invoke(app, ["status", str(run_dir)])
+            result = runner.invoke(app, ["runs", "status", str(run_dir)])
 
     assert result.exit_code == 0
     assert "not available" in result.output
@@ -114,7 +114,7 @@ def test_status_run_not_found(tmp_path: Path) -> None:
     (tmp_path / "runs").mkdir()
 
     with patch("simctl.cli.status.Path.cwd", return_value=tmp_path):
-        result = runner.invoke(app, ["status", "nonexistent"])
+        result = runner.invoke(app, ["runs", "status", "nonexistent"])
     assert result.exit_code != 0
 
 
@@ -136,7 +136,7 @@ def test_sync_updates_state(tmp_path: Path) -> None:
             return_value=JobStatus(run_state=RunState.RUNNING, slurm_state="RUNNING"),
         ),
     ):
-        result = runner.invoke(app, ["sync", str(run_dir)])
+            result = runner.invoke(app, ["runs", "sync", str(run_dir)])
 
     assert result.exit_code == 0
     assert "submitted" in result.output
@@ -167,7 +167,7 @@ def test_sync_no_change(tmp_path: Path) -> None:
             return_value=JobStatus(run_state=RunState.RUNNING, slurm_state="RUNNING"),
         ),
     ):
-        result = runner.invoke(app, ["sync", str(run_dir)])
+            result = runner.invoke(app, ["runs", "sync", str(run_dir)])
 
     assert result.exit_code == 0
     assert "unchanged" in result.output
@@ -180,7 +180,7 @@ def test_sync_no_job_id(tmp_path: Path) -> None:
     _create_run(run_dir, status="created", job_id="")
 
     with patch("simctl.cli.status.Path.cwd", return_value=tmp_path):
-        result = runner.invoke(app, ["sync", str(run_dir)])
+        result = runner.invoke(app, ["runs", "sync", str(run_dir)])
 
     assert result.exit_code != 0
     assert "no job_id" in result.output.lower()
@@ -201,7 +201,7 @@ def test_sync_slurm_query_failure(tmp_path: Path) -> None:
             side_effect=SlurmQueryError("Job not found"),
         ),
     ):
-        result = runner.invoke(app, ["sync", str(run_dir)])
+            result = runner.invoke(app, ["runs", "sync", str(run_dir)])
 
     assert result.exit_code != 0
     assert "query failed" in result.output or "Job not found" in result.output
@@ -222,7 +222,7 @@ def test_sync_completed(tmp_path: Path) -> None:
             ),
         ),
     ):
-        result = runner.invoke(app, ["sync", str(run_dir)])
+            result = runner.invoke(app, ["runs", "sync", str(run_dir)])
 
     assert result.exit_code == 0
     assert "running" in result.output

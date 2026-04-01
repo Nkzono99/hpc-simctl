@@ -20,8 +20,6 @@ def test_help_shows_primary_commands() -> None:
         "config",
         "knowledge",
         "case",
-        "create",
-        "submit",
         "runs",
         "analyze",
         "update",
@@ -63,13 +61,25 @@ def test_analyze_help_shows_grouped_analysis_commands() -> None:
         assert cmd in result.output
 
 
-def test_submit_help_replaces_legacy_run_name() -> None:
-    result = runner.invoke(app, ["submit", "--help"])
-    assert result.exit_code == 0
-    assert "--all" in result.output
-
-
 def test_runs_submit_help_is_available() -> None:
     result = runner.invoke(app, ["runs", "submit", "--help"])
     assert result.exit_code == 0
     assert "--afterok" in result.output
+
+
+def test_removed_top_level_create_command_is_unavailable() -> None:
+    result = runner.invoke(app, ["create", "--help"])
+    assert result.exit_code != 0
+    assert "No such command" in result.output
+
+
+def test_removed_top_level_run_command_is_unavailable() -> None:
+    result = runner.invoke(app, ["run", "--help"])
+    assert result.exit_code != 0
+    assert "No such command" in result.output
+
+
+def test_removed_top_level_submit_command_is_unavailable() -> None:
+    result = runner.invoke(app, ["submit", "--help"])
+    assert result.exit_code != 0
+    assert "No such command" in result.output

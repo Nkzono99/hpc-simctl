@@ -1,4 +1,4 @@
-"""Tests for simctl list command."""
+"""Tests for simctl runs list command."""
 
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ def _create_run(
 
 
 def test_list_no_runs(tmp_path: Path) -> None:
-    result = runner.invoke(app, ["list", str(tmp_path)])
+    result = runner.invoke(app, ["runs", "list", str(tmp_path)])
     assert result.exit_code == 0
     assert "No runs found" in result.output
 
@@ -52,7 +52,7 @@ def test_list_discovers_runs(tmp_path: Path) -> None:
     _create_run(tmp_path, "R20260327-0001", status="created", display_name="run_a")
     _create_run(tmp_path, "R20260327-0002", status="completed", display_name="run_b")
 
-    result = runner.invoke(app, ["list", str(tmp_path)])
+    result = runner.invoke(app, ["runs", "list", str(tmp_path)])
     assert result.exit_code == 0
     assert "R20260327-0001" in result.output
     assert "R20260327-0002" in result.output
@@ -64,7 +64,7 @@ def test_list_filter_by_status(tmp_path: Path) -> None:
     _create_run(tmp_path, "R20260327-0001", status="created")
     _create_run(tmp_path, "R20260327-0002", status="failed")
 
-    result = runner.invoke(app, ["list", str(tmp_path), "--status", "failed"])
+    result = runner.invoke(app, ["runs", "list", str(tmp_path), "--status", "failed"])
     assert result.exit_code == 0
     assert "R20260327-0002" in result.output
     assert "R20260327-0001" not in result.output
@@ -74,7 +74,10 @@ def test_list_filter_by_tag(tmp_path: Path) -> None:
     _create_run(tmp_path, "R20260327-0001", tags=["production"])
     _create_run(tmp_path, "R20260327-0002", tags=["test"])
 
-    result = runner.invoke(app, ["list", str(tmp_path), "--tag", "production"])
+    result = runner.invoke(
+        app,
+        ["runs", "list", str(tmp_path), "--tag", "production"],
+    )
     assert result.exit_code == 0
     assert "R20260327-0001" in result.output
     assert "R20260327-0002" not in result.output
@@ -83,7 +86,7 @@ def test_list_filter_by_tag(tmp_path: Path) -> None:
 def test_list_no_match(tmp_path: Path) -> None:
     _create_run(tmp_path, "R20260327-0001", status="created")
 
-    result = runner.invoke(app, ["list", str(tmp_path), "--status", "failed"])
+    result = runner.invoke(app, ["runs", "list", str(tmp_path), "--status", "failed"])
     assert result.exit_code == 0
     assert "No runs match" in result.output
 
@@ -93,7 +96,7 @@ def test_list_sorted_by_run_id(tmp_path: Path) -> None:
     _create_run(tmp_path, "R20260327-0001")
     _create_run(tmp_path, "R20260327-0002")
 
-    result = runner.invoke(app, ["list", str(tmp_path)])
+    result = runner.invoke(app, ["runs", "list", str(tmp_path)])
     assert result.exit_code == 0
     lines = result.output.strip().split("\n")
     # Skip header rows (header + separator)
@@ -104,6 +107,6 @@ def test_list_sorted_by_run_id(tmp_path: Path) -> None:
 
 
 def test_list_nonexistent_dir() -> None:
-    result = runner.invoke(app, ["list", "/nonexistent/path"])
+    result = runner.invoke(app, ["runs", "list", "/nonexistent/path"])
     assert result.exit_code == 1
     assert "Error" in result.output

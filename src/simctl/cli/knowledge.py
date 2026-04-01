@@ -154,26 +154,14 @@ def list_cmd(
         Optional[str],
         typer.Option("--tag", help="Filter by tag."),
     ] = None,
-    sources: Annotated[
-        bool,
-        typer.Option(
-            "--sources",
-            help="Show external knowledge sources instead of insights.",
-        ),
-    ] = False,
 ) -> None:
-    """List knowledge insights or sources.
+    """List knowledge insights.
 
     Examples:
       simctl knowledge list
-      simctl knowledge list --sources
       simctl knowledge list -s emses -t constraint
     """
     root = _find_root()
-
-    if sources:
-        _list_sources(root)
-        return
 
     insights = list_insights(
         root,
@@ -288,7 +276,6 @@ def show(
     typer.echo(path.read_text())
 
 
-@knowledge_app.command("sync")
 def sync(
     source_name: Annotated[
         Optional[str],
@@ -311,9 +298,9 @@ def sync(
     are still supported and can be synced by name.
 
     Examples:
-      simctl knowledge sync
-      simctl knowledge sync shared-lab-knowledge
-      simctl knowledge sync -s emses
+      simctl knowledge source sync
+      simctl knowledge source sync shared-lab-knowledge
+      simctl knowledge source sync -s emses
     """
     root = _find_root()
     matched_source = False
@@ -486,13 +473,6 @@ def add_fact(
             help="Simulator this fact applies to.",
         ),
     ] = "",
-    scope: Annotated[
-        str,
-        typer.Option(
-            "--scope",
-            help="Deprecated alias for --scope-text.",
-        ),
-    ] = "",
     scope_case: Annotated[
         str,
         typer.Option(
@@ -512,13 +492,6 @@ def add_fact(
         typer.Option(
             "--param-name",
             help="Parameter name this fact is about.",
-        ),
-    ] = "",
-    evidence: Annotated[
-        str,
-        typer.Option(
-            "--evidence",
-            help="Deprecated alias for --evidence-kind.",
         ),
     ] = "",
     evidence_kind: Annotated[
@@ -599,11 +572,11 @@ def add_fact(
         fact_type=fact_type,
         simulator=simulator,
         scope_case=scope_case,
-        scope_text=scope_text or scope,
+        scope_text=scope_text,
         param_name=param_name,
         confidence=confidence,
         source_run=source_run,
-        evidence_kind=evidence_kind or evidence,
+        evidence_kind=evidence_kind,
         evidence_ref=evidence_ref,
         tags=tag_list,
         supersedes=supersedes,
@@ -661,7 +634,6 @@ def facts_cmd(
 # ---------- Knowledge source commands ----------
 
 
-@knowledge_app.command("attach", hidden=True)
 def attach(
     source_type: Annotated[
         str,
@@ -695,9 +667,9 @@ def attach(
     """Attach an external knowledge source to this project.
 
     Examples:
-      simctl knowledge attach git shared-kb git@github.com:lab/kb.git
-      simctl knowledge attach path personal-kb ../hpc-knowledge
-      simctl knowledge attach git lab-kb \\
+      simctl knowledge source attach git shared-kb git@github.com:lab/kb.git
+      simctl knowledge source attach path personal-kb ../hpc-knowledge
+      simctl knowledge source attach git lab-kb \\
         https://github.com/lab/kb.git --profiles common,emses
     """
     if source_type not in ("git", "path"):
@@ -749,7 +721,6 @@ def attach(
                     typer.echo(f"  - {issue}")
 
 
-@knowledge_app.command("detach", hidden=True)
 def detach(
     name: Annotated[
         str,
@@ -763,8 +734,8 @@ def detach(
     """Detach a knowledge source from this project.
 
     Examples:
-      simctl knowledge detach shared-kb
-      simctl knowledge detach shared-kb --keep-files
+      simctl knowledge source detach shared-kb
+      simctl knowledge source detach shared-kb --keep-files
     """
     root = _find_root()
 
@@ -799,7 +770,6 @@ def detach(
         typer.echo(f"  Removed: {mount_path.relative_to(root)}")
 
 
-@knowledge_app.command("render", hidden=True)
 def render() -> None:
     """Render imports.md from enabled knowledge profiles.
 
@@ -807,7 +777,7 @@ def render() -> None:
     @import directives for each enabled profile.
 
     Examples:
-      simctl knowledge render
+      simctl knowledge source render
     """
     root = _find_root()
     config = load_knowledge_config(root)
@@ -827,12 +797,11 @@ def render() -> None:
                 typer.echo(f"  {line}")
 
 
-@knowledge_app.command("status", hidden=True)
 def status_cmd() -> None:
     """Show knowledge integration status.
 
     Examples:
-      simctl knowledge status
+      simctl knowledge source status
     """
     root = _find_root()
     config = load_knowledge_config(root)
@@ -843,7 +812,7 @@ def status_cmd() -> None:
         typer.echo("Knowledge integration: not configured")
         typer.echo(
             "  Add [knowledge] section to simproject.toml"
-            " or use 'simctl knowledge attach'. Legacy links remain supported."
+            " or use 'simctl knowledge source attach'. Legacy links remain supported."
         )
     else:
         status = "enabled" if config.enabled else "disabled"
@@ -864,7 +833,10 @@ def status_cmd() -> None:
     if imports_path.is_file():
         typer.echo(f"\n  imports.md: {imports_path.relative_to(root)} (exists)")
     else:
-        typer.echo("\n  imports.md: not generated (run 'simctl knowledge render')")
+        typer.echo(
+            "\n  imports.md: not generated "
+            "(run 'simctl knowledge source render')"
+        )
 
 
 @source_app.command("list")

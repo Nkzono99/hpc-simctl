@@ -1,4 +1,4 @@
-"""Tests for simctl archive and purge-work commands."""
+"""Tests for simctl runs archive and runs purge-work commands."""
 
 from __future__ import annotations
 
@@ -41,7 +41,7 @@ class TestArchive:
     def test_archive_completed_run(self, tmp_path: Path) -> None:
         run_dir = _create_run(tmp_path, "R20260327-0001", status="completed")
 
-        result = runner.invoke(app, ["archive", "--yes", str(run_dir)])
+        result = runner.invoke(app, ["runs", "archive", "--yes", str(run_dir)])
         assert result.exit_code == 0
         assert "Archived run R20260327-0001" in result.output
 
@@ -56,7 +56,7 @@ class TestArchive:
 
         run_dir = _create_run(tmp_path, "R20260327-0001", status="completed")
 
-        result = runner.invoke(app, ["archive", "--yes", str(run_dir)])
+        result = runner.invoke(app, ["runs", "archive", "--yes", str(run_dir)])
         assert result.exit_code == 0
 
         with open(run_dir / "manifest.toml", "rb") as f:
@@ -66,7 +66,7 @@ class TestArchive:
     def test_archive_cancelled_without_confirmation(self, tmp_path: Path) -> None:
         run_dir = _create_run(tmp_path, "R20260327-0001", status="completed")
 
-        result = runner.invoke(app, ["archive", str(run_dir)], input="n\n")
+        result = runner.invoke(app, ["runs", "archive", str(run_dir)], input="n\n")
         assert result.exit_code == 0
         assert "Cancelled." in result.output
 
@@ -78,18 +78,18 @@ class TestArchive:
     def test_archive_rejects_non_completed(self, tmp_path: Path) -> None:
         run_dir = _create_run(tmp_path, "R20260327-0001", status="created")
 
-        result = runner.invoke(app, ["archive", str(run_dir)])
+        result = runner.invoke(app, ["runs", "archive", str(run_dir)])
         assert result.exit_code == 1
         assert "completed" in result.output.lower()
 
     def test_archive_rejects_failed(self, tmp_path: Path) -> None:
         run_dir = _create_run(tmp_path, "R20260327-0001", status="failed")
 
-        result = runner.invoke(app, ["archive", str(run_dir)])
+        result = runner.invoke(app, ["runs", "archive", str(run_dir)])
         assert result.exit_code == 1
 
     def test_archive_nonexistent_run(self) -> None:
-        result = runner.invoke(app, ["archive", "/nonexistent/run"])
+        result = runner.invoke(app, ["runs", "archive", "/nonexistent/run"])
         assert result.exit_code == 1
         assert "Error" in result.output
 
@@ -104,7 +104,7 @@ class TestPurgeWork:
             d.mkdir()
             (d / "data.bin").write_bytes(b"x" * 1024)
 
-        result = runner.invoke(app, ["purge-work", "--yes", str(run_dir)])
+        result = runner.invoke(app, ["runs", "purge-work", "--yes", str(run_dir)])
         assert result.exit_code == 0
         assert "Purged work files" in result.output
         assert "Freed" in result.output
@@ -126,7 +126,7 @@ class TestPurgeWork:
 
         run_dir = _create_run(tmp_path, "R20260327-0001", status="archived")
 
-        result = runner.invoke(app, ["purge-work", "--yes", str(run_dir)])
+        result = runner.invoke(app, ["runs", "purge-work", "--yes", str(run_dir)])
         assert result.exit_code == 0
 
         with open(run_dir / "manifest.toml", "rb") as f:
@@ -140,7 +140,11 @@ class TestPurgeWork:
         work_outputs.mkdir()
         (work_outputs / "data.bin").write_bytes(b"x" * 1024)
 
-        result = runner.invoke(app, ["purge-work", str(run_dir)], input="n\n")
+        result = runner.invoke(
+            app,
+            ["runs", "purge-work", str(run_dir)],
+            input="n\n",
+        )
         assert result.exit_code == 0
         assert "Cancelled." in result.output
         assert work_outputs.exists()
@@ -153,12 +157,12 @@ class TestPurgeWork:
     def test_purge_rejects_non_archived(self, tmp_path: Path) -> None:
         run_dir = _create_run(tmp_path, "R20260327-0001", status="completed")
 
-        result = runner.invoke(app, ["purge-work", str(run_dir)])
+        result = runner.invoke(app, ["runs", "purge-work", str(run_dir)])
         assert result.exit_code == 1
         assert "archived" in result.output.lower()
 
     def test_purge_nonexistent_run(self) -> None:
-        result = runner.invoke(app, ["purge-work", "/nonexistent/run"])
+        result = runner.invoke(app, ["runs", "purge-work", "/nonexistent/run"])
         assert result.exit_code == 1
         assert "Error" in result.output
 
@@ -166,6 +170,6 @@ class TestPurgeWork:
         """Purge succeeds even if work subdirectories don't exist."""
         run_dir = _create_run(tmp_path, "R20260327-0001", status="archived")
 
-        result = runner.invoke(app, ["purge-work", "--yes", str(run_dir)])
+        result = runner.invoke(app, ["runs", "purge-work", "--yes", str(run_dir)])
         assert result.exit_code == 0
         assert "Freed: 0.0 B" in result.output

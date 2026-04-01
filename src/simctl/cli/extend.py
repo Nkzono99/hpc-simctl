@@ -42,9 +42,9 @@ def extend(
     The adapter handles simulator-specific continuation setup.
 
     Examples:
-      simctl extend                      # continue cwd run
-      simctl extend R0001 --nstep 200000 # continue with more steps
-      simctl extend --run                # continue and submit
+      simctl runs extend                      # continue cwd run
+      simctl runs extend R0001 --nstep 200000 # continue with more steps
+      simctl runs extend --run                # continue and submit
     """
     source_dir = resolve_run_or_cwd(run, search_dir=Path.cwd())
 

@@ -71,7 +71,7 @@ camphor のサイトプロファイルで自動ロードされるモジュール
 
 ## ジョブスクリプト例
 
-`simctl run` が自動生成する `job.sh` の典型例:
+`simctl runs submit` が自動生成する `job.sh` の典型例:
 
 ```bash
 #!/bin/bash
@@ -95,3 +95,4 @@ date
 - `srun` 使用時、`--ntasks` は省略可能 (Slurm が `--rsc` の `p` 値を `SLURM_NTASKS` に自動設定)
 - ジョブ名 (`-J`) には run_id が自動設定される
 - stdout/stderr は `stdout.<JOB_ID>.log` / `stderr.<JOB_ID>.log` 形式
+

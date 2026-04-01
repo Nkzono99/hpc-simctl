@@ -1,6 +1,6 @@
 # runs/ ディレクトリ
 
-ここには simulation run が格納される。すべて `simctl create` / `simctl sweep` で生成。
+ここには simulation run が格納される。すべて `simctl runs create` / `simctl runs sweep` で生成。
 
 ## 構造
 
@@ -18,5 +18,6 @@ runs/<path>/Rxxxx/
 - run ディレクトリ (`Rxxxx/`) を手で作らない
 - `manifest.toml` を手動編集しない
 - `input/*`, `submit/job.sh` を直接作らない
-- 状態確認は `simctl status`、同期は `simctl sync`
-- 解析は `simctl summarize` / `simctl collect`
+- 状態確認は `simctl runs status`、同期は `simctl runs sync`
+- 解析は `simctl analyze summarize` / `simctl analyze collect`
+

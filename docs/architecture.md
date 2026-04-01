@@ -390,7 +390,7 @@ class RunState(str, Enum):
 ### create (単一 run 生成)
 
 ```
-CLI: simctl create CASE --dest DIR
+CLI: simctl runs create CASE --dest DIR
   |
   +--> find_project_root() --> load_project()
   |      ProjectConfig を取得
@@ -435,7 +435,7 @@ CLI: simctl create CASE --dest DIR
 ### sweep (パラメータサーベイ展開)
 
 ```
-CLI: simctl sweep DIR
+CLI: simctl runs sweep DIR
   |
   +--> load_project() + load_survey() + load_case()
   |
@@ -454,7 +454,7 @@ CLI: simctl sweep DIR
 ### submit (job 投入)
 
 ```
-CLI: simctl submit RUN
+CLI: simctl runs submit RUN
   |
   +--> resolve_run()
   |      run_id またはパスから run ディレクトリを特定
@@ -476,7 +476,7 @@ CLI: simctl submit RUN
 ### sync (Slurm 状態同期)
 
 ```
-CLI: simctl sync RUN
+CLI: simctl runs sync RUN
   |
   +--> resolve_run() --> read_manifest()
   |      job_id を取得
@@ -633,7 +633,7 @@ campaign.toml              ← ユーザーが記述
 ```
 .simctl/insights/*.md      ← /learn で保存
 .simctl/links.toml         ← 他プロジェクトへの参照
-    ↓ simctl knowledge sync
+    ↓ simctl knowledge source sync
 insights のインポート       ← プロジェクト横断の知識共有
 ```
 
@@ -650,3 +650,5 @@ insights のインポート       ← プロジェクト横断の知識共有
 - **ファイルシステム**: pytest の `tmp_path` fixture を使った一時ディレクトリでの統合テスト
 - **CLI**: typer の `CliRunner` による CLI テスト
 - **Adapter / Launcher**: 抽象基底クラスの contract test で実装の正しさを検証
+
+

@@ -26,7 +26,7 @@ from simctl.cli.update_refs import update_refs
 
 case_app = typer.Typer(
     name="case",
-    help="Case template commands. Legacy top-level aliases remain available.",
+    help="Case template commands.",
 )
 case_app.command("new")(new)
 
@@ -58,7 +58,7 @@ analyze_app.command("plot")(plot)
 
 app = typer.Typer(
     name="simctl",
-    help="HPC simulation run management CLI tool with grouped command entry points.",
+    help="HPC simulation run management CLI tool.",
     no_args_is_help=True,
 )
 
@@ -71,24 +71,6 @@ app.command("context")(context)
 app.add_typer(case_app, name="case")
 app.add_typer(runs_app, name="runs")
 app.add_typer(analyze_app, name="analyze")
-app.command("new", hidden=True)(new)
-app.command("create")(create)
-app.command("sweep", hidden=True)(sweep)
-app.command("submit")(run_cmd)
-app.command("run", hidden=True)(run_cmd)
-app.command("log", hidden=True)(log)
-app.command("status", hidden=True)(status)
-app.command("sync", hidden=True)(sync)
-app.command("jobs", hidden=True)(jobs)
-app.command("history", hidden=True)(history)
-app.command("list", hidden=True)(list_runs)
-app.command("clone", hidden=True)(clone)
-app.command("extend", hidden=True)(extend)
-app.command("summarize", hidden=True)(summarize)
-app.command("collect", hidden=True)(collect)
-app.command("plot", hidden=True)(plot)
-app.command("archive", hidden=True)(archive)
-app.command("purge-work", hidden=True)(purge_work)
 app.command("update")(update)
 app.command("update-refs")(update_refs)
 

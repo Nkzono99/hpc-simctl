@@ -41,8 +41,8 @@ def create(
     """Create run(s) in the current directory.
 
     Examples:
-      cd runs/experiment && simctl create flat_surface
-      cd runs/mag_scan   && simctl create survey
+      cd runs/experiment && simctl runs create flat_surface
+      cd runs/mag_scan   && simctl runs create survey
     """
     target_dir = (dest or Path.cwd()).resolve()
 
@@ -99,9 +99,6 @@ def sweep(
         typer.Argument(help="Directory containing survey.toml (defaults to cwd)."),
     ] = None,
 ) -> None:
-    """Generate all runs from a survey.toml parameter sweep.
-
-    Alias for 'simctl create survey'. Kept for backwards compatibility.
-    """
+    """Generate all runs from a survey.toml parameter sweep."""
     target = (survey_dir or Path.cwd()).resolve()
     _create_survey(target)

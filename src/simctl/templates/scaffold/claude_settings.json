@@ -2,21 +2,21 @@
   "permissions": {
     "allow": [
       "Bash(simctl context*)",
-      "Bash(simctl list*)",
-      "Bash(simctl status*)",
-      "Bash(simctl sync*)",
-      "Bash(simctl jobs*)",
-      "Bash(simctl history*)",
-      "Bash(simctl log*)",
+      "Bash(simctl runs list*)",
+      "Bash(simctl runs status*)",
+      "Bash(simctl runs sync*)",
+      "Bash(simctl runs jobs*)",
+      "Bash(simctl runs history*)",
+      "Bash(simctl runs log*)",
       "Bash(simctl doctor*)",
       "Bash(simctl config *)",
-      "Bash(simctl new *)",
-      "Bash(simctl create *)",
-      "Bash(simctl sweep *)",
-      "Bash(simctl clone *)",
-      "Bash(simctl extend *)",
-      "Bash(simctl summarize*)",
-      "Bash(simctl collect*)",
+      "Bash(simctl case new *)",
+      "Bash(simctl runs create *)",
+      "Bash(simctl runs sweep *)",
+      "Bash(simctl runs clone *)",
+      "Bash(simctl runs extend *)",
+      "Bash(simctl analyze summarize*)",
+      "Bash(simctl analyze collect*)",
       "Bash(simctl knowledge *)",
       "Bash(simctl update-refs*)",
       "Bash(uv run pytest*)",
@@ -39,7 +39,7 @@
     "PreToolUse": [
       {
         "matcher": "Bash",
-        "if": "Bash(simctl run*)",
+        "if": "Bash(simctl runs submit*)",
         "hooks": [
           {
             "type": "command",
@@ -50,3 +50,5 @@
     ]
   }
 }
+
+

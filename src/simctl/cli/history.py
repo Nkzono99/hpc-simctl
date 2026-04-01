@@ -29,8 +29,8 @@ def history(
     Lists runs sorted by submission time (most recent first).
 
     Examples:
-      simctl history           # last 20 submissions
-      simctl history -n 0      # all submissions
+      simctl runs history           # last 20 submissions
+      simctl runs history -n 0      # all submissions
     """
     search_dir = (path or Path.cwd()).resolve()
 

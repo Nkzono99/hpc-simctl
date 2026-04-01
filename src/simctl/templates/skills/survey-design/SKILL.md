@@ -37,8 +37,8 @@ simctl knowledge facts
 ```bash
 mkdir -p runs/<category>/<survey_name>
 # survey.toml を作成 (フォーマットは tools/hpc-simctl/docs/toml-reference.md 参照)
-simctl sweep runs/<category>/<survey_name>
-simctl list runs/<category>/<survey_name>
+simctl runs sweep runs/<category>/<survey_name>
+simctl runs list runs/<category>/<survey_name>
 ```
 
 ## 注意
@@ -51,3 +51,4 @@ simctl list runs/<category>/<survey_name>
 ## TOML フォーマット
 
 詳細は `tools/hpc-simctl/docs/toml-reference.md` の survey.toml セクションを参照。
+

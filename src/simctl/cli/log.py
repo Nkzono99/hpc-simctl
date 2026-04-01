@@ -92,9 +92,9 @@ def log(
     """Show latest job output log with progress.
 
     Examples:
-      simctl log              # stdout of cwd run
-      simctl log -e           # stderr
-      simctl log -n 50        # last 50 lines
+      simctl runs log              # stdout of cwd run
+      simctl runs log -e           # stderr
+      simctl runs log -n 50        # last 50 lines
     """
     run_dir = resolve_run_or_cwd(run, search_dir=Path.cwd())
     work_dir = run_dir / "work"

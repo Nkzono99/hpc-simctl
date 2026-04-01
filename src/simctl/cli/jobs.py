@@ -29,8 +29,8 @@ def jobs(
     Shows job_id, status, run_id, and path for runs with Slurm jobs.
 
     Examples:
-      simctl jobs             # active jobs under cwd
-      simctl jobs --all       # all runs with job info
+      simctl runs jobs             # active jobs under cwd
+      simctl runs jobs --all       # all runs with job info
     """
     search_dir = (path or Path.cwd()).resolve()
 

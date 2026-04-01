@@ -1,4 +1,4 @@
-"""Tests for simctl create and sweep CLI commands."""
+"""Tests for simctl runs create and runs sweep CLI commands."""
 
 from __future__ import annotations
 
@@ -96,7 +96,7 @@ def _make_survey(
 
 
 class TestCreate:
-    """Tests for the ``simctl create`` command."""
+    """Tests for the ``simctl runs create`` command."""
 
     def test_create_success(self, tmp_path: Path) -> None:
         """A valid create invocation produces a run directory with manifest."""
@@ -106,7 +106,7 @@ class TestCreate:
 
         result = runner.invoke(
             app,
-            ["create", "my_case", "--dest", str(dest)],
+            ["runs", "create", "my_case", "--dest", str(dest)],
         )
 
         assert result.exit_code == 0, result.output
@@ -134,7 +134,7 @@ class TestCreate:
 
         result = runner.invoke(
             app,
-            ["create", "nonexistent_case", "--dest", str(dest)],
+            ["runs", "create", "nonexistent_case", "--dest", str(dest)],
         )
 
         assert result.exit_code == 1
@@ -147,7 +147,7 @@ class TestCreate:
 
         result = runner.invoke(
             app,
-            ["create", "some_case", "--dest", str(dest)],
+            ["runs", "create", "some_case", "--dest", str(dest)],
         )
 
         assert result.exit_code == 1
@@ -163,7 +163,7 @@ class TestCreate:
 
         result = runner.invoke(
             app,
-            ["create", "my_case", "--dest", str(dest)],
+            ["runs", "create", "my_case", "--dest", str(dest)],
         )
 
         assert result.exit_code == 0
@@ -178,7 +178,7 @@ class TestCreate:
 
 
 class TestSweep:
-    """Tests for the ``simctl sweep`` command."""
+    """Tests for the ``simctl runs sweep`` command."""
 
     def test_sweep_success(self, tmp_path: Path) -> None:
         """A valid sweep creates the correct number of runs."""
@@ -189,7 +189,7 @@ class TestSweep:
 
         result = runner.invoke(
             app,
-            ["sweep", str(survey_dir)],
+            ["runs", "sweep", str(survey_dir)],
         )
 
         assert result.exit_code == 0, result.output
@@ -212,7 +212,7 @@ class TestSweep:
 
         result = runner.invoke(
             app,
-            ["sweep", str(survey_dir)],
+            ["runs", "sweep", str(survey_dir)],
         )
 
         assert result.exit_code == 0
@@ -228,7 +228,7 @@ class TestSweep:
 
         result = runner.invoke(
             app,
-            ["sweep", str(survey_dir)],
+            ["runs", "sweep", str(survey_dir)],
         )
 
         assert result.exit_code == 1
@@ -242,7 +242,7 @@ class TestSweep:
 
         result = runner.invoke(
             app,
-            ["sweep", str(survey_dir)],
+            ["runs", "sweep", str(survey_dir)],
         )
 
         assert result.exit_code == 1
@@ -259,7 +259,7 @@ class TestSweep:
 
         result = runner.invoke(
             app,
-            ["sweep", str(survey_dir)],
+            ["runs", "sweep", str(survey_dir)],
         )
 
         assert result.exit_code == 0

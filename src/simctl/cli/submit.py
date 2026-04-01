@@ -108,10 +108,10 @@ def run_cmd(
     """Submit a run or all runs via sbatch.
 
     Examples:
-      cd runs/experiment/R0001 && simctl run
-      cd runs/mag_scan && simctl run --all
-      simctl run -qn gr10451a
-      simctl run --afterok 12345
+      cd runs/experiment/R0001 && simctl runs submit
+      cd runs/mag_scan && simctl runs submit --all
+      simctl runs submit -qn gr10451a
+      simctl runs submit --afterok 12345
     """
     if all_runs:
         target = Path(run) if run else None
@@ -155,7 +155,7 @@ def _submit_single_cwd(
         elif len(run_dirs) > 1:
             typer.echo(
                 f"Multiple runs found in {cwd}. "
-                "Use 'simctl run --all' or specify a run."
+                "Use 'simctl runs submit --all' or specify a run."
             )
             raise typer.Exit(code=1)
         else:

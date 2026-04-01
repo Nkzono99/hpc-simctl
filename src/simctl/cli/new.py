@@ -59,10 +59,10 @@ def new(
     an explicit --simulator/-s is required.
 
     Examples:
-      simctl new flat_surface -s emses
-      simctl new periodic -s beach --survey
-      cd cases/emses && simctl new flat_surface
-      simctl new mycase -d /path/to/dest -s emses
+      simctl case new flat_surface -s emses
+      simctl case new periodic -s beach --survey
+      cd cases/emses && simctl case new flat_surface
+      simctl case new mycase -d /path/to/dest -s emses
     """
     # Detect simulator early: from --simulator, or from dest/cwd path
     cwd = Path.cwd().resolve()
@@ -261,4 +261,6 @@ def _generate_survey_stub(
     survey_file.write_text(content, encoding="utf-8")
     typer.echo("\nCreated survey stub:")
     typer.echo(f"  Path: {survey_dir / 'survey.toml'}")
-    typer.echo(f"  Edit axes and naming, then run: cd {survey_dir} && simctl sweep")
+    typer.echo(
+        f"  Edit axes and naming, then run: cd {survey_dir} && simctl runs sweep"
+    )

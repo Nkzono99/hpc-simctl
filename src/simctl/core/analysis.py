@@ -623,7 +623,7 @@ def render_survey_plot(
         import matplotlib.pyplot as plt
     except Exception as exc:
         raise SimctlError(
-            "matplotlib is required for simctl plot. "
+            "matplotlib is required for simctl analyze plot. "
             "Install it in the project environment or use `uv run --with matplotlib`."
         ) from exc
 
@@ -823,7 +823,9 @@ def collect_survey_summaries(survey_dir: Path) -> SurveyCollectionResult:
         run_rows.append(row)
 
     if not csv_rows:
-        raise SimctlError("No summaries found. Run 'simctl summarize' first.")
+        raise SimctlError(
+            "No summaries found. Run 'simctl analyze summarize' first."
+        )
 
     ordered_columns = _ordered_columns(csv_rows)
 

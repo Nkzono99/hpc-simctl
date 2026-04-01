@@ -7,7 +7,7 @@ description: Save knowledge insights and structured facts from experiment result
 
 ## 手順
 
-1. 完了した run の結果 (`simctl summarize`, ログ, 出力) を読む
+1. 完了した run の結果 (`simctl analyze summarize`, ログ, 出力) を読む
 2. 新たに分かったこと・期待と異なる結果を特定する
 3. 知見の種類を判断する
 
@@ -40,3 +40,4 @@ simctl knowledge add-fact "<claim>" \
 
 - `high` confidence は複数 run の再現か deterministic 確認がある場合だけ使う
 - 既存 fact を修正するときは `--supersedes fNNN` を使う
+

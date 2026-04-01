@@ -28,7 +28,7 @@ def status(
 
     Displays the run state from manifest.toml. If a Slurm job_id is
     recorded, also queries Slurm for the live job state. Does NOT
-    update the manifest (use ``simctl sync`` for that).
+    update the manifest (use ``simctl runs sync`` for that).
     """
     cwd = Path.cwd()
     run_dir = (

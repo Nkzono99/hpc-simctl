@@ -1,5 +1,5 @@
 #!/bin/bash
-# approve-run.sh — simctl run の実行前承認フック
+# approve-run.sh — simctl runs submit の実行前承認フック
 #
 # 動作:
 #   1. 承認トークンがあれば → allow (トークン削除して実行許可)
@@ -31,3 +31,4 @@ jq -n --arg cmd "$COMMAND" '{
     permissionDecisionReason: ("ジョブ投入にはユーザー承認が必要です。\nコマンド: " + $cmd + "\n承認されたら .claude/hooks/.approve-run-token を作成して再実行してください。")
   }
 }'
+

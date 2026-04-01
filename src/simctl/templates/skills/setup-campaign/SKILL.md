@@ -74,7 +74,7 @@ unit = "V (normalized)"
 1. `campaign.toml` を更新する
 2. 記入内容のサマリーを表示する
 3. 次のステップを提案する:
-   - ケースが未作成なら `simctl new <case_name> -s <simulator>` を提案 (cases/<sim>/ に自動生成)
+   - ケースが未作成なら `simctl case new <case_name> -s <simulator>` を提案 (cases/<sim>/ に自動生成)
    - ケースが既存なら survey 設計を提案
 
 ## 注意
@@ -83,3 +83,4 @@ unit = "V (normalized)"
 - シミュレータの agent_guide に記載されたパラメータ名を優先的に使う
 - 物理単位は必ず `unit` に記入する
 - `reason` は将来の自分や共同研究者が読んで意図がわかるように書く
+

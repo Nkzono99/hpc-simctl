@@ -1,4 +1,4 @@
-"""Tests for simctl clone command."""
+"""Tests for simctl runs clone command."""
 
 from __future__ import annotations
 
@@ -61,7 +61,10 @@ def _create_run(
 def test_clone_basic(tmp_path: Path) -> None:
     source = _create_run(tmp_path, "R20260327-0001")
 
-    result = runner.invoke(app, ["clone", str(source), "--dest", str(tmp_path)])
+    result = runner.invoke(
+        app,
+        ["runs", "clone", str(source), "--dest", str(tmp_path)],
+    )
     assert result.exit_code == 0
     assert "Cloned R20260327-0001" in result.output
 
@@ -87,7 +90,10 @@ def test_clone_sets_parent_run(tmp_path: Path) -> None:
 
     source = _create_run(tmp_path, "R20260327-0001")
 
-    result = runner.invoke(app, ["clone", str(source), "--dest", str(tmp_path)])
+    result = runner.invoke(
+        app,
+        ["runs", "clone", str(source), "--dest", str(tmp_path)],
+    )
     assert result.exit_code == 0
 
     new_dirs = [d for d in tmp_path.iterdir() if d.is_dir() and d != source]
@@ -112,7 +118,7 @@ def test_clone_with_set_params(tmp_path: Path) -> None:
 
     result = runner.invoke(
         app,
-        ["clone", str(source), "--dest", str(tmp_path), "--set", "nx=128"],
+        ["runs", "clone", str(source), "--dest", str(tmp_path), "--set", "nx=128"],
     )
     assert result.exit_code == 0
 
@@ -130,13 +136,21 @@ def test_clone_invalid_set_format(tmp_path: Path) -> None:
 
     result = runner.invoke(
         app,
-        ["clone", str(source), "--dest", str(tmp_path), "--set", "badparam"],
+        [
+            "runs",
+            "clone",
+            str(source),
+            "--dest",
+            str(tmp_path),
+            "--set",
+            "badparam",
+        ],
     )
     assert result.exit_code == 1
     assert "invalid --set format" in result.output
 
 
 def test_clone_nonexistent_run() -> None:
-    result = runner.invoke(app, ["clone", "/nonexistent/run"])
+    result = runner.invoke(app, ["runs", "clone", "/nonexistent/run"])
     assert result.exit_code == 1
     assert "Error" in result.output

@@ -7,10 +7,10 @@ description: Diagnose failed runs and propose fixes. Use when a run has failed a
 
 ```bash
 cd $ARGUMENTS
-simctl sync
-simctl status
-simctl log -e
-simctl log
+simctl runs sync
+simctl runs status
+simctl runs log -e
+simctl runs log
 ```
 
 必要なら `work/` 以下も確認:
@@ -34,3 +34,5 @@ tail -n 100 work/*.out
 
 - case.toml または survey.toml を修正して新しい run を生成する
 - 同じ run の試行回数が 3 回前後に達したら、自動 retry を止めて原因を要約する
+
+

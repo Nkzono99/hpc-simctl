@@ -1,4 +1,4 @@
-"""Tests for simctl summarize and collect commands."""
+"""Tests for simctl analyze summarize/collect/plot commands."""
 
 from __future__ import annotations
 
@@ -58,7 +58,7 @@ class TestSummarize:
         mock_adapter_cls = MagicMock(return_value=mock_adapter)
 
         with patch("simctl.core.analysis.get_adapter", return_value=mock_adapter_cls):
-            result = runner.invoke(app, ["summarize", str(run_dir)])
+            result = runner.invoke(app, ["analyze", "summarize", str(run_dir)])
 
         assert result.exit_code == 0
         assert "Summary written" in result.output
@@ -77,12 +77,12 @@ class TestSummarize:
             "simctl.core.analysis.get_adapter",
             side_effect=KeyError("not found"),
         ):
-            result = runner.invoke(app, ["summarize", str(run_dir)])
+            result = runner.invoke(app, ["analyze", "summarize", str(run_dir)])
 
         assert result.exit_code == 1
 
     def test_summarize_nonexistent_run(self) -> None:
-        result = runner.invoke(app, ["summarize", "/nonexistent/run"])
+        result = runner.invoke(app, ["analyze", "summarize", "/nonexistent/run"])
         assert result.exit_code == 1
         assert "Error" in result.output
 
@@ -98,7 +98,7 @@ class TestSummarize:
         with open(run_dir / "manifest.toml", "wb") as f:
             tomli_w.dump(manifest, f)
 
-        result = runner.invoke(app, ["summarize", str(run_dir)])
+        result = runner.invoke(app, ["analyze", "summarize", str(run_dir)])
         assert result.exit_code == 1
         out = result.output.lower()
         assert "simulator" in out or "adapter" in out
@@ -139,7 +139,7 @@ class TestSummarize:
         mock_adapter_cls = MagicMock(return_value=mock_adapter)
 
         with patch("simctl.core.analysis.get_adapter", return_value=mock_adapter_cls):
-            result = runner.invoke(app, ["summarize", str(run_dir)])
+            result = runner.invoke(app, ["analyze", "summarize", str(run_dir)])
 
         assert result.exit_code == 0
         assert "Applied script" in result.output
@@ -173,7 +173,7 @@ class TestSummarize:
         mock_adapter_cls = MagicMock(return_value=mock_adapter)
 
         with patch("simctl.core.analysis.get_adapter", return_value=mock_adapter_cls):
-            result = runner.invoke(app, ["summarize", str(run_dir)])
+            result = runner.invoke(app, ["analyze", "summarize", str(run_dir)])
 
         assert result.exit_code == 0
         with open(run_dir / "analysis" / "summary.json") as f:
@@ -222,7 +222,7 @@ class TestSummarize:
         mock_adapter_cls = MagicMock(return_value=mock_adapter)
 
         with patch("simctl.core.analysis.get_adapter", return_value=mock_adapter_cls):
-            result = runner.invoke(app, ["summarize", str(run_dir)])
+            result = runner.invoke(app, ["analyze", "summarize", str(run_dir)])
 
         assert result.exit_code == 0
         with open(run_dir / "analysis" / "summary.json") as f:
@@ -252,7 +252,7 @@ class TestSummarize:
         mock_adapter_cls = MagicMock(return_value=mock_adapter)
 
         with patch("simctl.core.analysis.get_adapter", return_value=mock_adapter_cls):
-            result = runner.invoke(app, ["summarize", str(run_dir)])
+            result = runner.invoke(app, ["analyze", "summarize", str(run_dir)])
 
         # Should succeed with adapter summary (script failure is warning)
         assert result.exit_code == 0
@@ -302,7 +302,7 @@ class TestSummarize:
         mock_adapter_cls = MagicMock(return_value=mock_adapter)
 
         with patch("simctl.core.analysis.get_adapter", return_value=mock_adapter_cls):
-            result = runner.invoke(app, ["summarize", str(run_dir)])
+            result = runner.invoke(app, ["analyze", "summarize", str(run_dir)])
 
         assert result.exit_code == 0
         with open(run_dir / "analysis" / "summary.json") as f:
@@ -342,7 +342,7 @@ class TestSummarize:
         mock_adapter_cls = MagicMock(return_value=mock_adapter)
 
         with patch("simctl.core.analysis.get_adapter", return_value=mock_adapter_cls):
-            result = runner.invoke(app, ["summarize", str(run_dir)])
+            result = runner.invoke(app, ["analyze", "summarize", str(run_dir)])
 
         assert result.exit_code == 0
         with open(run_dir / "analysis" / "summary.json") as f:
@@ -359,7 +359,7 @@ class TestCollect:
             with open(run_dir / "analysis" / "summary.json", "w") as f:
                 json.dump(summary, f)
 
-        result = runner.invoke(app, ["collect", str(tmp_path)])
+        result = runner.invoke(app, ["analyze", "collect", str(tmp_path)])
         assert result.exit_code == 0
         assert "Collected 2 summaries" in result.output
 
@@ -378,14 +378,14 @@ class TestCollect:
         assert "R20260327-0002" in content
 
     def test_collect_no_runs(self, tmp_path: Path) -> None:
-        result = runner.invoke(app, ["collect", str(tmp_path)])
+        result = runner.invoke(app, ["analyze", "collect", str(tmp_path)])
         assert result.exit_code == 1
         assert "No runs found" in result.output
 
     def test_collect_no_summaries(self, tmp_path: Path) -> None:
         _create_run(tmp_path, "R20260327-0001")
 
-        result = runner.invoke(app, ["collect", str(tmp_path)])
+        result = runner.invoke(app, ["analyze", "collect", str(tmp_path)])
         assert result.exit_code == 1
         assert "No summaries found" in result.output
 
@@ -396,7 +396,7 @@ class TestCollect:
         with open(run1 / "analysis" / "summary.json", "w") as f:
             json.dump({"energy": 10.0}, f)
 
-        result = runner.invoke(app, ["collect", str(tmp_path)])
+        result = runner.invoke(app, ["analyze", "collect", str(tmp_path)])
         assert result.exit_code == 0
         assert "Collected 1 summaries" in result.output
         assert "1 runs missing" in result.output
@@ -409,7 +409,7 @@ class TestCollect:
         mock_adapter_cls = MagicMock(return_value=mock_adapter)
 
         with patch("simctl.core.analysis.get_adapter", return_value=mock_adapter_cls):
-            result = runner.invoke(app, ["collect", str(tmp_path)])
+            result = runner.invoke(app, ["analyze", "collect", str(tmp_path)])
 
         assert result.exit_code == 0
         assert "Collected 1 summaries" in result.output
@@ -436,7 +436,7 @@ class TestCollect:
                 f,
             )
 
-        result = runner.invoke(app, ["collect", str(tmp_path)])
+        result = runner.invoke(app, ["analyze", "collect", str(tmp_path)])
         assert result.exit_code == 0
 
         csv_content = (tmp_path / "summary" / "survey_summary.csv").read_text(
@@ -476,7 +476,7 @@ class TestCollect:
         with open(run_dir / "analysis" / "summary.json", "w", encoding="utf-8") as f:
             json.dump({"energy": 10.0}, f)
 
-        result = runner.invoke(app, ["collect", str(tmp_path)])
+        result = runner.invoke(app, ["analyze", "collect", str(tmp_path)])
         assert result.exit_code == 0
 
         csv_content = (tmp_path / "summary" / "survey_summary.csv").read_text(
@@ -497,14 +497,14 @@ class TestCollect:
         assert aggregate["runs"][0]["flat_metadata"]["param.u"] == 400000.0
 
     def test_collect_nonexistent_dir(self) -> None:
-        result = runner.invoke(app, ["collect", "/nonexistent/path"])
+        result = runner.invoke(app, ["analyze", "collect", "/nonexistent/path"])
         assert result.exit_code == 1
         assert "Error" in result.output
 
 
 class TestPlot:
     def test_plot_requires_x_and_y(self, tmp_path: Path) -> None:
-        result = runner.invoke(app, ["plot", str(tmp_path)])
+        result = runner.invoke(app, ["analyze", "plot", str(tmp_path)])
         assert result.exit_code == 1
         assert "--x and --y are required" in result.output
 
@@ -524,7 +524,10 @@ class TestPlot:
         with open(run_dir / "analysis" / "summary.json", "w", encoding="utf-8") as f:
             json.dump({"energy": 10.0}, f)
 
-        result = runner.invoke(app, ["plot", str(tmp_path), "--list-columns"])
+        result = runner.invoke(
+            app,
+            ["analyze", "plot", str(tmp_path), "--list-columns"],
+        )
 
         assert result.exit_code == 0
         assert "Available columns" in result.output
@@ -542,9 +545,10 @@ class TestPlot:
         with patch("simctl.cli.analyze.render_survey_plot", return_value=mock_result):
             result = runner.invoke(
                 app,
-                ["plot", str(tmp_path), "--x", "param.u", "--y", "energy"],
+                ["analyze", "plot", str(tmp_path), "--x", "param.u", "--y", "energy"],
             )
 
         assert result.exit_code == 0
         assert "Plot written" in result.output
         assert "Kind: line" in result.output
+

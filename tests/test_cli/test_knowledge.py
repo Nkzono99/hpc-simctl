@@ -20,7 +20,7 @@ def _create_project(tmp_path: Path, extra_toml: str = "") -> Path:
     return tmp_path
 
 
-def test_add_fact_supports_legacy_scope_and_evidence_options(tmp_path: Path) -> None:
+def test_add_fact_uses_structured_scope_and_evidence_fields(tmp_path: Path) -> None:
     project_root = _create_project(tmp_path)
 
     with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
@@ -30,9 +30,9 @@ def test_add_fact_supports_legacy_scope_and_evidence_options(tmp_path: Path) -> 
                 "knowledge",
                 "add-fact",
                 "dt must stay below the CFL limit",
-                "--scope",
+                "--scope-text",
                 "emses",
-                "--evidence",
+                "--evidence-kind",
                 "run_observation",
                 "--confidence",
                 "high",
@@ -49,6 +49,25 @@ def test_add_fact_supports_legacy_scope_and_evidence_options(tmp_path: Path) -> 
     assert facts[0].scope_text == "emses"
     assert facts[0].evidence_kind == "run_observation"
     assert facts[0].source_run == "R20260330-0001"
+
+
+def test_add_fact_rejects_removed_legacy_alias_options(tmp_path: Path) -> None:
+    project_root = _create_project(tmp_path)
+
+    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+        result = runner.invoke(
+            app,
+            [
+                "knowledge",
+                "add-fact",
+                "dt must stay below the CFL limit",
+                "--scope",
+                "emses",
+            ],
+        )
+
+    assert result.exit_code != 0
+    assert "No such option" in result.output
 
 
 def test_add_fact_supports_structured_fields_and_supersedes(tmp_path: Path) -> None:
@@ -130,7 +149,7 @@ def test_attach_path_source(tmp_path: Path) -> None:
         result = runner.invoke(
             app,
             [
-                "knowledge", "attach", "path", "my-kb",
+                "knowledge", "source", "attach", "path", "my-kb",
                 str(kb_dir), "--no-sync",
             ],
         )
@@ -152,7 +171,7 @@ def test_attach_git_source_with_profiles(tmp_path: Path) -> None:
         result = runner.invoke(
             app,
             [
-                "knowledge", "attach", "git", "lab-kb",
+                "knowledge", "source", "attach", "git", "lab-kb",
                 "https://github.com/lab/kb.git",
                 "--profiles", "common,emses",
                 "--no-sync",
@@ -171,7 +190,15 @@ def test_attach_invalid_type(tmp_path: Path) -> None:
     with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
         result = runner.invoke(
             app,
-            ["knowledge", "attach", "invalid", "kb", "some-url", "--no-sync"],
+            [
+                "knowledge",
+                "source",
+                "attach",
+                "invalid",
+                "kb",
+                "some-url",
+                "--no-sync",
+            ],
         )
 
     assert result.exit_code == 1
@@ -194,7 +221,7 @@ mount = "refs/knowledge/test-kb"
     with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
         result = runner.invoke(
             app,
-            ["knowledge", "detach", "test-kb", "--keep-files"],
+            ["knowledge", "source", "detach", "test-kb", "--keep-files"],
         )
 
     assert result.exit_code == 0
@@ -210,7 +237,7 @@ def test_detach_not_found(tmp_path: Path) -> None:
     with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
         result = runner.invoke(
             app,
-            ["knowledge", "detach", "nonexistent"],
+            ["knowledge", "source", "detach", "nonexistent"],
         )
 
     assert result.exit_code == 1
@@ -237,7 +264,7 @@ profiles = ["common"]
     (mount / "common.md").write_text("# Common\n")
 
     with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
-        result = runner.invoke(app, ["knowledge", "render"])
+        result = runner.invoke(app, ["knowledge", "source", "render"])
 
     assert result.exit_code == 0
     assert "Rendered:" in result.output
@@ -251,7 +278,7 @@ def test_render_no_knowledge_section(tmp_path: Path) -> None:
     project_root = _create_project(tmp_path)
 
     with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
-        result = runner.invoke(app, ["knowledge", "render"])
+        result = runner.invoke(app, ["knowledge", "source", "render"])
 
     assert result.exit_code == 1
     assert "No [knowledge] section" in result.output
@@ -261,7 +288,7 @@ def test_status_no_config(tmp_path: Path) -> None:
     project_root = _create_project(tmp_path)
 
     with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
-        result = runner.invoke(app, ["knowledge", "status"])
+        result = runner.invoke(app, ["knowledge", "source", "status"])
 
     assert result.exit_code == 0
     assert "not configured" in result.output
@@ -282,7 +309,7 @@ profiles = ["common"]
     project_root = _create_project(tmp_path, toml)
 
     with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
-        result = runner.invoke(app, ["knowledge", "status"])
+        result = runner.invoke(app, ["knowledge", "source", "status"])
 
     assert result.exit_code == 0
     assert "enabled" in result.output
@@ -300,7 +327,7 @@ def test_status_reports_legacy_links_without_knowledge_config(tmp_path: Path) ->
     )
 
     with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
-        result = runner.invoke(app, ["knowledge", "status"])
+        result = runner.invoke(app, ["knowledge", "source", "status"])
 
     assert result.exit_code == 0
     assert "not configured" in result.output
@@ -308,7 +335,7 @@ def test_status_reports_legacy_links_without_knowledge_config(tmp_path: Path) ->
     assert "legacy-project" in result.output
 
 
-def test_list_sources_flag(tmp_path: Path) -> None:
+def test_source_list_shows_configured_sources(tmp_path: Path) -> None:
     toml = """
 [knowledge]
 enabled = true
@@ -322,14 +349,14 @@ mount = "refs/knowledge/kb"
     project_root = _create_project(tmp_path, toml)
 
     with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
-        result = runner.invoke(app, ["knowledge", "list", "--sources"])
+        result = runner.invoke(app, ["knowledge", "source", "list"])
 
     assert result.exit_code == 0
     assert "kb" in result.output
     assert "git" in result.output
 
 
-def test_list_sources_includes_legacy_links(tmp_path: Path) -> None:
+def test_source_list_includes_legacy_links(tmp_path: Path) -> None:
     toml = """
 [knowledge]
 enabled = true
@@ -350,7 +377,7 @@ mount = "refs/knowledge/kb"
     )
 
     with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
-        result = runner.invoke(app, ["knowledge", "list", "--sources"])
+        result = runner.invoke(app, ["knowledge", "source", "list"])
 
     assert result.exit_code == 0
     assert "kb" in result.output
@@ -358,17 +385,17 @@ mount = "refs/knowledge/kb"
     assert "Legacy knowledge links" in result.output
 
 
-def test_list_sources_no_config(tmp_path: Path) -> None:
+def test_source_list_no_config(tmp_path: Path) -> None:
     project_root = _create_project(tmp_path)
 
     with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
-        result = runner.invoke(app, ["knowledge", "list", "--sources"])
+        result = runner.invoke(app, ["knowledge", "source", "list"])
 
     assert result.exit_code == 0
     assert "No external knowledge" in result.output
 
 
-def test_source_group_list_alias(tmp_path: Path) -> None:
+def test_source_group_list(tmp_path: Path) -> None:
     toml = """
 [knowledge]
 enabled = true
@@ -417,7 +444,7 @@ def test_sync_supports_named_legacy_link(tmp_path: Path) -> None:
     )
 
     with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
-        result = runner.invoke(app, ["knowledge", "sync", "alpha"])
+        result = runner.invoke(app, ["knowledge", "source", "sync", "alpha"])
 
     assert result.exit_code == 0
     assert "legacy linked projects" in result.output
@@ -425,3 +452,14 @@ def test_sync_supports_named_legacy_link(tmp_path: Path) -> None:
     assert "beta" not in result.output
     assert (project_root / ".simctl" / "insights" / "alpha-note.md").is_file()
     assert not (project_root / ".simctl" / "insights" / "beta-note.md").exists()
+
+
+def test_removed_flat_source_commands_are_unavailable() -> None:
+    for argv in (
+        ["knowledge", "attach", "--help"],
+        ["knowledge", "status"],
+        ["knowledge", "render"],
+    ):
+        result = runner.invoke(app, argv)
+        assert result.exit_code != 0
+        assert "No such command" in result.output
