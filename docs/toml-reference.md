@@ -21,6 +21,48 @@ version = "1.0"                 # Optional.
 | `project.description` | string | No | Human-readable description |
 | `project.version` | string | No | Project version |
 
+### `[knowledge]` section (optional)
+
+External shared knowledge source integration. If absent, only local knowledge (insights, facts, links) is used.
+
+```toml
+[knowledge]
+enabled = true                       # Enable knowledge integration
+mount_dir = "refs/knowledge"         # Base mount directory
+derived_dir = ".simctl/knowledge"    # Generated files directory
+auto_sync_on_setup = true            # Sync sources during `simctl setup`
+generate_claude_imports = true       # Generate CLAUDE.md @import stubs
+
+[[knowledge.sources]]
+name = "shared-lab-knowledge"        # Source identifier
+type = "git"                         # "git" or "path"
+url = "git@github.com:lab/kb.git"   # Git URL (for type = "git")
+ref = "main"                         # Git ref to checkout
+mount = "refs/knowledge/shared-lab-knowledge"  # Mount path
+profiles = ["common-analysis", "emses-basic"]  # Enabled profiles
+
+[[knowledge.sources]]
+name = "personal-knowledge"
+type = "path"
+path = "../hpc-knowledge"            # Filesystem path (for type = "path")
+mount = "refs/knowledge/personal-knowledge"
+```
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `knowledge.enabled` | bool | No | `true` | Enable knowledge integration |
+| `knowledge.mount_dir` | string | No | `"refs/knowledge"` | Base directory for source mounts |
+| `knowledge.derived_dir` | string | No | `".simctl/knowledge"` | Directory for generated files |
+| `knowledge.auto_sync_on_setup` | bool | No | `true` | Auto-sync on `simctl setup` |
+| `knowledge.generate_claude_imports` | bool | No | `true` | Generate `imports.md` for CLAUDE.md |
+| `knowledge.sources[].name` | string | Yes | — | Source identifier |
+| `knowledge.sources[].type` | string | Yes | — | `"git"` or `"path"` |
+| `knowledge.sources[].url` | string | Conditional | — | Git URL (required when type = "git") |
+| `knowledge.sources[].path` | string | Conditional | — | Filesystem path (required when type = "path") |
+| `knowledge.sources[].ref` | string | No | `"main"` | Git ref to checkout |
+| `knowledge.sources[].mount` | string | No | `"<mount_dir>/<name>"` | Relative mount path |
+| `knowledge.sources[].profiles` | string[] | No | `[]` | Enabled profile names |
+
 ---
 
 ## simulators.toml
