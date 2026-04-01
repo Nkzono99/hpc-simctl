@@ -117,7 +117,7 @@ def test_submit_success(tmp_path: Path) -> None:
     with (
         patch("simctl.cli.submit.Path.cwd", return_value=tmp_path),
         patch(
-            "simctl.cli.submit.sbatch_submit",
+            "simctl.slurm.submit.sbatch_submit",
             return_value="99999",
         ),
     ):
@@ -135,6 +135,7 @@ def test_submit_success(tmp_path: Path) -> None:
     assert updated.run.get("status") == "submitted"
     assert updated.job.get("submitted_at") != ""
     assert "T" in updated.job["submitted_at"]  # ISO format check
+    assert (run_dir / "status" / "state.json").exists()
 
 
 def test_submit_dry_run(tmp_path: Path) -> None:
@@ -168,7 +169,7 @@ def test_submit_all(tmp_path: Path) -> None:
     with (
         patch("simctl.cli.submit.Path.cwd", return_value=tmp_path),
         patch(
-            "simctl.cli.submit.sbatch_submit",
+            "simctl.slurm.submit.sbatch_submit",
             side_effect=["22222", "33333"],
         ),
     ):
@@ -214,7 +215,7 @@ def test_submit_empty_input_dir(tmp_path: Path) -> None:
     with (
         patch("simctl.cli.submit.Path.cwd", return_value=tmp_path),
         patch(
-            "simctl.cli.submit.sbatch_submit",
+            "simctl.slurm.submit.sbatch_submit",
             return_value="99999",
         ),
     ):
@@ -235,7 +236,7 @@ def test_submit_sbatch_failure(tmp_path: Path) -> None:
     with (
         patch("simctl.cli.submit.Path.cwd", return_value=tmp_path),
         patch(
-            "simctl.cli.submit.sbatch_submit",
+            "simctl.slurm.submit.sbatch_submit",
             side_effect=SlurmSubmitError("sbatch failed (exit 1):\nPermission denied"),
         ),
     ):

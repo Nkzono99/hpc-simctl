@@ -119,7 +119,7 @@ ACTION_SPECS: dict[str, ActionSpec] = {
         name="submit_run",
         description="Submit a run to Slurm via sbatch.",
         required_params=("run_dir",),
-        optional_params=("queue_name",),
+        optional_params=("queue_name", "afterok"),
         preconditions=("run state == created", "job.sh exists"),
         state_change="created -> submitted",
     ),
@@ -254,42 +254,28 @@ def create_run(
     params: dict[str, Any] | None = None,
 ) -> ActionResult:
     """Create a new run directory from a case definition."""
-    from simctl.core.discovery import collect_existing_run_ids
-    from simctl.core.manifest import ManifestData, write_manifest
-    from simctl.core.run import create_run as _create_run
+    from simctl.core.project import load_project
+    from simctl.core.run_creation import create_case_run
 
     try:
-        runs_dir = dest_dir or (project_root / "runs" / case_name)
-        runs_dir.mkdir(parents=True, exist_ok=True)
-
-        existing_ids = collect_existing_run_ids(project_root / "runs")
-        info = _create_run(
-            parent_dir=runs_dir,
-            existing_ids=existing_ids,
+        project = load_project(project_root)
+        result = create_case_run(
+            project,
+            case_name,
+            dest_dir=dest_dir,
             display_name=display_name,
             params=params,
         )
 
-        # Write initial manifest
-        manifest = ManifestData(
-            run={
-                "id": info.run_id,
-                "status": RunState.CREATED.value,
-                "created_at": info.created_at,
-                "display_name": info.display_name,
-            },
-            origin={"case": case_name},
-        )
-        write_manifest(info.run_dir, manifest)
-
         return ActionResult(
             action="create_run",
             status=ActionStatus.SUCCESS,
-            message=f"Created run {info.run_id}",
+            message=f"Created run {result.run_info.run_id}",
             data={
-                "run_id": info.run_id,
-                "run_dir": str(info.run_dir),
-                "display_name": info.display_name,
+                "run_id": result.run_info.run_id,
+                "run_dir": str(result.run_info.run_dir),
+                "display_name": result.run_info.display_name,
+                "warnings": list(result.warnings),
             },
             state_after=RunState.CREATED.value,
         )
@@ -301,11 +287,17 @@ def submit_run(
     run_dir: Path,
     *,
     queue_name: str = "",
+    afterok: str = "",
 ) -> ActionResult:
     """Submit a run to Slurm via sbatch."""
     from simctl.core.manifest import read_manifest, update_manifest
     from simctl.core.retry import get_attempt_count
-    from simctl.slurm.submit import SlurmSubmitError, sbatch_submit
+    from simctl.core.state import update_state
+    from simctl.slurm.submit import (
+        SlurmNotFoundError,
+        SlurmSubmitError,
+        sbatch_submit,
+    )
 
     state_str, err = _require_state(run_dir, RunState.CREATED)
     if err:
@@ -315,21 +307,51 @@ def submit_run(
     if not job_script.exists():
         return _precondition_fail("submit_run", f"Job script not found: {job_script}")
 
+    input_dir = run_dir / "input"
+    if not input_dir.is_dir() or not any(input_dir.iterdir()):
+        return _precondition_fail(
+            "submit_run",
+            f"input/ directory is empty or missing in {run_dir}",
+        )
+
+    try:
+        job_content = job_script.read_text()
+    except OSError as e:
+        return _error("submit_run", f"Failed to read job script: {e}")
+
+    if "#SBATCH" not in job_content:
+        return _precondition_fail(
+            "submit_run",
+            "job.sh does not contain expected #SBATCH directives",
+        )
+
+    manifest = read_manifest(run_dir)
+    run_id = manifest.run.get("id", run_dir.name)
+    warnings: list[str] = []
+    tags = manifest.classification.get("tags", [])
+    if "production" in tags and manifest.simulator_source.get("git_dirty", False):
+        warnings.append("production run submitted with dirty git working tree")
+
     work_dir = run_dir / "work"
-    work_dir.mkdir(exist_ok=True)
+    if not work_dir.is_dir():
+        work_dir = run_dir
 
     extra_args: list[str] = []
     if queue_name:
         extra_args.append(f"--partition={queue_name}")
 
     try:
-        job_id = sbatch_submit(job_script, work_dir, extra_args=extra_args)
-    except (SlurmSubmitError, FileNotFoundError, RuntimeError) as e:
+        job_id = sbatch_submit(
+            job_script,
+            work_dir,
+            extra_args=extra_args or None,
+            afterok=afterok or None,
+        )
+    except (SlurmNotFoundError, SlurmSubmitError, FileNotFoundError, RuntimeError) as e:
         return _error("submit_run", f"sbatch failed: {e}")
 
     # Update manifest
     now = datetime.now(tz=timezone.utc).isoformat(timespec="seconds")
-    manifest = read_manifest(run_dir)
     attempt = get_attempt_count(manifest.job) + 1
     existing_attempts: list[dict[str, str]] = list(manifest.job.get("attempts", []))
     existing_attempts.append(
@@ -342,7 +364,6 @@ def submit_run(
     update_manifest(
         run_dir,
         {
-            "run": {"status": RunState.SUBMITTED.value},
             "job": {
                 "job_id": job_id,
                 "submitted_at": now,
@@ -352,12 +373,21 @@ def submit_run(
             },
         },
     )
+    try:
+        update_state(run_dir, RunState.SUBMITTED)
+    except SimctlError as e:
+        return _error("submit_run", f"State transition failed: {e}")
 
     return ActionResult(
         action="submit_run",
         status=ActionStatus.SUCCESS,
         message=f"Submitted job {job_id} (attempt {attempt})",
-        data={"job_id": job_id, "attempt": attempt},
+        data={
+            "job_id": job_id,
+            "attempt": attempt,
+            "run_id": run_id,
+            "warnings": warnings,
+        },
         state_before=state_str,
         state_after=RunState.SUBMITTED.value,
     )
@@ -369,14 +399,15 @@ def sync_run(run_dir: Path) -> ActionResult:
     from simctl.core.state import update_state
     from simctl.slurm.query import SlurmQueryError, query_job_status
 
-    state_str, err = _require_state(run_dir, RunState.SUBMITTED, RunState.RUNNING)
-    if err:
-        return _precondition_fail("sync_run", err)
-
     manifest = read_manifest(run_dir)
+    run_id = manifest.run.get("id", run_dir.name)
     job_id = manifest.job.get("job_id", "")
     if not job_id:
         return _precondition_fail("sync_run", "No job_id recorded in manifest")
+
+    state_str, err = _require_state(run_dir, RunState.SUBMITTED, RunState.RUNNING)
+    if err:
+        return _precondition_fail("sync_run", err)
 
     try:
         job_status = query_job_status(job_id)
@@ -389,7 +420,7 @@ def sync_run(run_dir: Path) -> ActionResult:
             action="sync_run",
             status=ActionStatus.SUCCESS,
             message=f"State unchanged: {state_str}",
-            data={"slurm_state": job_status.slurm_state},
+            data={"run_id": run_id, "slurm_state": job_status.slurm_state},
             state_before=state_str,
             state_after=state_str,
         )
@@ -410,6 +441,7 @@ def sync_run(run_dir: Path) -> ActionResult:
         status=ActionStatus.SUCCESS,
         message=f"State: {state_str} -> {new_state.value}",
         data={
+            "run_id": run_id,
             "slurm_state": job_status.slurm_state,
             "failure_reason": job_status.failure_reason,
             "exit_code": job_status.exit_code,
@@ -598,11 +630,14 @@ def retry_run(
 
 def archive_run(run_dir: Path) -> ActionResult:
     """Archive a completed run."""
+    from simctl.core.manifest import read_manifest
     from simctl.core.state import update_state
 
     state_str, err = _require_state(run_dir, RunState.COMPLETED)
     if err:
         return _precondition_fail("archive_run", err)
+
+    run_id = read_manifest(run_dir).run.get("id", run_dir.name)
 
     try:
         update_state(run_dir, RunState.ARCHIVED)
@@ -613,6 +648,7 @@ def archive_run(run_dir: Path) -> ActionResult:
         action="archive_run",
         status=ActionStatus.SUCCESS,
         message="Run archived",
+        data={"run_id": run_id},
         state_before=state_str,
         state_after=RunState.ARCHIVED.value,
     )

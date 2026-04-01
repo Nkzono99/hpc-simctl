@@ -389,6 +389,7 @@ def sync_insights(
     project_root: Path,
     *,
     simulator: str = "",
+    link_names: list[str] | None = None,
 ) -> tuple[int, int]:
     """Import insights from linked projects.
 
@@ -397,11 +398,14 @@ def sync_insights(
     """
     links = load_links(project_root)
     our_insights_dir = get_insights_dir(project_root)
+    selected_names = set(link_names or [])
 
     imported = 0
     skipped = 0
 
     for link in links:
+        if selected_names and link.name not in selected_names:
+            continue
         if link.link_type == "shared":
             # Shared knowledge: look for insights/ directly
             source_dir = link.path / _INSIGHTS_DIR

@@ -7,6 +7,8 @@ from pathlib import Path
 
 import typer
 
+from simctl.core.actions import ActionStatus
+from simctl.core.actions import archive_run as archive_run_action
 from simctl.core.discovery import resolve_run
 from simctl.core.exceptions import InvalidStateTransitionError, SimctlError
 from simctl.core.manifest import read_manifest
@@ -78,11 +80,10 @@ def archive(
         typer.echo("Cancelled.")
         raise typer.Exit()
 
-    try:
-        update_state(run_dir, RunState.ARCHIVED)
-    except InvalidStateTransitionError as e:
-        typer.echo(f"Error: {e}", err=True)
-        raise typer.Exit(code=1) from None
+    result = archive_run_action(run_dir)
+    if result.status is not ActionStatus.SUCCESS:
+        typer.echo(f"Error: {result.message}", err=True)
+        raise typer.Exit(code=1)
 
     typer.echo(f"Archived run {run_id}.")
     typer.echo(f"  Path: {run_dir}")

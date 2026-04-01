@@ -7,15 +7,14 @@ from typing import Annotated, Optional
 
 import typer
 
+from simctl.core.actions import ActionStatus
+from simctl.core.actions import sync_run as sync_run_action
 from simctl.core.discovery import resolve_run
 from simctl.core.exceptions import (
-    InvalidStateTransitionError,
     ManifestNotFoundError,
     RunNotFoundError,
-    SimctlError,
 )
-from simctl.core.manifest import read_manifest, update_manifest
-from simctl.core.state import update_state
+from simctl.core.manifest import read_manifest
 from simctl.slurm.query import SlurmQueryError, query_job_status
 from simctl.slurm.submit import SlurmNotFoundError
 
@@ -136,79 +135,18 @@ def sync(
     else:
         run_dir = _resolve_run_dir(run)
 
-    try:
-        manifest = read_manifest(run_dir)
-    except ManifestNotFoundError as e:
-        typer.echo(f"Error: {e}")
-        raise typer.Exit(code=1) from None
-
-    run_id = manifest.run.get("id", run_dir.name)
-    current_status = manifest.run.get("status", "unknown")
-    job_id = manifest.job.get("job_id", "")
-
-    if not job_id:
-        typer.echo(f"Error: Run {run_id} has no job_id. Submit the run first.")
+    result = sync_run_action(run_dir)
+    if result.status is not ActionStatus.SUCCESS:
+        typer.echo(f"Error: {result.message}")
         raise typer.Exit(code=1)
 
-    # Query Slurm
-    try:
-        job_status = query_job_status(job_id)
-    except SlurmNotFoundError as e:
-        typer.echo(f"Error: {e}")
-        raise typer.Exit(code=1) from None
-    except SlurmQueryError as e:
-        typer.echo(f"Error: Slurm query failed for job {job_id}: {e}")
-        raise typer.Exit(code=1) from None
-
-    # Check if state actually changed
-    if job_status.run_state.value == current_status:
-        typer.echo(f"{run_id}: state unchanged ({current_status})")
+    run_id = str(result.data.get("run_id", run_dir.name))
+    if result.state_before == result.state_after:
+        typer.echo(f"{run_id}: state unchanged ({result.state_after})")
         return
 
-    # Attempt state transition using reconciliation rules
-    # (allows skipping intermediate states, e.g. submitted -> completed)
-    try:
-        update_state(
-            run_dir,
-            job_status.run_state,
-            reconcile=True,
-            reason=job_status.failure_reason,
-            slurm_state=job_status.slurm_state,
-        )
-    except InvalidStateTransitionError as e:
-        typer.echo(
-            f"Error: Cannot transition {run_id} from "
-            f"'{current_status}' to '{job_status.run_state.value}': {e}"
-        )
-        raise typer.Exit(code=1) from None
-    except SimctlError as e:
-        typer.echo(f"Error: Failed to update state: {e}")
-        raise typer.Exit(code=1) from None
-
-    # Update current attempt with terminal info (if terminal state)
-    terminal_states = {"completed", "failed", "cancelled"}
-    if job_status.run_state.value in terminal_states:
-        from datetime import datetime, timezone
-
-        attempts = list(manifest.job.get("attempts", []))
-        if attempts:
-            # Find the attempt matching current job_id
-            for att in reversed(attempts):
-                if att.get("job_id") == job_id:
-                    att["terminal_state"] = job_status.run_state.value
-                    att["slurm_state"] = job_status.slurm_state
-                    att["finished_at"] = datetime.now(tz=timezone.utc).isoformat()
-                    if job_status.failure_reason:
-                        att["failure_reason"] = job_status.failure_reason
-                    if job_status.exit_code:
-                        att["exit_code"] = job_status.exit_code
-                    break
-            import contextlib
-
-            with contextlib.suppress(SimctlError):
-                update_manifest(run_dir, {"job": {"attempts": attempts}})
-
-    msg = f"{run_id}: {current_status} -> {job_status.run_state.value}"
-    if job_status.failure_reason:
-        msg += f" (reason: {job_status.failure_reason})"
+    msg = f"{run_id}: {result.state_before} -> {result.state_after}"
+    failure_reason = str(result.data.get("failure_reason", ""))
+    if failure_reason:
+        msg += f" (reason: {failure_reason})"
     typer.echo(msg)

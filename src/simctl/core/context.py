@@ -185,9 +185,9 @@ def _collect_recent_failures(root: Path, *, limit: int = 10) -> list[dict[str, s
 
 def _collect_facts_summary(root: Path, *, limit: int = 20) -> list[dict[str, Any]]:
     try:
-        from simctl.core.knowledge import load_facts
+        from simctl.core.knowledge import query_facts
 
-        facts = load_facts(root)
+        facts = query_facts(root)
         return [
             {
                 "id": f.id,
@@ -195,6 +195,8 @@ def _collect_facts_summary(root: Path, *, limit: int = 20) -> list[dict[str, Any
                 "confidence": f.confidence,
                 "fact_type": getattr(f, "fact_type", ""),
                 "simulator": getattr(f, "simulator", ""),
+                "source_run": getattr(f, "source_run", ""),
+                "evidence_ref": getattr(f, "evidence_ref", ""),
             }
             for f in facts[:limit]
         ]
@@ -204,23 +206,91 @@ def _collect_facts_summary(root: Path, *, limit: int = 20) -> list[dict[str, Any
 
 def _collect_knowledge_paths(root: Path) -> dict[str, Any]:
     result: dict[str, Any] = {}
+    knowledge_dir = root / ".simctl" / "knowledge"
 
     refs_dir = root / "refs"
     if refs_dir.is_dir():
         result["refs_dir"] = str(refs_dir)
         result["refs_repos"] = [p.name for p in refs_dir.iterdir() if p.is_dir()]
 
-    knowledge_dir = root / ".simctl" / "knowledge"
     if knowledge_dir.is_dir():
         result["knowledge_dir"] = str(knowledge_dir)
+        imports_file = knowledge_dir / "enabled" / "imports.md"
+        result["imports_file"] = str(imports_file)
+        result["imports_ready"] = imports_file.is_file()
 
     insights_dir = root / ".simctl" / "insights"
     if insights_dir.is_dir():
-        insight_files = list(insights_dir.glob("*.md"))
-        result["insights_count"] = len(insight_files)
+        from simctl.core.knowledge import list_insights
+
+        insights = list_insights(root)
+        result["insights_count"] = len(insights)
+        recent = sorted(
+            insights,
+            key=lambda insight: insight.created or "",
+            reverse=True,
+        )[:5]
+        result["recent_insights"] = [
+            {
+                "name": insight.name,
+                "type": insight.type,
+                "simulator": insight.simulator,
+                "created": insight.created,
+            }
+            for insight in recent
+        ]
 
     facts_file = root / ".simctl" / "facts.toml"
     if facts_file.is_file():
         result["facts_file"] = str(facts_file)
+
+    try:
+        from simctl.core.knowledge_source import (
+            collect_external_knowledge,
+            load_knowledge_config,
+        )
+
+        config = load_knowledge_config(root)
+        if config is not None:
+            result["knowledge_enabled"] = config.enabled
+        external_entries = collect_external_knowledge(root)
+        if external_entries:
+            result["external_knowledge"] = [
+                {
+                    "name": entry.name,
+                    "origin": entry.origin,
+                    "type": entry.source_type,
+                    "path": str(entry.path),
+                    "display_path": entry.display_path,
+                    "exists": entry.exists,
+                    "profiles_enabled": list(entry.profiles_enabled),
+                    "profiles_available": list(entry.profiles_available),
+                }
+                for entry in external_entries
+            ]
+            result["knowledge_sources"] = [
+                {
+                    "name": entry.name,
+                    "type": entry.source_type,
+                    "mount": entry.display_path,
+                    "mounted": entry.exists,
+                    "profiles_enabled": list(entry.profiles_enabled),
+                    "profiles_available": list(entry.profiles_available),
+                }
+                for entry in external_entries
+                if entry.origin == "source"
+            ]
+            result["links"] = [
+                {
+                    "name": entry.name,
+                    "type": entry.source_type,
+                    "path": str(entry.path),
+                    "exists": entry.exists,
+                }
+                for entry in external_entries
+                if entry.origin == "legacy_link"
+            ]
+    except Exception:
+        logger.debug("Failed to collect knowledge integration details", exc_info=True)
 
     return result

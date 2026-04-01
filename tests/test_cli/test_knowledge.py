@@ -276,6 +276,25 @@ profiles = ["common"]
     assert "kb" in result.output
 
 
+def test_status_reports_legacy_links_without_knowledge_config(tmp_path: Path) -> None:
+    project_root = _create_project(tmp_path)
+    linked_project = tmp_path.parent / "legacy-project"
+    linked_project.mkdir(parents=True, exist_ok=True)
+    (project_root / ".simctl").mkdir()
+    (project_root / ".simctl" / "links.toml").write_text(
+        '[projects]\nlegacy-project = "../legacy-project"\n',
+        encoding="utf-8",
+    )
+
+    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+        result = runner.invoke(app, ["knowledge", "status"])
+
+    assert result.exit_code == 0
+    assert "not configured" in result.output
+    assert "legacy_links: 1" in result.output
+    assert "legacy-project" in result.output
+
+
 def test_list_sources_flag(tmp_path: Path) -> None:
     toml = """
 [knowledge]
@@ -297,6 +316,35 @@ mount = "refs/knowledge/kb"
     assert "git" in result.output
 
 
+def test_list_sources_includes_legacy_links(tmp_path: Path) -> None:
+    toml = """
+[knowledge]
+enabled = true
+
+[[knowledge.sources]]
+name = "kb"
+type = "git"
+url = "https://github.com/lab/kb.git"
+mount = "refs/knowledge/kb"
+"""
+    project_root = _create_project(tmp_path, toml)
+    linked_project = tmp_path.parent / "legacy-project"
+    linked_project.mkdir(parents=True, exist_ok=True)
+    (project_root / ".simctl").mkdir()
+    (project_root / ".simctl" / "links.toml").write_text(
+        '[projects]\nlegacy-project = "../legacy-project"\n',
+        encoding="utf-8",
+    )
+
+    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+        result = runner.invoke(app, ["knowledge", "list", "--sources"])
+
+    assert result.exit_code == 0
+    assert "kb" in result.output
+    assert "legacy-project" in result.output
+    assert "Legacy knowledge links" in result.output
+
+
 def test_list_sources_no_config(tmp_path: Path) -> None:
     project_root = _create_project(tmp_path)
 
@@ -304,4 +352,42 @@ def test_list_sources_no_config(tmp_path: Path) -> None:
         result = runner.invoke(app, ["knowledge", "list", "--sources"])
 
     assert result.exit_code == 0
-    assert "No knowledge sources" in result.output
+    assert "No external knowledge" in result.output
+
+
+def test_sync_supports_named_legacy_link(tmp_path: Path) -> None:
+    project_root = _create_project(tmp_path)
+    project_simctl = project_root / ".simctl"
+    project_simctl.mkdir()
+    linked_a = tmp_path.parent / "linked-a"
+    linked_b = tmp_path.parent / "linked-b"
+    for linked_root, insight_name in (
+        (linked_a, "alpha-note"),
+        (linked_b, "beta-note"),
+    ):
+        insights_dir = linked_root / ".simctl" / "insights"
+        insights_dir.mkdir(parents=True, exist_ok=True)
+        (insights_dir / f"{insight_name}.md").write_text(
+            "---\n"
+            "type: result\n"
+            "simulator: emses\n"
+            "created: 2026-04-02\n"
+            "---\n\n"
+            f"{insight_name}\n",
+            encoding="utf-8",
+        )
+
+    (project_simctl / "links.toml").write_text(
+        '[projects]\nalpha = "../linked-a"\nbeta = "../linked-b"\n',
+        encoding="utf-8",
+    )
+
+    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+        result = runner.invoke(app, ["knowledge", "sync", "alpha"])
+
+    assert result.exit_code == 0
+    assert "legacy linked projects" in result.output
+    assert "alpha" in result.output
+    assert "beta" not in result.output
+    assert (project_root / ".simctl" / "insights" / "alpha-note.md").is_file()
+    assert not (project_root / ".simctl" / "insights" / "beta-note.md").exists()

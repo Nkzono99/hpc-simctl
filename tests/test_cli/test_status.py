@@ -132,7 +132,7 @@ def test_sync_updates_state(tmp_path: Path) -> None:
     with (
         patch("simctl.cli.status.Path.cwd", return_value=tmp_path),
         patch(
-            "simctl.cli.status.query_job_status",
+            "simctl.slurm.query.query_job_status",
             return_value=JobStatus(run_state=RunState.RUNNING, slurm_state="RUNNING"),
         ),
     ):
@@ -163,7 +163,7 @@ def test_sync_no_change(tmp_path: Path) -> None:
     with (
         patch("simctl.cli.status.Path.cwd", return_value=tmp_path),
         patch(
-            "simctl.cli.status.query_job_status",
+            "simctl.slurm.query.query_job_status",
             return_value=JobStatus(run_state=RunState.RUNNING, slurm_state="RUNNING"),
         ),
     ):
@@ -183,7 +183,7 @@ def test_sync_no_job_id(tmp_path: Path) -> None:
         result = runner.invoke(app, ["sync", str(run_dir)])
 
     assert result.exit_code != 0
-    assert "no job_id" in result.output
+    assert "no job_id" in result.output.lower()
 
 
 def test_sync_slurm_query_failure(tmp_path: Path) -> None:
@@ -197,7 +197,7 @@ def test_sync_slurm_query_failure(tmp_path: Path) -> None:
     with (
         patch("simctl.cli.status.Path.cwd", return_value=tmp_path),
         patch(
-            "simctl.cli.status.query_job_status",
+            "simctl.slurm.query.query_job_status",
             side_effect=SlurmQueryError("Job not found"),
         ),
     ):
@@ -216,7 +216,7 @@ def test_sync_completed(tmp_path: Path) -> None:
     with (
         patch("simctl.cli.status.Path.cwd", return_value=tmp_path),
         patch(
-            "simctl.cli.status.query_job_status",
+            "simctl.slurm.query.query_job_status",
             return_value=JobStatus(
                 run_state=RunState.COMPLETED, slurm_state="COMPLETED"
             ),

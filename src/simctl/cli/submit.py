@@ -3,23 +3,21 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated, Optional
 
 import typer
 
+from simctl.core.actions import ActionStatus
+from simctl.core.actions import submit_run as submit_run_action
 from simctl.core.discovery import discover_runs, resolve_run
 from simctl.core.exceptions import (
-    InvalidStateTransitionError,
     ManifestNotFoundError,
     RunNotFoundError,
     SimctlError,
 )
-from simctl.core.manifest import read_manifest, update_manifest
-from simctl.core.retry import get_attempt_count
-from simctl.core.state import RunState, update_state
-from simctl.slurm.submit import SlurmNotFoundError, SlurmSubmitError, sbatch_submit
+from simctl.core.manifest import read_manifest
+from simctl.core.state import RunState
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +63,7 @@ def _submit_single_run(
     run_dir: Path,
     *,
     quiet: bool = False,
-    sbatch_extra: list[str] | None = None,
+    queue_name: str = "",
     afterok: str | None = None,
 ) -> str | None:
     """Submit a single run and return the job_id, or None on skip/error.
@@ -80,107 +78,29 @@ def _submit_single_run(
     Raises:
         typer.Exit: On fatal errors (only in single-run mode, not --all).
     """
-    # Read manifest
-    try:
-        manifest = read_manifest(run_dir)
-    except ManifestNotFoundError as e:
-        typer.echo(f"Error: {e}")
+    result = submit_run_action(
+        run_dir,
+        queue_name=queue_name,
+        afterok=afterok or "",
+    )
+
+    if result.status is not ActionStatus.SUCCESS:
+        prefix = "Error"
+        if result.status is ActionStatus.PRECONDITION_FAILED:
+            prefix = "Error"
+        typer.echo(f"{prefix}: {result.message}")
         return None
 
-    # Check current state
-    current_status = manifest.run.get("status", "")
-    if current_status != RunState.CREATED.value:
-        msg = (
-            f"Run {run_dir.name} is in state '{current_status}', "
-            f"expected '{RunState.CREATED.value}'. Skipping."
-        )
-        typer.echo(msg)
-        return None
+    warnings = result.data.get("warnings", [])
+    for warning in warnings:
+        typer.echo(f"Warning: {warning}")
 
-    # Verify job script exists
-    job_script = run_dir / "submit" / "job.sh"
-    if not job_script.exists():
-        typer.echo(f"Error: Job script not found: {job_script}")
-        return None
-
-    # Pre-flight: check input/ directory is not empty
-    input_dir = run_dir / "input"
-    if not input_dir.is_dir() or not any(input_dir.iterdir()):
-        typer.echo(f"Error: input/ directory is empty or missing in {run_dir}")
-        return None
-
-    # Pre-flight: check job.sh contains SBATCH directives
-    job_content = job_script.read_text()
-    if "#SBATCH" not in job_content:
-        typer.echo("Error: job.sh does not contain expected #SBATCH directives")
-        return None
-
-    # Pre-flight: if production tag, warn if git is dirty
-    tags = manifest.classification.get("tags", [])
-    if "production" in tags:
-        sim_source = manifest.simulator_source
-        if sim_source.get("git_dirty", False):
-            typer.echo("Warning: production run submitted with dirty git working tree")
-
-    # Determine working directory
-    work_dir = run_dir / "work"
-    if not work_dir.is_dir():
-        work_dir = run_dir
-
-    # Submit via sbatch
-    try:
-        job_id = sbatch_submit(
-            job_script, work_dir, extra_args=sbatch_extra or None, afterok=afterok
-        )
-    except SlurmNotFoundError as e:
-        typer.echo(f"Error: {e}")
-        return None
-    except SlurmSubmitError as e:
-        typer.echo(f"Error: sbatch failed for {run_dir.name}: {e}")
-        return None
-
-    # Record job_id, submitted_at, and attempt history in manifest
-    try:
-        submitted_at = datetime.now(tz=timezone.utc).isoformat()
-
-        # Build new attempt record
-        attempt = {
-            "job_id": job_id,
-            "submitted_at": submitted_at,
-        }
-        # Append to attempts list (preserving existing history)
-        existing_attempts: list[dict[str, str]] = list(manifest.job.get("attempts", []))
-        attempt_number = get_attempt_count(manifest.job) + 1
-        attempt["attempt"] = str(attempt_number)
-        existing_attempts.append(attempt)
-
-        update_manifest(
-            run_dir,
-            {
-                "job": {
-                    "job_id": job_id,
-                    "submitted_at": submitted_at,
-                    "attempt": attempt_number,
-                    "attempts": existing_attempts,
-                },
-            },
-        )
-    except SimctlError as e:
-        typer.echo(f"Error: Failed to update manifest: {e}")
-        return None
-
-    # Transition state to submitted
-    try:
-        update_state(run_dir, RunState.SUBMITTED)
-    except InvalidStateTransitionError as e:
-        typer.echo(f"Error: State transition failed: {e}")
-        return None
-
+    job_id = str(result.data.get("job_id", ""))
+    run_id = str(result.data.get("run_id", run_dir.name))
     if not quiet:
-        run_id = manifest.run.get("id", run_dir.name)
         typer.echo(f"Submitted {run_id}: job_id={job_id}")
 
-    return job_id
+    return job_id or None
 
 
 def run_cmd(
@@ -216,29 +136,33 @@ def run_cmd(
       simctl run -qn gr10451a
       simctl run --afterok 12345
     """
-    sbatch_extra: list[str] = []
-    if queue_name:
-        sbatch_extra.append(f"--partition={queue_name}")
-
     if all_runs:
         target = Path(run) if run else None
         _submit_all_cwd(
-            target, dry_run=dry_run, sbatch_extra=sbatch_extra, afterok=afterok_id
+            target,
+            dry_run=dry_run,
+            queue_name=queue_name or "",
+            afterok=afterok_id,
         )
     elif run is None:
         _submit_single_cwd(
-            dry_run=dry_run, sbatch_extra=sbatch_extra, afterok=afterok_id
+            dry_run=dry_run,
+            queue_name=queue_name or "",
+            afterok=afterok_id,
         )
     else:
         _submit_single(
-            run, dry_run=dry_run, sbatch_extra=sbatch_extra, afterok=afterok_id
+            run,
+            dry_run=dry_run,
+            queue_name=queue_name or "",
+            afterok=afterok_id,
         )
 
 
 def _submit_single_cwd(
     *,
     dry_run: bool = False,
-    sbatch_extra: list[str] | None = None,
+    queue_name: str = "",
     afterok: str | None = None,
 ) -> None:
     """Submit the run in the current directory."""
@@ -268,7 +192,7 @@ def _submit_single_cwd(
         typer.echo(f"  Exists: {job_script.exists()}")
         return
 
-    result = _submit_single_run(run_dir, sbatch_extra=sbatch_extra, afterok=afterok)
+    result = _submit_single_run(run_dir, queue_name=queue_name, afterok=afterok)
     if result is None:
         raise typer.Exit(code=1)
 
@@ -277,13 +201,13 @@ def _submit_all_cwd(
     target: Path | None,
     *,
     dry_run: bool = False,
-    sbatch_extra: list[str] | None = None,
+    queue_name: str = "",
     afterok: str | None = None,
 ) -> None:
     """Submit all runs in the given directory or cwd."""
     target_dir = (target or Path.cwd()).resolve()
     _submit_all(
-        None, target_dir, dry_run=dry_run, sbatch_extra=sbatch_extra, afterok=afterok
+        None, target_dir, dry_run=dry_run, queue_name=queue_name, afterok=afterok
     )
 
 
@@ -291,7 +215,7 @@ def _submit_single(
     run_arg: str | None,
     *,
     dry_run: bool = False,
-    sbatch_extra: list[str] | None = None,
+    queue_name: str = "",
     afterok: str | None = None,
 ) -> None:
     """Handle single-run submission."""
@@ -308,7 +232,7 @@ def _submit_single(
         typer.echo(f"  Exists: {job_script.exists()}")
         return
 
-    result = _submit_single_run(run_dir, sbatch_extra=sbatch_extra, afterok=afterok)
+    result = _submit_single_run(run_dir, queue_name=queue_name, afterok=afterok)
     if result is None:
         raise typer.Exit(code=1)
 
@@ -318,7 +242,7 @@ def _submit_all(
     survey_dir_opt: Path | None,
     *,
     dry_run: bool = False,
-    sbatch_extra: list[str] | None = None,
+    queue_name: str = "",
     afterok: str | None = None,
 ) -> None:
     """Handle batch submission of all runs in a directory.
@@ -378,7 +302,7 @@ def _submit_all(
             continue
 
         job_id = _submit_single_run(
-            rd, quiet=True, sbatch_extra=sbatch_extra, afterok=afterok
+            rd, quiet=True, queue_name=queue_name, afterok=afterok
         )
         if job_id is not None:
             run_id = manifest.run.get("id", rd.name)

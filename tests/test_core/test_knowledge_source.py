@@ -10,6 +10,7 @@ import pytest
 from simctl.core.knowledge_source import (
     KnowledgeConfig,
     KnowledgeSource,
+    collect_external_knowledge,
     discover_profiles,
     load_knowledge_config,
     remove_knowledge_source,
@@ -190,7 +191,7 @@ def test_sync_source_path_exists(tmp_path: Path) -> None:
         mount="refs/knowledge/test-kb",
     )
     status = sync_source(project, source)
-    assert status in ("linked", "exists")
+    assert status in ("linked", "copied", "exists", "updated-copy")
 
 
 def test_sync_source_path_not_found(tmp_path: Path) -> None:
@@ -294,6 +295,48 @@ def test_discover_profiles(tmp_path: Path) -> None:
 
 def test_discover_profiles_no_dir(tmp_path: Path) -> None:
     assert discover_profiles(tmp_path) == []
+
+
+def test_collect_external_knowledge_includes_sources_and_legacy_links(
+    tmp_path: Path,
+) -> None:
+    kb_dir = _create_knowledge_source(tmp_path, "kb")
+    project = tmp_path / "project"
+    project.mkdir()
+    _create_project(
+        project,
+        """
+[knowledge]
+enabled = true
+
+[[knowledge.sources]]
+name = "kb"
+type = "path"
+path = "../kb"
+mount = "refs/knowledge/kb"
+profiles = ["common"]
+""",
+    )
+
+    mount_dir = project / "refs" / "knowledge" / "kb"
+    mount_dir.parent.mkdir(parents=True)
+    import shutil
+
+    shutil.copytree(kb_dir, mount_dir)
+    (project / ".simctl").mkdir()
+    (project / ".simctl" / "links.toml").write_text(
+        '[projects]\nother-project = "../other-project"\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "other-project").mkdir()
+
+    entries = collect_external_knowledge(project)
+
+    assert [entry.name for entry in entries] == ["kb", "other-project"]
+    assert entries[0].origin == "source"
+    assert entries[0].profiles_available == ["advanced", "common"]
+    assert entries[1].origin == "legacy_link"
+    assert entries[1].exists is True
 
 
 # ---------- render_imports ----------

@@ -7,6 +7,7 @@ defined in simproject.toml's ``[knowledge]`` section.
 from __future__ import annotations
 
 import logging
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -75,6 +76,33 @@ class KnowledgeConfig:
     auto_sync_on_setup: bool = True
     generate_claude_imports: bool = True
     sources: list[KnowledgeSource] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class ExternalKnowledgeMount:
+    """Normalized view of an attached knowledge source or legacy link.
+
+    Attributes:
+        name: User-facing identifier.
+        origin: ``"source"`` for ``[knowledge.sources]`` entries or
+            ``"legacy_link"`` for ``.simctl/links.toml`` entries.
+        source_type: Concrete backend type such as ``"git"``, ``"path"``,
+            ``"project"``, or ``"shared"``.
+        path: Resolved absolute path for this external knowledge entry.
+        display_path: Relative mount path or resolved link path to show in CLI.
+        exists: Whether the mounted path currently exists.
+        profiles_enabled: Enabled profile names for mounted sources.
+        profiles_available: Discovered profile names at the mounted location.
+    """
+
+    name: str
+    origin: str
+    source_type: str
+    path: Path
+    display_path: str
+    exists: bool
+    profiles_enabled: list[str] = field(default_factory=list)
+    profiles_available: list[str] = field(default_factory=list)
 
 
 # ---------- Config I/O ----------
@@ -217,6 +245,54 @@ def remove_knowledge_source(project_root: Path, name: str) -> bool:
     return True
 
 
+def collect_external_knowledge(project_root: Path) -> list[ExternalKnowledgeMount]:
+    """Return configured knowledge sources and legacy links in one list."""
+    entries: list[ExternalKnowledgeMount] = []
+
+    config = load_knowledge_config(project_root)
+    if config is not None:
+        for source in config.sources:
+            mount_path = project_root / source.mount
+            mounted = mount_path.is_dir()
+            entries.append(
+                ExternalKnowledgeMount(
+                    name=source.name,
+                    origin="source",
+                    source_type=source.source_type,
+                    path=mount_path,
+                    display_path=source.mount,
+                    exists=mounted,
+                    profiles_enabled=list(source.profiles),
+                    profiles_available=(
+                        discover_profiles(mount_path) if mounted else []
+                    ),
+                )
+            )
+
+    try:
+        from simctl.core.knowledge import load_links
+    except Exception:
+        load_links = None
+
+    if load_links is not None:
+        for link in load_links(project_root):
+            entries.append(
+                ExternalKnowledgeMount(
+                    name=link.name,
+                    origin="legacy_link",
+                    source_type=link.link_type,
+                    path=link.path,
+                    display_path=str(link.path),
+                    exists=link.path.is_dir(),
+                )
+            )
+
+    return sorted(
+        entries,
+        key=lambda entry: (entry.origin != "source", entry.name.lower()),
+    )
+
+
 # ---------- Source sync ----------
 
 
@@ -242,12 +318,28 @@ def sync_source(project_root: Path, source: KnowledgeSource) -> str:
             raise KnowledgeSourceError(
                 f"Knowledge source path not found: {resolved}"
             )
-        # For path sources, create symlink if mount doesn't exist
-        if not mount_path.exists():
-            mount_path.parent.mkdir(parents=True, exist_ok=True)
-            mount_path.symlink_to(resolved)
+        mount_path.parent.mkdir(parents=True, exist_ok=True)
+
+        if mount_path.exists():
+            if mount_path.is_symlink():
+                return "exists"
+            if mount_path.is_dir():
+                shutil.copytree(resolved, mount_path, dirs_exist_ok=True)
+                return "updated-copy"
+            return "exists"
+
+        try:
+            mount_path.symlink_to(resolved, target_is_directory=True)
             return "linked"
-        return "exists"
+        except OSError as e:
+            logger.info(
+                "Symlink unavailable for knowledge source %s (%s); "
+                "falling back to directory copy",
+                source.name,
+                e,
+            )
+            shutil.copytree(resolved, mount_path, dirs_exist_ok=True)
+            return "copied"
 
     # git source
     if mount_path.is_dir() and (mount_path / ".git").exists():
