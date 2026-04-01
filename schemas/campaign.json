@@ -62,7 +62,12 @@
             "required": ["role"]
           },
           {
-            "description": "Simple fixed value"
+            "type": ["number", "string", "boolean", "integer"],
+            "description": "Simple fixed value (scalar)"
+          },
+          {
+            "type": "array",
+            "description": "Simple fixed value (list)"
           }
         ]
       }

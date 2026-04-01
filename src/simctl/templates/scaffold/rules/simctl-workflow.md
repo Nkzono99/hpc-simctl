@@ -17,6 +17,12 @@
 - **case は `simctl new <name> -s <simulator>` で生成する** (cases/<sim>/ に自動配置)
 - 生成された case.toml や入力テンプレートの編集は自由
 
+## ジョブ投入の承認フロー
+- `simctl run` はフックにより自動ブロックされる
+- ブロックされたら、投入内容（コマンド、対象 run、queue 等）をユーザーに提示して承認を求める
+- ユーザーが承認したら `touch .claude/hooks/.approve-run-token` してから `simctl run` を再実行する
+- 承認なしに `simctl run` を繰り返し試行しない
+
 ## 知見の記録
 - 実験の知見・結果は Agent の memory ではなく `/learn` で保存する
 - 保存先: `.simctl/insights/`, `.simctl/facts.toml`

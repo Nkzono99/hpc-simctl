@@ -1,7 +1,6 @@
 ---
 name: survey-design
 description: Design a parameter survey. Use when planning a parameter sweep, creating survey.toml, or exploring parameter space.
-disable-model-invocation: true
 ---
 
 # パラメータサーベイを設計する

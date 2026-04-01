@@ -1,7 +1,6 @@
 ---
 name: run-all
 description: Generate and submit all runs from a survey. Use when ready to launch a parameter sweep.
-disable-model-invocation: true
 ---
 
 # サーベイの全 Run を生成して投入する

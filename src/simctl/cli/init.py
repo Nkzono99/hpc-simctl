@@ -1317,6 +1317,17 @@ def init(
     else:
         skipped.append(_CLAUDE_SETTINGS)
 
+    # .claude/hooks/ (approval hooks)
+    hooks_base = project_dir / ".claude/hooks"
+    hooks_base.mkdir(parents=True, exist_ok=True)
+    hook_script = hooks_base / "approve-run.sh"
+    hook_display = ".claude/hooks/approve-run.sh"
+    if _write_if_missing(hook_script, load_static("scaffold/hooks/approve-run.sh")):
+        hook_script.chmod(0o755)
+        created.append(hook_display)
+    else:
+        skipped.append(hook_display)
+
     # .claude/rules/ (project-wide rules, split from CLAUDE.md)
     rules_base = project_dir / _RULES_DIR
     rules_base.mkdir(parents=True, exist_ok=True)

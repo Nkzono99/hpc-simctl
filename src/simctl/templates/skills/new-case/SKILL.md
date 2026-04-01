@@ -1,7 +1,6 @@
 ---
 name: new-case
 description: Create a new simulation case and customize its input files. Use when setting up a new case from scratch with simctl new.
-disable-model-invocation: true
 ---
 
 # ケースを作成・編集する

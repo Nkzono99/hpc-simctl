@@ -1,7 +1,6 @@
 ---
 name: create-run
 description: Create runs or expand a survey from cases. Use when generating simulation runs with simctl create or simctl sweep.
-disable-model-invocation: true
 ---
 
 # Run / Survey を生成する

@@ -1,7 +1,24 @@
 {
   "permissions": {
     "allow": [
-      "Bash(simctl *)",
+      "Bash(simctl context*)",
+      "Bash(simctl list*)",
+      "Bash(simctl status*)",
+      "Bash(simctl sync*)",
+      "Bash(simctl jobs*)",
+      "Bash(simctl history*)",
+      "Bash(simctl log*)",
+      "Bash(simctl doctor*)",
+      "Bash(simctl config *)",
+      "Bash(simctl new *)",
+      "Bash(simctl create *)",
+      "Bash(simctl sweep *)",
+      "Bash(simctl clone *)",
+      "Bash(simctl extend *)",
+      "Bash(simctl summarize*)",
+      "Bash(simctl collect*)",
+      "Bash(simctl knowledge *)",
+      "Bash(simctl update-refs*)",
       "Bash(uv run pytest*)",
       "Bash(uv run ruff*)",
       "Bash(uv run mypy*)",
@@ -16,6 +33,20 @@
       "Bash(rm -rf *)",
       "Bash(git push --force*)",
       "Bash(git reset --hard*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "if": "Bash(simctl run*)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/approve-run.sh\""
+          }
+        ]
+      }
     ]
   }
 }

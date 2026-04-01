@@ -1,7 +1,6 @@
 ---
 name: cleanup
 description: Archive completed runs and purge unnecessary work files. Use for housekeeping after experiments.
-disable-model-invocation: true
 ---
 
 # 完了・不要な Run を整理する

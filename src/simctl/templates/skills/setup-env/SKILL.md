@@ -1,7 +1,6 @@
 ---
 name: setup-env
 description: Set up or repair the project Python environment. Use when initializing a project or fixing environment issues.
-disable-model-invocation: true
 ---
 
 # プロジェクト環境のセットアップ
