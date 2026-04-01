@@ -19,7 +19,7 @@ from simctl.core.project import ProjectConfig, find_project_root, load_project
 from simctl.core.run import RunInfo, create_run
 from simctl.core.site import SiteProfile, load_site_profile
 from simctl.core.survey import (
-    expand_axes,
+    expand_survey,
     generate_display_name,
     load_survey,
 )
@@ -585,8 +585,8 @@ def _create_survey(survey_dir: Path) -> None:
     launcher = _get_launcher(project, launcher_name)
     site = load_site_profile(project.root_dir)
 
-    # Expand parameter axes
-    combinations = expand_axes(survey_data.axes)
+    # Expand parameter axes and linked groups
+    combinations = expand_survey(survey_data.axes, survey_data.linked)
     if not combinations:
         typer.echo("No parameter combinations to expand.")
         raise typer.Exit(code=0)
@@ -613,6 +613,8 @@ def _create_survey(survey_dir: Path) -> None:
     )
 
     variation_keys = list(survey_data.axes.keys())
+    for group in survey_data.linked:
+        variation_keys.extend(group.keys())
     created_runs: list[RunInfo] = []
 
     for combo in combinations:

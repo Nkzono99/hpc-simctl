@@ -537,6 +537,48 @@ ntasks = 32
 walltime = "12:00:00"
 ```
 
+## 11.2.1 連動パラメータ (`[[linked]]`)
+
+`[axes]` は各パラメータを独立に直積展開するが、`[[linked]]` を使うと複数パラメータを連動（zip）して変化させられる。
+
+```toml
+[axes]
+seed = [1, 2, 3]
+
+# nx と ny は連動して変化 (zip)
+[[linked]]
+nx = [32, 64, 128]
+ny = [32, 64, 128]
+# → (32,32), (64,64), (128,128) の 3 組
+```
+
+上記の場合、最終展開は `3 seeds × 3 linked pairs = 9 runs`。
+
+**ルール:**
+- 同一 `[[linked]]` グループ内のパラメータは同じ長さでなければならない
+- 複数の `[[linked]]` グループを定義可能。グループ間は直積で展開される
+- `[axes]` と `[[linked]]` のパラメータ名は重複不可
+- `[axes]` のみ、`[[linked]]` のみ、両方組み合わせ、いずれも可
+
+**複数グループの例:**
+
+```toml
+[axes]
+seed = [1, 2]
+
+# グリッド解像度の連動
+[[linked]]
+nx = [32, 64]
+ny = [32, 64]
+
+# 時間ステップの連動
+[[linked]]
+dt = [0.1, 0.01]
+steps = [100, 1000]
+```
+
+展開: `2 seeds × 2 grid pairs × 2 time pairs = 8 runs`
+
 ---
 
 ## 11.3 run 生成位置
@@ -990,7 +1032,7 @@ production tag を持つ run では、以下を推奨または要求する。
 ## 19.2 `sweep`
 
 * `survey.toml` を読み込む
-* parameter 組合せを展開
+* parameter 組合せを展開 (`[axes]` 直積 × `[[linked]]` zip)
 * 各 run を survey 親ディレクトリ直下に生成
 * 各 manifest に survey 情報を記録
 

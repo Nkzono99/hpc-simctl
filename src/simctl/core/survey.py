@@ -1,6 +1,7 @@
-"""Survey expansion and parameter cartesian product.
+"""Survey expansion and parameter sweep.
 
 Reads survey.toml and expands parameter axes into individual run configurations.
+Supports both Cartesian product (axes) and co-varying (linked) parameters.
 """
 
 from __future__ import annotations
@@ -41,6 +42,7 @@ class SurveyData:
         launcher: Launcher profile name.
         classification: Classification metadata.
         axes: Parameter axes for cartesian product expansion.
+        linked: List of co-varying parameter groups (zip expansion).
         naming_template: Template string for generating display_name.
         job: Slurm job configuration.
         survey_dir: Absolute path to the survey directory.
@@ -54,6 +56,7 @@ class SurveyData:
     launcher: str
     classification: ClassificationData = field(default_factory=ClassificationData)
     axes: dict[str, list[Any]] = field(default_factory=dict)
+    linked: list[dict[str, list[Any]]] = field(default_factory=list)
     naming_template: str = ""
     job: JobData = field(default_factory=JobData)
     survey_dir: Path = field(default_factory=lambda: Path("."))
@@ -134,6 +137,54 @@ def load_survey(survey_dir: Path) -> SurveyData:
             raise SurveyConfigError(f"Axis '{key}' must not be empty in {survey_file}")
         axes[key] = values
 
+    # Parse linked parameter groups
+    linked_section = raw.get("linked", [])
+    linked: list[dict[str, list[Any]]] = []
+    if isinstance(linked_section, list):
+        for i, group in enumerate(linked_section):
+            if not isinstance(group, dict):
+                raise SurveyConfigError(
+                    f"[[linked]] entry {i} must be a table in {survey_file}"
+                )
+            parsed_group: dict[str, list[Any]] = {}
+            lengths: set[int] = set()
+            for key, values in group.items():
+                if not isinstance(values, list):
+                    raise SurveyConfigError(
+                        f"Linked parameter '{key}' in group {i} must be a list"
+                        f" in {survey_file}"
+                    )
+                if len(values) == 0:
+                    raise SurveyConfigError(
+                        f"Linked parameter '{key}' in group {i} must not be empty"
+                        f" in {survey_file}"
+                    )
+                lengths.add(len(values))
+                parsed_group[key] = values
+            if len(lengths) > 1:
+                raise SurveyConfigError(
+                    f"All parameters in [[linked]] group {i} must have the same"
+                    f" number of values (got {sorted(lengths)}) in {survey_file}"
+                )
+            if parsed_group:
+                linked.append(parsed_group)
+    elif isinstance(linked_section, dict):
+        raise SurveyConfigError(
+            f"[linked] must be an array of tables ([[linked]]), not a single"
+            f" table in {survey_file}"
+        )
+
+    # Validate no overlap between axes and linked keys
+    axes_keys = set(axes.keys())
+    for i, group in enumerate(linked):
+        linked_keys = set(group.keys())
+        overlap = axes_keys & linked_keys
+        if overlap:
+            raise SurveyConfigError(
+                f"Parameters {overlap} appear in both [axes] and [[linked]]"
+                f" group {i} in {survey_file}"
+            )
+
     # Parse naming template
     naming_section = raw.get("naming", {})
     naming_template = ""
@@ -150,6 +201,7 @@ def load_survey(survey_dir: Path) -> SurveyData:
         launcher=str(launcher),
         classification=classification,
         axes=axes,
+        linked=linked,
         naming_template=naming_template,
         job=job,
         survey_dir=survey_dir,
@@ -180,6 +232,88 @@ def expand_axes(axes: dict[str, list[Any]]) -> list[dict[str, Any]]:
     return [
         dict(zip(keys, combo, strict=True)) for combo in itertools.product(*value_lists)
     ]
+
+
+def _expand_linked(linked: list[dict[str, list[Any]]]) -> list[dict[str, Any]]:
+    """Expand linked parameter groups via zip, then Cartesian product across groups.
+
+    Each group's parameters co-vary (zip). Multiple groups are combined via
+    Cartesian product with each other.
+
+    Args:
+        linked: List of linked parameter groups.
+
+    Returns:
+        List of parameter dictionaries from linked expansion.
+        Returns [{}] if linked is empty (identity for Cartesian product).
+    """
+    if not linked:
+        return [{}]
+
+    # Each group produces a list of dicts (zip within group)
+    group_expansions: list[list[dict[str, Any]]] = []
+    for group in linked:
+        keys = list(group.keys())
+        n = len(group[keys[0]])
+        zipped = [
+            {k: group[k][i] for k in keys}
+            for i in range(n)
+        ]
+        group_expansions.append(zipped)
+
+    # Cartesian product across groups
+    if len(group_expansions) == 1:
+        return group_expansions[0]
+
+    result: list[dict[str, Any]] = []
+    for combo in itertools.product(*group_expansions):
+        merged: dict[str, Any] = {}
+        for d in combo:
+            merged.update(d)
+        result.append(merged)
+    return result
+
+
+def expand_survey(
+    axes: dict[str, list[Any]],
+    linked: list[dict[str, list[Any]]],
+) -> list[dict[str, Any]]:
+    """Expand both axes (Cartesian product) and linked (co-varying) parameters.
+
+    The final result is the Cartesian product of:
+    - The axes expansion (Cartesian product of independent axes)
+    - The linked expansion (zip within each group, Cartesian across groups)
+
+    Args:
+        axes: Parameter axes for Cartesian product.
+        linked: List of co-varying parameter groups.
+
+    Returns:
+        List of parameter dictionaries, one per combination.
+
+    Example:
+        >>> expand_survey({"seed": [1, 2]}, [{"nx": [32, 64], "ny": [32, 64]}])
+        [
+            {"seed": 1, "nx": 32, "ny": 32},
+            {"seed": 1, "nx": 64, "ny": 64},
+            {"seed": 2, "nx": 32, "ny": 32},
+            {"seed": 2, "nx": 64, "ny": 64},
+        ]
+    """
+    axes_combos = expand_axes(axes)
+    linked_combos = _expand_linked(linked)
+
+    if not axes_combos and not linked:
+        return []
+    if not axes_combos:
+        return linked_combos
+    if not linked:
+        return axes_combos
+
+    result: list[dict[str, Any]] = []
+    for axes_dict, linked_dict in itertools.product(axes_combos, linked_combos):
+        result.append({**axes_dict, **linked_dict})
+    return result
 
 
 def generate_display_name(template: str, params: dict[str, Any]) -> str:

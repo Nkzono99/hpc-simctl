@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "survey.toml",
-  "description": "Parameter survey definition for simctl (Cartesian product expansion). See SPEC section 11 and docs/toml-reference.md.",
+  "description": "Parameter survey definition for simctl (Cartesian product and co-varying expansion). See SPEC section 11 and docs/toml-reference.md.",
   "type": "object",
   "required": ["survey"],
   "properties": {
@@ -57,6 +57,18 @@
         "type": "array",
         "minItems": 1,
         "description": "Array of values for this parameter axis"
+      }
+    },
+    "linked": {
+      "type": "array",
+      "description": "Co-varying parameter groups. Parameters within each group are zipped (must have equal-length arrays). Multiple groups are combined via Cartesian product with each other and with [axes].",
+      "items": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Array of values for this co-varying parameter"
+        }
       }
     },
     "naming": {

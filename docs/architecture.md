@@ -122,7 +122,7 @@ Case 自体は直接実行しません。create コマンドまたは survey の
 
 - **定義ファイル**: `runs/.../survey.toml`
 - **データクラス**: `SurveyData` (`core/survey.py`)
-- **主な責務**: パラメータ軸の定義、直積展開、display_name のテンプレート生成
+- **主な責務**: パラメータ軸の定義、直積展開、連動展開、display_name のテンプレート生成
 
 ```python
 @dataclass(frozen=True)
@@ -133,23 +133,26 @@ class SurveyData:
     simulator: str
     launcher: str
     classification: ClassificationData
-    axes: dict[str, list[Any]]
+    axes: dict[str, list[Any]]       # 直積展開
+    linked: list[dict[str, list[Any]]]  # 連動 (zip) 展開
     naming_template: str
     job: JobData
     survey_dir: Path
     raw: dict[str, Any]
 ```
 
-`expand_axes()` 関数が `[axes]` セクションの直積を計算します:
+`expand_survey()` 関数が `[axes]`（直積）と `[[linked]]`（zip）を組み合わせて展開します:
 
 ```python
-expand_axes({"u": [2e5, 4e5], "aspect": [2.0, 4.0]})
-# => [
-#   {"u": 2e5, "aspect": 2.0},
-#   {"u": 2e5, "aspect": 4.0},
-#   {"u": 4e5, "aspect": 2.0},
-#   {"u": 4e5, "aspect": 4.0},
-# ]
+# axes のみ（従来の直積）
+expand_survey({"u": [2e5, 4e5], "aspect": [2.0, 4.0]}, [])
+# => [{"u": 2e5, "aspect": 2.0}, {"u": 2e5, "aspect": 4.0},
+#     {"u": 4e5, "aspect": 2.0}, {"u": 4e5, "aspect": 4.0}]
+
+# axes × linked（直積 × 連動）
+expand_survey({"seed": [1, 2]}, [{"nx": [32, 64], "ny": [32, 64]}])
+# => [{"seed": 1, "nx": 32, "ny": 32}, {"seed": 1, "nx": 64, "ny": 64},
+#     {"seed": 2, "nx": 32, "ny": 32}, {"seed": 2, "nx": 64, "ny": 64}]
 ```
 
 ### Run
@@ -436,8 +439,8 @@ CLI: simctl sweep DIR
   |
   +--> load_project() + load_survey() + load_case()
   |
-  +--> expand_axes()
-  |      パラメータ直積を展開 (N 個の組合せ)
+  +--> expand_survey(axes, linked)
+  |      axes 直積 × linked zip を展開 (N 個の組合せ)
   |
   +--> N 回ループ:
          +--> merge params (base_case + sweep 差分)

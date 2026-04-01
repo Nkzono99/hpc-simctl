@@ -321,7 +321,7 @@ Parameter overrides using dot-notation keys. These modify the simulator's input 
 
 ## survey.toml
 
-Parameter survey definition. Generates runs from the Cartesian product of parameter axes.
+Parameter survey definition. Generates runs from the Cartesian product of parameter axes and co-varying (linked) parameter groups.
 
 ```toml
 [survey]
@@ -369,6 +369,40 @@ Parameter axes for Cartesian product expansion. Each key is a dot-notation param
 "plasma.wc" = [0.0, 0.147, 0.294]    # 3 values
 "plasma.phiz" = [0.0, 45.0, 90.0]     # 3 values
 # Total runs: 3 x 3 = 9
+```
+
+### `[[linked]]`
+
+Co-varying parameter groups. Parameters within each `[[linked]]` group are **zipped** (must have equal-length arrays). Multiple `[[linked]]` groups are combined via Cartesian product with each other and with `[axes]`.
+
+```toml
+[axes]
+seed = [1, 2, 3]
+
+# nx and ny co-vary (zip): (32,32), (64,64), (128,128)
+[[linked]]
+nx = [32, 64, 128]
+ny = [32, 64, 128]
+# Total runs: 3 seeds × 3 linked pairs = 9
+```
+
+| Constraint | Description |
+|-----------|-------------|
+| Equal length | All arrays in one `[[linked]]` group must have the same length |
+| No overlap | Parameter names must not appear in both `[axes]` and `[[linked]]` |
+| Multiple groups | Each `[[linked]]` group is independent; groups are Cartesian-multiplied |
+
+**Multiple groups example:**
+
+```toml
+[[linked]]
+nx = [32, 64]
+ny = [32, 64]
+
+[[linked]]
+dt = [0.1, 0.01]
+steps = [100, 1000]
+# Total runs: 2 grid pairs × 2 time pairs = 4
 ```
 
 ### `[naming]`
