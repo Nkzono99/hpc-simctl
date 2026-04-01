@@ -43,6 +43,12 @@ knowledge_app = typer.Typer(
     no_args_is_help=True,
 )
 
+source_app = typer.Typer(
+    name="source",
+    help="Manage configured external knowledge sources.",
+    no_args_is_help=True,
+)
+
 
 def _find_root() -> Path:
     """Find project root or exit."""
@@ -655,7 +661,7 @@ def facts_cmd(
 # ---------- Knowledge source commands ----------
 
 
-@knowledge_app.command("attach")
+@knowledge_app.command("attach", hidden=True)
 def attach(
     source_type: Annotated[
         str,
@@ -743,7 +749,7 @@ def attach(
                     typer.echo(f"  - {issue}")
 
 
-@knowledge_app.command("detach")
+@knowledge_app.command("detach", hidden=True)
 def detach(
     name: Annotated[
         str,
@@ -793,7 +799,7 @@ def detach(
         typer.echo(f"  Removed: {mount_path.relative_to(root)}")
 
 
-@knowledge_app.command("render")
+@knowledge_app.command("render", hidden=True)
 def render() -> None:
     """Render imports.md from enabled knowledge profiles.
 
@@ -821,7 +827,7 @@ def render() -> None:
                 typer.echo(f"  {line}")
 
 
-@knowledge_app.command("status")
+@knowledge_app.command("status", hidden=True)
 def status_cmd() -> None:
     """Show knowledge integration status.
 
@@ -859,3 +865,19 @@ def status_cmd() -> None:
         typer.echo(f"\n  imports.md: {imports_path.relative_to(root)} (exists)")
     else:
         typer.echo("\n  imports.md: not generated (run 'simctl knowledge render')")
+
+
+@source_app.command("list")
+def source_list_cmd() -> None:
+    """Show configured external knowledge sources and legacy links."""
+    root = _find_root()
+    _list_sources(root)
+
+
+source_app.command("attach")(attach)
+source_app.command("detach")(detach)
+source_app.command("sync")(sync)
+source_app.command("render")(render)
+source_app.command("status")(status_cmd)
+
+knowledge_app.add_typer(source_app, name="source")

@@ -102,6 +102,19 @@ def test_add_fact_supports_structured_fields_and_supersedes(tmp_path: Path) -> N
     assert [fact.id for fact in visible] == ["f002"]
 
 
+def test_knowledge_help_shows_source_group() -> None:
+    result = runner.invoke(app, ["knowledge", "--help"])
+    assert result.exit_code == 0
+    assert "source" in result.output
+
+
+def test_knowledge_source_help_shows_grouped_commands() -> None:
+    result = runner.invoke(app, ["knowledge", "source", "--help"])
+    assert result.exit_code == 0
+    for cmd in ["list", "attach", "detach", "sync", "render", "status"]:
+        assert cmd in result.output
+
+
 # ---------- Knowledge source CLI tests ----------
 
 
@@ -353,6 +366,27 @@ def test_list_sources_no_config(tmp_path: Path) -> None:
 
     assert result.exit_code == 0
     assert "No external knowledge" in result.output
+
+
+def test_source_group_list_alias(tmp_path: Path) -> None:
+    toml = """
+[knowledge]
+enabled = true
+
+[[knowledge.sources]]
+name = "kb"
+type = "git"
+url = "https://github.com/lab/kb.git"
+mount = "refs/knowledge/kb"
+"""
+    project_root = _create_project(tmp_path, toml)
+
+    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+        result = runner.invoke(app, ["knowledge", "source", "list"])
+
+    assert result.exit_code == 0
+    assert "Configured knowledge sources" in result.output
+    assert "kb" in result.output
 
 
 def test_sync_supports_named_legacy_link(tmp_path: Path) -> None:
