@@ -123,7 +123,17 @@ def setup(
                     for issue in issues:
                         typer.echo(f"  Warning ({src.name}): {issue}")
 
-            render_imports(project_dir, kc)
+            # Discover agent docs and include in imports.md
+            from simctl.cli.init import (
+                _collect_doc_repos,
+                _discover_agent_docs,
+            )
+
+            doc_repos = _collect_doc_repos(sim_names) if sim_names else []
+            agent_docs = _discover_agent_docs(project_dir, doc_repos)
+            render_imports(
+                project_dir, kc, extra_imports=agent_docs or None
+            )
             typer.echo("  Rendered knowledge imports")
 
     # Print results

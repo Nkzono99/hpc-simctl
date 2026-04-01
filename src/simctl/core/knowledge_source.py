@@ -347,12 +347,23 @@ def discover_profiles(source_path: Path) -> list[str]:
 # ---------- Rendering ----------
 
 
-def render_imports(project_root: Path, config: KnowledgeConfig) -> Path:
+def render_imports(
+    project_root: Path,
+    config: KnowledgeConfig,
+    *,
+    extra_imports: list[str] | None = None,
+) -> Path:
     """Generate imports.md from enabled profiles.
 
     Reads each enabled profile file and generates a single
     ``imports.md`` that uses ``@import`` directives to reference
     source content.
+
+    Args:
+        project_root: Project root directory.
+        config: Knowledge configuration.
+        extra_imports: Additional relative paths to include as
+            ``@import`` directives (e.g. agent docs from refs/).
 
     Returns:
         Path to the generated imports.md file.
@@ -388,6 +399,11 @@ def render_imports(project_root: Path, config: KnowledgeConfig) -> Path:
                     f"<!-- profile {profile_name} not found "
                     f"in {source.name} -->"
                 )
+
+    if extra_imports:
+        lines.append("")
+        for path in extra_imports:
+            lines.append(f"@{path}")
 
     lines.append("")  # trailing newline
     imports_path.write_text("\n".join(lines), encoding="utf-8")

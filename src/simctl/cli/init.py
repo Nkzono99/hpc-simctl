@@ -365,6 +365,12 @@ def _build_simulator_guides(simulator_names: list[str]) -> str:
     return "\n".join(parts)
 
 
+def _build_cookbook_rule() -> str:
+    """Load the cookbook rule template for .claude/rules/."""
+    templates_dir = Path(__file__).resolve().parent.parent / "templates"
+    return (templates_dir / "rules" / "cookbook.md").read_text(encoding="utf-8")
+
+
 def _get_jinja_env() -> jinja2.Environment:
     """Return a Jinja2 environment that loads from simctl/templates/."""
     templates_dir = Path(__file__).resolve().parent.parent / "templates"
@@ -406,14 +412,9 @@ def _build_agent_md(
     project_name: str,
     simulator_names: list[str],
     *,
-    agent_doc_imports: list[str] | None = None,
     knowledge_imports_path: str = "",
 ) -> str:
     """Build shared agent instructions for CLAUDE.md / AGENTS.md."""
-    simulator_guides = ""
-    if simulator_names:
-        simulator_guides = _build_simulator_guides(simulator_names)
-
     doc_repos = _collect_doc_repos(simulator_names) if simulator_names else []
 
     env = _get_jinja_env()
@@ -421,9 +422,7 @@ def _build_agent_md(
     return template.render(
         doc_name=doc_name,
         project_name=project_name,
-        simulator_guides=simulator_guides,
         doc_repos=doc_repos,
-        agent_doc_imports=agent_doc_imports or [],
         knowledge_imports_path=knowledge_imports_path,
     )
 
@@ -432,7 +431,6 @@ def _build_claude_md(
     project_name: str,
     simulator_names: list[str],
     *,
-    agent_doc_imports: list[str] | None = None,
     knowledge_imports_path: str = "",
 ) -> str:
     """Build CLAUDE.md content."""
@@ -440,7 +438,6 @@ def _build_claude_md(
         "CLAUDE.md",
         project_name,
         simulator_names,
-        agent_doc_imports=agent_doc_imports,
         knowledge_imports_path=knowledge_imports_path,
     )
 
@@ -449,7 +446,6 @@ def _build_agents_md(
     project_name: str,
     simulator_names: list[str],
     *,
-    agent_doc_imports: list[str] | None = None,
     knowledge_imports_path: str = "",
 ) -> str:
     """Build AGENTS.md content."""
@@ -457,7 +453,6 @@ def _build_agents_md(
         "AGENTS.md",
         project_name,
         simulator_names,
-        agent_doc_imports=agent_doc_imports,
         knowledge_imports_path=knowledge_imports_path,
     )
 
@@ -1422,22 +1417,31 @@ def init(
         sync_all_sources as _sync_all,
     )
 
+    from simctl.core.knowledge_source import KnowledgeConfig
+
     kc = _load_kc(project_dir)
     if kc is not None and kc.sources:
         typer.echo("Syncing knowledge sources...")
         for name, status in _sync_all(project_dir, kc):
             typer.echo(f"  {name}: {status}")
-        _render_imports(project_dir, kc)
-    if kc is not None and kc.generate_claude_imports:
-        imports_file = project_dir / kc.derived_dir / "enabled" / "imports.md"
+    # Render imports.md with external sources + agent docs unified.
+    # Use default config if none exists but agent docs were discovered.
+    render_kc = kc if kc is not None else KnowledgeConfig()
+    if agent_doc_imports or (kc is not None and kc.sources):
+        _render_imports(
+            project_dir, render_kc, extra_imports=agent_doc_imports or None
+        )
+    if render_kc.generate_claude_imports:
+        imports_file = (
+            project_dir / render_kc.derived_dir / "enabled" / "imports.md"
+        )
         if imports_file.is_file():
-            knowledge_imports_path = f"{kc.derived_dir}/enabled/imports.md"
+            knowledge_imports_path = f"{render_kc.derived_dir}/enabled/imports.md"
 
     # CLAUDE.md (use sim_names from earlier — may come from args or interactive)
     claude_content = _build_claude_md(
         project_name,
         sim_names,
-        agent_doc_imports=agent_doc_imports,
         knowledge_imports_path=knowledge_imports_path,
     )
     if _write_if_missing(project_dir / _CLAUDE_MD, claude_content):
@@ -1449,7 +1453,6 @@ def init(
     agents_content = _build_agents_md(
         project_name,
         sim_names,
-        agent_doc_imports=agent_doc_imports,
         knowledge_imports_path=knowledge_imports_path,
     )
     if _write_if_missing(project_dir / _AGENTS_MD, agents_content):
@@ -1481,10 +1484,15 @@ def init(
     # .claude/rules/ (project-wide rules, split from CLAUDE.md)
     rules_base = project_dir / _RULES_DIR
     rules_base.mkdir(parents=True, exist_ok=True)
-    for rule_name, rule_content in [
+    rules_to_write: list[tuple[str, str]] = [
         ("simctl-workflow.md", _RULE_SIMCTL_WORKFLOW),
         ("plan-before-act.md", _RULE_PLAN_BEFORE_ACT),
-    ]:
+    ]
+    # Add cookbook rule if any simulator has a cookbook
+    if doc_repos:
+        cookbook_rule = _build_cookbook_rule()
+        rules_to_write.append(("cookbook.md", cookbook_rule))
+    for rule_name, rule_content in rules_to_write:
         rule_path = rules_base / rule_name
         display = f"{_RULES_DIR}/{rule_name}"
         if _write_if_missing(rule_path, rule_content):

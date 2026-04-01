@@ -1,0 +1,22 @@
+---
+globs: refs/**/cookbook/**
+---
+
+# Simulator Cookbook ルール
+
+`refs/` 以下のシミュレータリポジトリに `cookbook/` がある場合、
+入力例やフラグメントをパラメータ生成の出発点として使う。
+
+## 読取順序
+
+1. `refs/<repo>/cookbook/index.toml` で `tags` / `status` から候補を絞る
+2. 候補 entry の `meta.toml` で `[applicability]` と `[recommended]` を確認
+3. `input.toml` の実ファイルを読む
+4. fragment を使うときは `[merge]` と `[compatibility]` を確認してから合成
+
+## 注意
+
+- `status = "stable"` の entry を優先する
+- fragment の `[compatibility].requires_tags` を entry の tags と照合する
+- `[edit_policy]` の `immutable` パラメータは変更しない
+- `[cost]` を参考に計算資源を見積もる

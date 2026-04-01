@@ -139,15 +139,20 @@ class TestInit:
         assert "Skipped" in result.output
 
     def test_init_claude_md_with_simulators(self, tmp_path: Path) -> None:
-        """CLAUDE.md includes simulator-specific guides when simulators given."""
+        """CLAUDE.md includes refs but not inline simulator details."""
         runner.invoke(app, ["init", "emses", "beach", "-y", "--path", str(tmp_path)])
         content = (tmp_path / "CLAUDE.md").read_text(encoding="utf-8")
-        assert "EMSES" in content
-        assert "plasma.toml" in content
-        assert "BEACH" in content
-        assert "beach.toml" in content
+        # Simulator details are via imports.md, not inline
+        assert "シミュレータ固有知識" not in content
+        assert "Agent ガイド" not in content
         assert "simctl context" in content
         assert "campaign.toml" in content
+        # Ref repos should be listed
+        assert "リファレンスリポジトリ" in content
+        # Cookbook rule should be generated separately
+        cookbook_rule = tmp_path / ".claude" / "rules" / "cookbook.md"
+        assert cookbook_rule.exists()
+        assert "cookbook" in cookbook_rule.read_text(encoding="utf-8").lower()
 
     def test_init_claude_md_without_simulators(self, tmp_path: Path) -> None:
         """CLAUDE.md is generated without simulator sections when none given."""
@@ -155,6 +160,9 @@ class TestInit:
         content = (tmp_path / "CLAUDE.md").read_text(encoding="utf-8")
         assert "simctl" in content
         assert "シミュレータ固有知識" not in content
+        # No cookbook rule when no simulators
+        cookbook_rule = tmp_path / ".claude" / "rules" / "cookbook.md"
+        assert not cookbook_rule.exists()
 
     def test_init_agents_md(self, tmp_path: Path) -> None:
         """AGENTS.md is generated as a standalone instruction file."""
