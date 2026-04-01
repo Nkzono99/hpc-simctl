@@ -122,6 +122,7 @@ class BeachAdapter(SimulatorAdapter):
         return {
             "case.toml": load_static("adapters/beach/case.toml"),
             "beach.toml": load_static("adapters/beach/beach.toml"),
+            "summarize.py": load_static("adapters/beach/summarize.py"),
         }
 
     @classmethod

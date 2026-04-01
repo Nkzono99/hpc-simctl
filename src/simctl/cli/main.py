@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import typer
 
-from simctl.cli.analyze import collect, summarize
+from simctl.cli.analyze import collect, plot, summarize
 from simctl.cli.clone import clone
 from simctl.cli.config import config_app
 from simctl.cli.context import context
@@ -50,6 +50,7 @@ app.command("clone")(clone)
 app.command("extend")(extend)
 app.command("summarize")(summarize)
 app.command("collect")(collect)
+app.command("plot")(plot)
 app.command("archive")(archive)
 app.command("purge-work")(purge_work)
 app.command("update")(update)

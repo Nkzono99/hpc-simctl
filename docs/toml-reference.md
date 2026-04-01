@@ -217,6 +217,7 @@ Case template definition. Located in `cases/<case_name>/case.toml`.
 cases/
   flat_surface/
     case.toml          # メタデータ・パラメータ定義
+    summarize.py       # run 後の解析・可視化フック
     input/             # テンプレート入力ファイル
       plasma.toml
 ```
@@ -519,6 +520,7 @@ R20260329-0001/
 ## analysis/summary.json
 
 `simctl summarize` が生成する run の要約ファイル。Adapter が基本メトリクスを出力し、プロジェクトスクリプトで拡張できる。
+`simctl collect` 実行時も、completed run に `analysis/summary.json` が無い場合はこの生成処理が自動で走る。
 
 ### 基本構造
 
@@ -553,7 +555,8 @@ R20260329-0001/
 `simctl summarize` は Adapter の `summarize()` 実行後、以下の順でプロジェクトスクリプトを探索し、見つかれば実行する:
 
 1. `cases/<case>/summarize.py` — ケース固有の解析
-2. `scripts/summarize.py` — プロジェクト共通の解析
+2. `cases/<simulator>/<case>/summarize.py` — multi-simulator layout のケース解析
+3. `scripts/summarize.py` — プロジェクト共通の解析
 
 スクリプトは `summarize(run_dir, base_summary)` 関数を定義する:
 
@@ -581,6 +584,85 @@ def summarize(run_dir: Path, base_summary: dict) -> dict:
 ```
 
 スクリプトが例外を投げた場合は Warning を出力し、Adapter の summary のみで続行する。
+
+---
+
+## survey summary outputs
+
+`simctl collect <survey_dir>` は survey 配下の run を走査し、`<survey_dir>/summary/` に集計成果物を生成する。
+`simctl plot <survey_dir> --x <column> --y <column>` はこの集計結果を使って図を生成する。
+
+### 生成されるファイル
+
+| File | Description |
+|------|-------------|
+| `summary/survey_summary.csv` | ネストをフラット化した run 一覧。list/dict は JSON 文字列として保持。`origin.*`, `classification.*`, `variation.*`, `param.*` など manifest 由来の列も含む |
+| `summary/survey_summary.json` | run ごとの summary 原本、状態数、数値統計、warning を含む集計 JSON |
+| `summary/figures_index.json` | `analysis/figures/` と `summary.figures[]` を run ごとに引いた索引 |
+| `summary/survey_summary.md` | すぐ読める Markdown レポート |
+| `summary/plots/*.png` | `simctl plot` が生成する survey 可視化 |
+
+### 収集ルール
+
+- `analysis/summary.json` がある run はそれを利用する
+- completed run で `analysis/summary.json` が無い場合は自動 summarize してから集計する
+- completed 以外の run は state count には含めるが、summary が無ければ集計対象外
+
+### survey_summary.json の概要
+
+```jsonc
+{
+  "generated_at": "2026-04-01T10:57:41+00:00",
+  "survey_dir": "runs/beach_smoke",
+  "total_runs": 2,
+  "summaries_collected": 2,
+  "generated_summaries": 1,
+  "missing_summaries": 0,
+  "state_counts": {
+    "completed": 2
+  },
+  "numeric_stats": {
+    "potential_final_v": {
+      "count": 2,
+      "min": -1.35,
+      "max": 1.15,
+      "mean": -0.1
+    }
+  },
+  "warnings": [],
+  "runs": [
+    {
+      "run_id": "R20260401-0001",
+      "status": "completed",
+      "summary": {
+        "potential_final_v": 1.15
+      }
+    }
+  ]
+}
+```
+
+### plot command
+
+`simctl plot` は `survey_summary.json` の各 run から `flat_metadata` と `flat_summary` を統合した表を読み、指定列で可視化する。
+
+```bash
+simctl plot runs/sheath/angle_scan --list-columns
+simctl plot runs/sheath/angle_scan --x param.tmgrid_dt --y floating_potential_final
+simctl plot runs/sheath/angle_scan --x origin.case --y energy_total_ratio --kind bar
+simctl plot runs/sheath/angle_scan --x param.angle --y ion_flux --group param.seed
+```
+
+| Option | Description |
+|--------|-------------|
+| `--x` | x 軸列名 |
+| `--y` | y 軸列名 (数値列) |
+| `--kind` | `auto`, `line`, `scatter`, `bar` |
+| `--group` | シリーズ分割に使う列名 |
+| `--output` | 保存先パス |
+| `--list-columns` | 利用可能な列を表示して終了 |
+
+`--kind auto` では、x 列が数値なら line、非数値なら bar を選ぶ。
 
 ---
 

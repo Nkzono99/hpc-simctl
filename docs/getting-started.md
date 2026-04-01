@@ -71,6 +71,7 @@ Commands:
   clone       Clone a run.
   summarize   Generate run analysis summary.
   collect     Collect survey-level summary.
+  plot        Render a survey plot from collected summaries.
   archive     Archive a run.
   purge-work  Purge work directory files.
 ```
@@ -315,6 +316,7 @@ simctl new solar_wind_flat --survey
 ```
 
 `--survey` オプションを付けると、`runs/<case_name>/survey.toml` にスタブファイルも同時に生成されます。
+あわせて `cases/<simulator>/<case_name>/summarize.py` も scaffold されるため、run 完了後の解析処理をそのまま書き始められます。
 
 ### ディレクトリ構成
 
@@ -324,6 +326,7 @@ cases/
     solar_wind_flat/
       case.toml          # メタデータ・パラメータ定義
       plasma.toml        # シミュレータ入力ファイル (Adapter が生成)
+      summarize.py       # run 後の解析・可視化フック
       input/             # テンプレート入力ファイル (run の input/ にコピーされる)
 ```
 
@@ -622,6 +625,13 @@ simctl summarize R20260327-0001
 ```
 
 Adapter が出力ファイルを解析し、`analysis/summary.json` を生成します。
+`simctl new` で生成される `cases/<simulator>/<case>/summarize.py` があれば続けて実行され、追加メトリクスや `analysis/figures/` 配下の可視化も同時に保存できます。
+
+典型的な生成物:
+
+- `analysis/summary.json` - run ごとのメトリクス要約
+- `analysis/figures/*.png` - ケース固有のプロットや可視化
+- `analysis/figures/*.svg|*.pdf` - 必要に応じた追加図
 
 ### survey 集計
 
@@ -630,6 +640,33 @@ simctl collect runs/cavity/rectangular/u_aspect_scan
 ```
 
 survey 内の全 run の summary を収集し、集計データを生成します。
+completed run に `analysis/summary.json` がまだない場合、`collect` はその run を自動で summarize してから集計します。
+
+`runs/<survey>/summary/` には以下が生成されます:
+
+- `survey_summary.csv` - フラット化した run 一覧
+  `origin.*`, `classification.*`, `variation.*`, `param.*` 列も含まれるので、そのまま sweep 軸と結果を plotting しやすい
+- `survey_summary.json` - summary 原本と数値統計を含む集計 JSON
+- `figures_index.json` - 図の run 対応表
+- `survey_summary.md` - すぐ読める Markdown レポート
+
+### survey plot の生成
+
+まず列名を確認します:
+
+```bash
+simctl plot runs/cavity/rectangular/u_aspect_scan --list-columns
+```
+
+そのうえで、sweep 軸と観測量を指定して図を生成します:
+
+```bash
+simctl plot runs/cavity/rectangular/u_aspect_scan \
+  --x param.aspect \
+  --y potential_final_v
+```
+
+既定では `summary/plots/` に PNG を保存します。`--kind line|scatter|bar` や `--group param.seed` も指定できます。
 
 ---
 

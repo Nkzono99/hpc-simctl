@@ -96,7 +96,9 @@ simctl extend --run         # 生成して即投入
 
 ```bash
 simctl summarize                          # run の要約
-simctl collect runs/sheath/angle_scan     # survey 集計 CSV
+simctl collect runs/sheath/angle_scan     # survey 集計 artifacts (CSV/JSON/report)
+simctl plot runs/sheath/angle_scan --list-columns
+simctl plot runs/sheath/angle_scan --x param.angle --y ion_flux
 ```
 
 ## 知見管理

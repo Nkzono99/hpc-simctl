@@ -46,6 +46,20 @@ _DEFAULT_SIMCTL_REPO = "https://github.com/Nkzono99/hpc-simctl.git"
 
 
 
+def _safe_echo(message: str, *, err: bool = False) -> None:
+    """Echo text even when the console encoding cannot represent it."""
+    try:
+        typer.echo(message, err=err)
+    except UnicodeEncodeError:
+        stream = sys.stderr if err else sys.stdout
+        encoding = getattr(stream, "encoding", None) or "utf-8"
+        safe_message = message.encode(encoding, errors="replace").decode(
+            encoding,
+            errors="replace",
+        )
+        typer.echo(safe_message, err=err)
+
+
 def _write_if_missing(path: Path, content: str) -> bool:
     """Write content to path if the file does not already exist.
 
@@ -982,9 +996,9 @@ def _bootstrap_environment(
         if pkg_result.returncode == 0:
             created.append(f"pip install ({len(pip_pkgs)} packages)")
         else:
-            typer.echo(
+            _safe_echo(
                 f"  Warning: pip install failed:\n"
-                f"    {(pkg_result.stderr or '').strip()[:300]}"
+                f"    {(pkg_result.stderr or '').strip()[:300]}",
             )
 
     # 5. Activation hint
@@ -1242,6 +1256,9 @@ def init(
     # Knowledge integration: sync sources and render imports if configured
     knowledge_imports_path = ""
     from simctl.core.knowledge_source import (
+        KnowledgeConfig,
+    )
+    from simctl.core.knowledge_source import (
         load_knowledge_config as _load_kc,
     )
     from simctl.core.knowledge_source import (
@@ -1250,8 +1267,6 @@ def init(
     from simctl.core.knowledge_source import (
         sync_all_sources as _sync_all,
     )
-
-    from simctl.core.knowledge_source import KnowledgeConfig
 
     kc = _load_kc(project_dir)
     if kc is not None and kc.sources:

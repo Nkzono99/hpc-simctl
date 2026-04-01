@@ -98,6 +98,7 @@ class SimulatorAdapter(ABC):
         name = getattr(cls, "adapter_name", "generic")
         return {
             "case.toml": render("adapters/generic/case.toml.j2", name=name),
+            "summarize.py": render("adapters/generic/summarize.py"),
         }
 
     @classmethod

@@ -10,6 +10,7 @@ Each action wraps existing core functions -- no new domain logic lives here.
 
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -456,45 +457,23 @@ def summarize_run(run_dir: Path) -> ActionResult:
     if err:
         return _precondition_fail("summarize_run", err)
 
-    from simctl.core.manifest import read_manifest
-
-    manifest = read_manifest(run_dir)
-    sim_name = manifest.simulator.get("name", "unknown")
-
-    # Delegate to adapter if available
     try:
-        from simctl.adapters.registry import get as get_adapter_cls
+        from simctl.core.analysis import generate_run_summary
 
-        adapter_cls = get_adapter_cls(sim_name)
-        if adapter_cls is not None:
-            adapter = adapter_cls()
-            summary = adapter.summarize(run_dir)
-            return ActionResult(
-                action="summarize_run",
-                status=ActionStatus.SUCCESS,
-                message=f"Summary generated via {sim_name} adapter",
-                data={"summary": summary, "simulator": sim_name},
-            )
-    except (ImportError, SimctlError):
-        pass
-
-    # Fallback: list output files
-    analysis_dir = run_dir / "analysis"
-    work_dir = run_dir / "work"
-    outputs = (
-        [str(p.name) for p in work_dir.iterdir() if p.is_file()]
-        if work_dir.is_dir()
-        else []
-    )
+        result = generate_run_summary(run_dir)
+    except (KeyError, OSError, TypeError, json.JSONDecodeError, SimctlError) as e:
+        return _error("summarize_run", str(e))
 
     return ActionResult(
         action="summarize_run",
         status=ActionStatus.SUCCESS,
-        message="Basic summary (no adapter)",
+        message=f"Summary written to {result.summary_path}",
         data={
-            "simulator": sim_name,
-            "work_files": outputs[:50],
-            "has_analysis": analysis_dir.is_dir() and any(analysis_dir.iterdir()),
+            "run_id": result.run_id,
+            "summary": result.summary,
+            "summary_path": str(result.summary_path),
+            "script_path": str(result.script_path) if result.script_path else "",
+            "warnings": list(result.warnings),
         },
     )
 
@@ -531,14 +510,28 @@ def collect_survey(survey_dir: Path) -> ActionResult:
             f"No completed runs found under {survey_dir}",
         )
 
+    try:
+        from simctl.core.analysis import collect_survey_summaries
+
+        result = collect_survey_summaries(survey_dir)
+    except (OSError, TypeError, json.JSONDecodeError, SimctlError) as e:
+        return _error("collect_survey", str(e))
+
     return ActionResult(
         action="collect_survey",
         status=ActionStatus.SUCCESS,
-        message=f"Collected {len(run_data)} runs",
+        message=f"Collected {result.summaries_collected} summaries",
         data={
             "total_runs": len(run_data),
             "state_counts": {k: v for k, v in summary.items() if v > 0},
-            "runs": run_data,
+            "csv_path": str(result.csv_path),
+            "json_path": str(result.json_path),
+            "figures_path": str(result.figures_path),
+            "report_path": str(result.report_path),
+            "generated_summaries": result.generated_summaries,
+            "missing_summaries": result.missing_summaries,
+            "figure_count": len(result.figures),
+            "warnings": list(result.warnings),
         },
     )
 

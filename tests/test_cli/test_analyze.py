@@ -57,7 +57,7 @@ class TestSummarize:
 
         mock_adapter_cls = MagicMock(return_value=mock_adapter)
 
-        with patch("simctl.cli.analyze.get_adapter", return_value=mock_adapter_cls):
+        with patch("simctl.core.analysis.get_adapter", return_value=mock_adapter_cls):
             result = runner.invoke(app, ["summarize", str(run_dir)])
 
         assert result.exit_code == 0
@@ -73,7 +73,10 @@ class TestSummarize:
     def test_summarize_no_adapter(self, tmp_path: Path) -> None:
         run_dir = _create_run(tmp_path, "R20260327-0001")
 
-        with patch("simctl.cli.analyze.get_adapter", side_effect=KeyError("not found")):
+        with patch(
+            "simctl.core.analysis.get_adapter",
+            side_effect=KeyError("not found"),
+        ):
             result = runner.invoke(app, ["summarize", str(run_dir)])
 
         assert result.exit_code == 1
@@ -135,7 +138,7 @@ class TestSummarize:
         mock_adapter.summarize.return_value = {"energy": 42.0}
         mock_adapter_cls = MagicMock(return_value=mock_adapter)
 
-        with patch("simctl.cli.analyze.get_adapter", return_value=mock_adapter_cls):
+        with patch("simctl.core.analysis.get_adapter", return_value=mock_adapter_cls):
             result = runner.invoke(app, ["summarize", str(run_dir)])
 
         assert result.exit_code == 0
@@ -169,7 +172,7 @@ class TestSummarize:
         mock_adapter.summarize.return_value = {"steps": 100}
         mock_adapter_cls = MagicMock(return_value=mock_adapter)
 
-        with patch("simctl.cli.analyze.get_adapter", return_value=mock_adapter_cls):
+        with patch("simctl.core.analysis.get_adapter", return_value=mock_adapter_cls):
             result = runner.invoke(app, ["summarize", str(run_dir)])
 
         assert result.exit_code == 0
@@ -218,7 +221,7 @@ class TestSummarize:
         mock_adapter.summarize.return_value = {}
         mock_adapter_cls = MagicMock(return_value=mock_adapter)
 
-        with patch("simctl.cli.analyze.get_adapter", return_value=mock_adapter_cls):
+        with patch("simctl.core.analysis.get_adapter", return_value=mock_adapter_cls):
             result = runner.invoke(app, ["summarize", str(run_dir)])
 
         assert result.exit_code == 0
@@ -248,7 +251,7 @@ class TestSummarize:
         mock_adapter.summarize.return_value = {"ok": True}
         mock_adapter_cls = MagicMock(return_value=mock_adapter)
 
-        with patch("simctl.cli.analyze.get_adapter", return_value=mock_adapter_cls):
+        with patch("simctl.core.analysis.get_adapter", return_value=mock_adapter_cls):
             result = runner.invoke(app, ["summarize", str(run_dir)])
 
         # Should succeed with adapter summary (script failure is warning)
@@ -298,7 +301,7 @@ class TestSummarize:
         mock_adapter.summarize.return_value = {}
         mock_adapter_cls = MagicMock(return_value=mock_adapter)
 
-        with patch("simctl.cli.analyze.get_adapter", return_value=mock_adapter_cls):
+        with patch("simctl.core.analysis.get_adapter", return_value=mock_adapter_cls):
             result = runner.invoke(app, ["summarize", str(run_dir)])
 
         assert result.exit_code == 0
@@ -307,6 +310,44 @@ class TestSummarize:
         assert len(data["figures"]) == 1
         assert data["figures"][0]["path"] == "figures/plot.png"
         assert (run_dir / "analysis" / "figures" / "plot.png").exists()
+
+    def test_summarize_with_multisim_case_script(self, tmp_path: Path) -> None:
+        """Case scripts under cases/<simulator>/<case>/ are discovered."""
+        with open(tmp_path / "simproject.toml", "wb") as f:
+            tomli_w.dump(_PROJECT_TOML, f)
+
+        case_dir = tmp_path / "cases" / "emses" / "mycase"
+        case_dir.mkdir(parents=True)
+        (case_dir / "summarize.py").write_text(
+            textwrap.dedent("""\
+                def summarize(run_dir, base_summary):
+                    base_summary["source"] = "multi-sim"
+                    return base_summary
+            """),
+            encoding="utf-8",
+        )
+
+        runs_dir = tmp_path / "runs"
+        run_dir = _create_run(runs_dir, "R20260327-0001")
+        manifest: dict[str, Any] = {
+            "run": {"id": "R20260327-0001", "status": "completed"},
+            "origin": {"case": "mycase"},
+            "simulator": {"name": "emses", "adapter": "test_adapter"},
+        }
+        with open(run_dir / "manifest.toml", "wb") as f:
+            tomli_w.dump(manifest, f)
+
+        mock_adapter = MagicMock()
+        mock_adapter.summarize.return_value = {}
+        mock_adapter_cls = MagicMock(return_value=mock_adapter)
+
+        with patch("simctl.core.analysis.get_adapter", return_value=mock_adapter_cls):
+            result = runner.invoke(app, ["summarize", str(run_dir)])
+
+        assert result.exit_code == 0
+        with open(run_dir / "analysis" / "summary.json") as f:
+            data = json.load(f)
+        assert data["source"] == "multi-sim"
 
 
 class TestCollect:
@@ -323,7 +364,13 @@ class TestCollect:
         assert "Collected 2 summaries" in result.output
 
         csv_path = tmp_path / "summary" / "survey_summary.csv"
+        json_path = tmp_path / "summary" / "survey_summary.json"
+        figures_path = tmp_path / "summary" / "figures_index.json"
+        report_path = tmp_path / "summary" / "survey_summary.md"
         assert csv_path.exists()
+        assert json_path.exists()
+        assert figures_path.exists()
+        assert report_path.exists()
         content = csv_path.read_text()
         assert "run_id" in content
         assert "energy" in content
@@ -354,7 +401,150 @@ class TestCollect:
         assert "Collected 1 summaries" in result.output
         assert "1 runs missing" in result.output
 
+    def test_collect_auto_summarizes_completed_runs(self, tmp_path: Path) -> None:
+        run_dir = _create_run(tmp_path, "R20260327-0001")
+
+        mock_adapter = MagicMock()
+        mock_adapter.summarize.return_value = {"energy": 12.5}
+        mock_adapter_cls = MagicMock(return_value=mock_adapter)
+
+        with patch("simctl.core.analysis.get_adapter", return_value=mock_adapter_cls):
+            result = runner.invoke(app, ["collect", str(tmp_path)])
+
+        assert result.exit_code == 0
+        assert "Collected 1 summaries" in result.output
+        assert "Auto-summarized: 1" in result.output
+        assert (run_dir / "analysis" / "summary.json").exists()
+
+    def test_collect_flattens_nested_metrics_and_indexes_figures(
+        self, tmp_path: Path
+    ) -> None:
+        run_dir = _create_run(tmp_path, "R20260327-0001")
+        figures_dir = run_dir / "analysis" / "figures"
+        figures_dir.mkdir(exist_ok=True)
+        (figures_dir / "plot.png").write_bytes(b"fake png")
+
+        with open(run_dir / "analysis" / "summary.json", "w", encoding="utf-8") as f:
+            json.dump(
+                {
+                    "energy": 10.0,
+                    "output_counts": {"logs": 2},
+                    "figures": [
+                        {"path": "figures/plot.png", "caption": "Test plot"},
+                    ],
+                },
+                f,
+            )
+
+        result = runner.invoke(app, ["collect", str(tmp_path)])
+        assert result.exit_code == 0
+
+        csv_content = (tmp_path / "summary" / "survey_summary.csv").read_text(
+            encoding="utf-8"
+        )
+        assert "output_counts.logs" in csv_content
+
+        figures_index = json.loads(
+            (tmp_path / "summary" / "figures_index.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        assert figures_index["figures"][0]["path"].endswith("figures/plot.png")
+        assert figures_index["figures"][0]["caption"] == "Test plot"
+
+    def test_collect_includes_manifest_context_columns(self, tmp_path: Path) -> None:
+        run_dir = _create_run(tmp_path, "R20260327-0001")
+        manifest: dict[str, Any] = {
+            "run": {
+                "id": "R20260327-0001",
+                "display_name": "u400_a4",
+                "status": "completed",
+            },
+            "origin": {"case": "cavity_base", "survey": "u_scan"},
+            "classification": {
+                "model": "cavity",
+                "submodel": "rectangular",
+                "tags": ["scan"],
+            },
+            "simulator": {"name": "test_sim", "adapter": "test_adapter"},
+            "launcher": {"name": "srun"},
+            "variation": {"u": 400000.0},
+            "params_snapshot": {"u": 400000.0, "aspect": 4.0},
+        }
+        with open(run_dir / "manifest.toml", "wb") as f:
+            tomli_w.dump(manifest, f)
+        with open(run_dir / "analysis" / "summary.json", "w", encoding="utf-8") as f:
+            json.dump({"energy": 10.0}, f)
+
+        result = runner.invoke(app, ["collect", str(tmp_path)])
+        assert result.exit_code == 0
+
+        csv_content = (tmp_path / "summary" / "survey_summary.csv").read_text(
+            encoding="utf-8"
+        )
+        assert "origin.case" in csv_content
+        assert "classification.model" in csv_content
+        assert "variation.u" in csv_content
+        assert "param.u" in csv_content
+        assert "param.aspect" in csv_content
+
+        aggregate = json.loads(
+            (tmp_path / "summary" / "survey_summary.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        assert aggregate["runs"][0]["flat_metadata"]["origin.case"] == "cavity_base"
+        assert aggregate["runs"][0]["flat_metadata"]["param.u"] == 400000.0
+
     def test_collect_nonexistent_dir(self) -> None:
         result = runner.invoke(app, ["collect", "/nonexistent/path"])
         assert result.exit_code == 1
         assert "Error" in result.output
+
+
+class TestPlot:
+    def test_plot_requires_x_and_y(self, tmp_path: Path) -> None:
+        result = runner.invoke(app, ["plot", str(tmp_path)])
+        assert result.exit_code == 1
+        assert "--x and --y are required" in result.output
+
+    def test_plot_lists_columns(self, tmp_path: Path) -> None:
+        run_dir = _create_run(tmp_path, "R20260327-0001")
+        manifest: dict[str, Any] = {
+            "run": {
+                "id": "R20260327-0001",
+                "display_name": "u400_a4",
+                "status": "completed",
+            },
+            "simulator": {"name": "test_sim", "adapter": "test_adapter"},
+            "params_snapshot": {"u": 400000.0},
+        }
+        with open(run_dir / "manifest.toml", "wb") as f:
+            tomli_w.dump(manifest, f)
+        with open(run_dir / "analysis" / "summary.json", "w", encoding="utf-8") as f:
+            json.dump({"energy": 10.0}, f)
+
+        result = runner.invoke(app, ["plot", str(tmp_path), "--list-columns"])
+
+        assert result.exit_code == 0
+        assert "Available columns" in result.output
+        assert "param.u" in result.output
+        assert "energy" in result.output
+
+    def test_plot_success(self, tmp_path: Path) -> None:
+        output_path = tmp_path / "summary" / "plots" / "energy_vs_param_u.png"
+        mock_result = MagicMock()
+        mock_result.output_path = output_path
+        mock_result.kind = "line"
+        mock_result.points_plotted = 2
+        mock_result.generated_summaries = 0
+
+        with patch("simctl.cli.analyze.render_survey_plot", return_value=mock_result):
+            result = runner.invoke(
+                app,
+                ["plot", str(tmp_path), "--x", "param.u", "--y", "energy"],
+            )
+
+        assert result.exit_code == 0
+        assert "Plot written" in result.output
+        assert "Kind: line" in result.output

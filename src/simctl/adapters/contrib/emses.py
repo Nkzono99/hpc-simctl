@@ -133,6 +133,7 @@ class EmseAdapter(SimulatorAdapter):
         return {
             "case.toml": load_static("adapters/emses/case.toml"),
             "plasma.toml": load_static("adapters/emses/plasma.toml"),
+            "summarize.py": load_static("adapters/emses/summarize.py"),
         }
 
     @classmethod
