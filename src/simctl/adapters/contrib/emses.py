@@ -177,6 +177,10 @@ class EmseAdapter(SimulatorAdapter):
                 "https://github.com/CS12-Laboratory/MPIEMSES3D.git",
                 "MPIEMSES3D",
             ),
+            (
+                "https://github.com/Nkzono99/emout.git",
+                "emout",
+            ),
         ]
 
     @classmethod
@@ -192,6 +196,10 @@ class EmseAdapter(SimulatorAdapter):
                 "cookbook/index.toml",
                 "cookbook/**/*.toml",
                 "cookbook/**/*.md",
+            ],
+            "emout": [
+                "README.md",
+                "docs/agent-user-guide.md",
             ],
         }
 
