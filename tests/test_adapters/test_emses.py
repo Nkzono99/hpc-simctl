@@ -88,6 +88,17 @@ class TestKnowledgeSources:
         assert "cookbook/**/*.md" in patterns
 
 
+class TestCaseTemplate:
+    def test_summarize_scaffold_focuses_on_profiles_and_conductors(self) -> None:
+        templates = EmseAdapter.case_template()
+        summarize_script = templates["summarize.py"]
+
+        assert "potential_density_profile.png" in summarize_script
+        assert "unit.phi.reverse" in summarize_script
+        assert "inp.npc" in summarize_script
+        assert "energy_total.png" not in summarize_script
+
+
 # ===================================================================
 # 2. render_inputs
 # ===================================================================
@@ -98,7 +109,7 @@ class TestRenderInputs:
         self, adapter: EmseAdapter, run_dir: Path, case_data: dict[str, Any]
     ) -> None:
         created = adapter.render_inputs(case_data, run_dir)
-        assert "input/plasma.toml" in created
+        assert any(Path(path).name == "plasma.toml" for path in created)
         assert (run_dir / "input" / "plasma.toml").exists()
 
     def test_applies_overrides(
