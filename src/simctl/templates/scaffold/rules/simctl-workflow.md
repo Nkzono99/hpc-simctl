@@ -14,7 +14,8 @@
 - **simctl コマンド実行前に `.venv/` を activate する**
 
 ## case 作成
-- **case は `simctl new` で生成する** (case.toml を手書きしない)
+- **case は `simctl new <name> -s <simulator>` で生成する** (cases/<sim>/ に自動配置)
+- 生成された case.toml や入力テンプレートの編集は自由
 
 ## 知見の記録
 - 実験の知見・結果は Agent の memory ではなく `/learn` で保存する

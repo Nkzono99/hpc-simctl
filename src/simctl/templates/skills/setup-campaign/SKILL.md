@@ -74,7 +74,7 @@ unit = "V (normalized)"
 1. `campaign.toml` を更新する
 2. 記入内容のサマリーを表示する
 3. 次のステップを提案する:
-   - ケースが未作成なら `simctl new <case_name> -s <simulator>` を提案
+   - ケースが未作成なら `simctl new <case_name> -s <simulator>` を提案 (cases/<sim>/ に自動生成)
    - ケースが既存なら survey 設計を提案
 
 ## 注意

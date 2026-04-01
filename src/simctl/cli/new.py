@@ -38,7 +38,11 @@ def new(
     ] = None,
     dest: Annotated[
         Optional[Path],
-        typer.Option("--dest", "-d", help="Destination directory (defaults to cwd)."),
+        typer.Option(
+            "--dest",
+            "-d",
+            help="Destination directory (defaults to cases/<simulator>/).",
+        ),
     ] = None,
     survey: Annotated[
         bool,
@@ -50,21 +54,40 @@ def new(
 ) -> None:
     """Create a new case template with simulator-specific boilerplate.
 
-    Auto-detects the simulator from the current directory if under cases/<sim>/.
+    When --dest is omitted, the case is created under cases/<simulator>/
+    (resolved from the project root).  If the simulator cannot be determined,
+    an explicit --simulator/-s is required.
 
     Examples:
+      simctl new flat_surface -s emses
+      simctl new periodic -s beach --survey
       cd cases/emses && simctl new flat_surface
-      cd cases/beach && simctl new periodic
-      simctl new mycase -s emses -d cases/emses
-      simctl new mycase -s emses --survey  # also generate survey.toml
+      simctl new mycase -d /path/to/dest -s emses
     """
-    target_dir = (dest or Path.cwd()).resolve()
+    # Detect simulator early: from --simulator, or from dest/cwd path
+    cwd = Path.cwd().resolve()
+    sim_name = simulator or _detect_simulator((dest or cwd).resolve())
 
-    # Detect simulator
-    sim_name = simulator or _detect_simulator(target_dir)
+    # Resolve target_dir: use dest if given, otherwise cases/<sim>/ from project root
+    if dest is not None:
+        target_dir = dest.resolve()
+    elif sim_name is not None:
+        project_root_candidate: Path | None = None
+        with contextlib.suppress(Exception):
+            project_root_candidate = find_project_root(cwd)
+        if project_root_candidate is not None:
+            target_dir = (project_root_candidate / "cases" / sim_name).resolve()
+        else:
+            target_dir = cwd
+    else:
+        target_dir = cwd
+
+    # Final simulator detection from resolved target_dir
+    if sim_name is None:
+        sim_name = _detect_simulator(target_dir)
     if sim_name is None:
         typer.echo(
-            "Cannot detect simulator from current directory.\n"
+            "Cannot detect simulator.\n"
             "Use --simulator/-s or run from inside cases/<simulator>/."
         )
         raise typer.Exit(code=1)

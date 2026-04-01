@@ -17,15 +17,17 @@ disable-model-invocation: true
 ## ケースの作成
 
 ```bash
-# cases/<sim>/ 以下で実行すると simulator を自動検出
-cd cases/emses
-simctl new my_case
-
-# simulator を明示指定
-simctl new my_case -s emses -d cases/emses
+# simulator を指定するだけで cases/<sim>/ 以下に自動生成
+simctl new my_case -s emses
 
 # survey.toml も同時に生成
 simctl new my_case -s emses --survey
+
+# cases/<sim>/ 以下にいれば -s 不要 (自動検出)
+cd cases/emses && simctl new my_case
+
+# 明示的に生成先を指定
+simctl new my_case -s emses -d /path/to/dest
 ```
 
 生成されるファイル:

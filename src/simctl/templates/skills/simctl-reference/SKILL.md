@@ -22,10 +22,12 @@ simctl history -n 0   # 全件
 ## Case を作る
 
 ```bash
+# simulator 指定で cases/<sim>/ 以下に自動生成
+simctl new my_case -s emses
 # cases/<sim>/ 以下なら simulator を自動検出
 cd cases/emses && simctl new my_case
-# simulator を明示
-simctl new my_case -s emses -d cases/emses
+# 生成先を明示指定
+simctl new my_case -s emses -d /path/to/dest
 ```
 
 ## Run を作る
