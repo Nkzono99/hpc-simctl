@@ -165,8 +165,7 @@ class TestInit:
         content = agents_path.read_text(encoding="utf-8")
         assert "simctl" in content
         assert "simctl context" in content
-        assert "plan を出す" in content
-        assert "simctl run --all" in content
+        assert "役割分担" in content
 
     def test_init_skills(self, tmp_path: Path) -> None:
         """Individual SKILL.md files are created under .claude/skills/."""
@@ -189,6 +188,48 @@ class TestInit:
         ).read_text(encoding="utf-8")
         assert "emout" in content
         assert "h5py" in content
+
+    def test_init_claude_settings(self, tmp_path: Path) -> None:
+        """Team-shared .claude/settings.json is created with permissions."""
+        runner.invoke(app, ["init", "-y", "--path", str(tmp_path)])
+        settings_path = tmp_path / ".claude" / "settings.json"
+        assert settings_path.exists()
+        import json
+
+        data = json.loads(settings_path.read_text(encoding="utf-8"))
+        assert "permissions" in data
+        assert "allow" in data["permissions"]
+        assert any("simctl" in r for r in data["permissions"]["allow"])
+
+    def test_init_claude_rules(self, tmp_path: Path) -> None:
+        """Project rules are created in .claude/rules/."""
+        runner.invoke(app, ["init", "-y", "--path", str(tmp_path)])
+        rules_dir = tmp_path / ".claude" / "rules"
+        assert (rules_dir / "simctl-workflow.md").exists()
+        assert (rules_dir / "plan-before-act.md").exists()
+        workflow = (rules_dir / "simctl-workflow.md").read_text(encoding="utf-8")
+        assert "manifest.toml" in workflow
+
+    def test_init_subdirectory_claude_md(self, tmp_path: Path) -> None:
+        """Context-specific CLAUDE.md files are created in cases/ and runs/."""
+        runner.invoke(app, ["init", "-y", "--path", str(tmp_path)])
+        assert (tmp_path / "cases" / "CLAUDE.md").exists()
+        assert (tmp_path / "runs" / "CLAUDE.md").exists()
+        cases_content = (tmp_path / "cases" / "CLAUDE.md").read_text(
+            encoding="utf-8"
+        )
+        assert "case.toml" in cases_content
+        runs_content = (tmp_path / "runs" / "CLAUDE.md").read_text(
+            encoding="utf-8"
+        )
+        assert "manifest.toml" in runs_content
+
+    def test_init_gitignore_personal_overrides(self, tmp_path: Path) -> None:
+        """.gitignore excludes personal agent override files."""
+        runner.invoke(app, ["init", "-y", "--path", str(tmp_path)])
+        content = (tmp_path / ".gitignore").read_text(encoding="utf-8")
+        assert "CLAUDE.local.md" in content
+        assert "settings.local.json" in content
 
     def test_init_with_simulators(self, tmp_path: Path) -> None:
         """Init with simulator names generates default simulators.toml."""

@@ -37,6 +37,8 @@ _CAMPAIGN_FILE = "campaign.toml"
 _CLAUDE_MD = "CLAUDE.md"
 _AGENTS_MD = "AGENTS.md"
 _SKILLS_DIR = ".claude/skills"
+_RULES_DIR = ".claude/rules"
+_CLAUDE_SETTINGS = ".claude/settings.json"
 _VSCODE_DIR = ".vscode"
 _VSCODE_SETTINGS = "settings.json"
 
@@ -71,6 +73,10 @@ runs/**/work/*.log
 # analysis cache
 runs/**/analysis/cache/
 runs/**/analysis/.ipynb_checkpoints/
+
+# Personal agent overrides (not shared)
+CLAUDE.local.md
+.claude/settings.local.json
 """
 
 _VSCODE_SETTINGS_CONTENT = """\
@@ -83,6 +89,74 @@ _VSCODE_SETTINGS_CONTENT = """\
         "VIRTUAL_ENV_DISABLE_PROMPT": "1"
     }
 }
+"""
+
+_CLAUDE_SETTINGS_CONTENT = """\
+{
+  "permissions": {
+    "allow": [
+      "Bash(simctl *)",
+      "Bash(uv run pytest*)",
+      "Bash(uv run ruff*)",
+      "Bash(uv run mypy*)",
+      "Bash(source .venv/bin/activate*)",
+      "Bash(cat runs/*/work/*.out*)",
+      "Bash(cat runs/*/work/*.err*)",
+      "Bash(git status*)",
+      "Bash(git log*)",
+      "Bash(git diff*)"
+    ],
+    "deny": [
+      "Bash(rm -rf *)",
+      "Bash(git push --force*)",
+      "Bash(git reset --hard*)"
+    ]
+  }
+}
+"""
+
+_RULE_SIMCTL_WORKFLOW = """\
+# simctl ワークフロールール
+
+## ファイル操作の制約
+- run ディレクトリ (`Rxxxx/`) は手で作らない
+- `manifest.toml` は手動編集しない
+- `Rxxxx/input/*` は直接作らない
+- `Rxxxx/submit/job.sh` は手書きしない
+- run は必ず `simctl create` または `simctl sweep` で生成する
+- `work/` と `.simctl/knowledge/` の自動生成物は手で整形しない
+- `runs/**/input/*` を緊急修正した場合は、同じ修正を上流へ戻す
+- `tools/hpc-simctl/` は参照用。通常は編集しない
+
+## venv
+- **simctl コマンド実行前に `.venv/` を activate する**
+
+## case 作成
+- **case は `simctl new` で生成する** (case.toml を手書きしない)
+
+## 知見の記録
+- 実験の知見・結果は Agent の memory ではなく `/learn` で保存する
+- 保存先: `.simctl/insights/`, `.simctl/facts.toml`
+- `high` confidence は複数 run の再現か deterministic 確認がある場合だけ使う
+"""
+
+_RULE_PLAN_BEFORE_ACT = """\
+# 実行前ルール
+
+複数ファイル編集または高コスト操作の前には、短い plan を出す。
+
+```json
+{
+  "goal": "what you want to achieve",
+  "edits": ["file1.toml", "file2.toml"],
+  "commands": ["simctl sweep ...", "simctl run --all ..."],
+  "checkpoints": ["Confirm survey size before bulk submit"]
+}
+```
+
+- 高コスト操作では run 数・queue・retry 理由を書く
+- plan にない高コスト操作をいきなり実行しない
+- approval が必要な操作は、plan を出したところで止まる
 """
 
 
@@ -363,7 +437,9 @@ def _build_claude_md(
 ) -> str:
     """Build CLAUDE.md content."""
     return _build_agent_md(
-        "CLAUDE.md", project_name, simulator_names,
+        "CLAUDE.md",
+        project_name,
+        simulator_names,
         agent_doc_imports=agent_doc_imports,
         knowledge_imports_path=knowledge_imports_path,
     )
@@ -378,7 +454,9 @@ def _build_agents_md(
 ) -> str:
     """Build AGENTS.md content."""
     return _build_agent_md(
-        "AGENTS.md", project_name, simulator_names,
+        "AGENTS.md",
+        project_name,
+        simulator_names,
         agent_doc_imports=agent_doc_imports,
         knowledge_imports_path=knowledge_imports_path,
     )
@@ -483,9 +561,13 @@ def _search_knowledge_repos() -> list[tuple[str, str]]:
     """
     result = subprocess.run(
         [
-            "gh", "repo", "list",
-            "--limit", "50",
-            "--json", "nameWithOwner,sshUrl,description",
+            "gh",
+            "repo",
+            "list",
+            "--limit",
+            "50",
+            "--json",
+            "nameWithOwner,sshUrl,description",
         ],
         capture_output=True,
         text=True,
@@ -529,9 +611,7 @@ def _prompt_knowledge_sources(
     """
     from simctl.core.knowledge_source import KnowledgeSource
 
-    want = typer.confirm(
-        "\nAttach shared knowledge repositories?", default=False
-    )
+    want = typer.confirm("\nAttach shared knowledge repositories?", default=False)
     if not want:
         return []
 
@@ -547,8 +627,7 @@ def _prompt_knowledge_sources(
             typer.echo(f"    {i}. {full_name}")
 
         selection = typer.prompt(
-            "\n  Select repos (comma-separated numbers, "
-            "Enter to skip)",
+            "\n  Select repos (comma-separated numbers, Enter to skip)",
             default="",
         )
 
@@ -571,9 +650,7 @@ def _prompt_knowledge_sources(
                         )
                     )
                 else:
-                    typer.echo(
-                        f"    Warning: ignoring invalid number '{token}'"
-                    )
+                    typer.echo(f"    Warning: ignoring invalid number '{token}'")
     else:
         typer.echo("  No *shared_knowledge* repos found on GitHub.")
 
@@ -612,9 +689,7 @@ def _prompt_knowledge_sources(
         else:
             # Local path
             p = Path(manual).expanduser()
-            source_name = typer.prompt(
-                "    Source name", default=p.name
-            )
+            source_name = typer.prompt("    Source name", default=p.name)
             selected_sources.append(
                 KnowledgeSource(
                     name=source_name,
@@ -626,9 +701,7 @@ def _prompt_knowledge_sources(
         typer.echo(f"    Added: {source_name}")
 
     if selected_sources:
-        typer.echo(
-            f"\n  {len(selected_sources)} knowledge source(s) selected."
-        )
+        typer.echo(f"\n  {len(selected_sources)} knowledge source(s) selected.")
     return selected_sources
 
 
@@ -1057,6 +1130,83 @@ def _bootstrap_environment(
     typer.echo("  Then: simctl doctor")
 
 
+def _create_subdirectory_claude_md(
+    project_dir: Path,
+    sim_names: list[str],
+    created: list[str],
+    skipped: list[str],
+) -> None:
+    """Create context-specific CLAUDE.md in cases/ and runs/ subdirectories.
+
+    These are lazily loaded by Claude Code when the agent navigates into
+    the subdirectory, providing focused context without bloating the root
+    CLAUDE.md.
+    """
+    # cases/CLAUDE.md
+    cases_md = project_dir / "cases" / "CLAUDE.md"
+    if cases_md.parent.exists():
+        if _write_if_missing(cases_md, _CASES_CLAUDE_MD):
+            created.append("cases/CLAUDE.md")
+        else:
+            skipped.append("cases/CLAUDE.md")
+
+    # runs/CLAUDE.md
+    runs_md = project_dir / "runs" / "CLAUDE.md"
+    if runs_md.parent.exists():
+        if _write_if_missing(runs_md, _RUNS_CLAUDE_MD):
+            created.append("runs/CLAUDE.md")
+        else:
+            skipped.append("runs/CLAUDE.md")
+
+
+_CASES_CLAUDE_MD = """\
+# cases/ ディレクトリ
+
+ここには simulation case の定義を置く。
+
+## 構造
+
+```
+cases/<simulator>/<case-name>/
+  case.toml          # パラメータ定義
+  survey.toml        # (optional) パラメータ掃引定義
+  templates/         # 入力テンプレート
+```
+
+## ルール
+
+- case は `simctl new <name>` で生成する (手書きしない)
+- survey 付きは `simctl new <name> --survey`
+- case.toml の編集は自由だが、フォーマットは `simctl-reference` スキルを参照
+- テンプレートの Jinja2 変数は case.toml の `[parameters]` から展開される
+"""
+
+_RUNS_CLAUDE_MD = """\
+# runs/ ディレクトリ
+
+ここには simulation run が格納される。すべて `simctl create` / `simctl sweep` で生成。
+
+## 構造
+
+```
+runs/<path>/Rxxxx/
+  manifest.toml      # 正本 (状態・由来・provenance)
+  input/             # 入力ファイル (自動生成)
+  submit/            # job.sh 等 (自動生成)
+  work/              # 実行時出力 (.gitignore 対象)
+  analysis/          # 解析結果
+```
+
+## ルール
+
+- run ディレクトリ (`Rxxxx/`) を手で作らない
+- `manifest.toml` を手動編集しない
+- `input/*`, `submit/job.sh` を直接作らない
+- 状態確認は `simctl status`、同期は `simctl sync`
+- 解析は `simctl summarize` / `simctl collect`
+"""
+
+
 def init(
     simulators: Annotated[
         Optional[list[str]],
@@ -1272,6 +1422,7 @@ def init(
     from simctl.core.knowledge_source import (
         sync_all_sources as _sync_all,
     )
+
     kc = _load_kc(project_dir)
     if kc is not None and kc.sources:
         typer.echo("Syncing knowledge sources...")
@@ -1285,7 +1436,9 @@ def init(
 
     # CLAUDE.md (use sim_names from earlier — may come from args or interactive)
     claude_content = _build_claude_md(
-        project_name, sim_names, agent_doc_imports=agent_doc_imports,
+        project_name,
+        sim_names,
+        agent_doc_imports=agent_doc_imports,
         knowledge_imports_path=knowledge_imports_path,
     )
     if _write_if_missing(project_dir / _CLAUDE_MD, claude_content):
@@ -1295,7 +1448,9 @@ def init(
 
     # AGENTS.md
     agents_content = _build_agents_md(
-        project_name, sim_names, agent_doc_imports=agent_doc_imports,
+        project_name,
+        sim_names,
+        agent_doc_imports=agent_doc_imports,
         knowledge_imports_path=knowledge_imports_path,
     )
     if _write_if_missing(project_dir / _AGENTS_MD, agents_content):
@@ -1315,6 +1470,31 @@ def init(
             created.append(display)
         else:
             skipped.append(display)
+
+    # .claude/settings.json (team-shared permissions)
+    claude_settings_path = project_dir / _CLAUDE_SETTINGS
+    claude_settings_path.parent.mkdir(parents=True, exist_ok=True)
+    if _write_if_missing(claude_settings_path, _CLAUDE_SETTINGS_CONTENT):
+        created.append(_CLAUDE_SETTINGS)
+    else:
+        skipped.append(_CLAUDE_SETTINGS)
+
+    # .claude/rules/ (project-wide rules, split from CLAUDE.md)
+    rules_base = project_dir / _RULES_DIR
+    rules_base.mkdir(parents=True, exist_ok=True)
+    for rule_name, rule_content in [
+        ("simctl-workflow.md", _RULE_SIMCTL_WORKFLOW),
+        ("plan-before-act.md", _RULE_PLAN_BEFORE_ACT),
+    ]:
+        rule_path = rules_base / rule_name
+        display = f"{_RULES_DIR}/{rule_name}"
+        if _write_if_missing(rule_path, rule_content):
+            created.append(display)
+        else:
+            skipped.append(display)
+
+    # Subdirectory CLAUDE.md files (lazy-loaded context)
+    _create_subdirectory_claude_md(project_dir, sim_names, created, skipped)
 
     # .vscode/settings.json
     vscode_dir = project_dir / _VSCODE_DIR
