@@ -38,6 +38,8 @@ simctl doctor
 
 `simctl init` がディレクトリ構造と初期ファイルを作ります（詳細は [README.md](../README.md) を参照）。
 初期セットアップを細かく確認するより、すぐにエージェントへ研究内容を渡して構成を整えてもらう方が早いです。
+あわせて Claude Code 向けのガードも生成され、`manifest.toml`、`input/`、`submit/job.sh`、
+`SITE.md` などの生成物は直接編集しない前提になります。
 
 運用全体を俯瞰したい場合は [AI Agent 運用概念図](project-flow.md) を先に見ると、
 `campaign.toml`・`case.toml`・`survey.toml`・`manifest.toml` がそれぞれ何の役割を持つか掴みやすくなります。

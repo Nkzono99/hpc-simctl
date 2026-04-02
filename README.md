@@ -69,10 +69,16 @@ my-simulation-project/
   simproject.toml      # プロジェクト設定
   simulators.toml      # シミュレータ定義
   launchers.toml       # Launcher Profile 定義
+  SITE.md              # site profile 由来の companion doc (生成物)
   campaign.toml        # 研究意図 (仮説・変数・観測量)
   .gitignore           # 大容量出力の除外設定
   CLAUDE.md            # 現在の標準 Agent ハーネス (Claude Code) 向け指示
   AGENTS.md            # CLAUDE.md と同内容の補助ミラー
+  .claude/
+    settings.json      # Claude Code の team-shared permission / hook 設定
+    hooks/             # submit 承認・保護パス監視 hook
+    rules/             # project 固有の運用ルール
+    skills/            # 定型作業用 SKILL
   cases/               # Case 定義の格納場所
   runs/                # run の格納場所
   refs/                # シミュレータリファレンス / 外部知識ソース
@@ -90,6 +96,16 @@ my-simulation-project/
     facts.toml         # 構造化された知識 (AI 向け machine-readable claims)
     environment.toml   # 実行環境記述 (自動検出)
 ```
+
+`simctl init` が生成する Claude ハーネスは、`.claude/settings.json` と
+`.claude/hooks/` により次のようなガードを入れます。
+
+- `manifest.toml`、`runs/**/input/**`、`submit/job.sh`、`work/**`、`SITE.md` などの生成物は直接編集しない
+- `.simctl/facts.toml` や `.simctl/insights/` は `simctl knowledge save` / `add-fact` 経由で更新する
+- `simctl runs submit` は `--dry-run` を除き実行前に確認を挟む
+
+hpc-simctl 自体の開発では、Claude ハーネスの定義は
+`src/simctl/harness/claude.py` にまとまっています。
 
 ### 2. 研究意図の定義 (campaign.toml)
 

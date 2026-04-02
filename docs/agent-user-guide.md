@@ -46,6 +46,16 @@ simctl プロジェクトにおける Agent の作業ガイド。
 - `runs/**/survey.toml` — パラメータサーベイ定義
 - `runs/**/Rxxxx/manifest.toml` — run メタデータ (自動生成、手動編集禁止)
 
+## ハーネスのガード
+
+`simctl init` は `.claude/settings.json` と `.claude/hooks/` も生成し、
+Claude Code 向けに project 内の保護ルールを設定する。
+
+- 直接編集してよいのは主に `campaign.toml`、`cases/**`、`runs/**/survey.toml`、通常の docs
+- 直接編集してはいけないのは `runs/**/manifest.toml`、`input/**`、`submit/**`、`work/**`、`SITE.md`
+- `.simctl/insights/` と `.simctl/facts.toml` は `simctl knowledge save` / `add-fact` を使う
+- `simctl runs submit` は `--dry-run` を除いて実行前に確認を挟む
+
 ## 状態遷移
 
 ```
