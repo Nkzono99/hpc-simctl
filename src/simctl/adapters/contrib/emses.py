@@ -37,6 +37,13 @@ logger = logging.getLogger(__name__)
 
 INPUT_DIR = "input"
 WORK_DIR = "work"
+LATEST_OUTPUT_DIR = f"{WORK_DIR}/latest"
+
+
+def _relative_to_run(path: Path, run_dir: Path) -> str:
+    """Return a stable POSIX-style relative path under the run directory."""
+    return path.relative_to(run_dir).as_posix()
+
 
 # Domain decomposition: [mpi] group, nodes = [nxdiv, nydiv, nzdiv]
 DOMAIN_DECOMP_SECTION = "mpi"
@@ -482,6 +489,7 @@ class EmseAdapter(SimulatorAdapter):
         params = case_data.get("params", {})
         input_dir = run_dir / INPUT_DIR
         input_dir.mkdir(parents=True, exist_ok=True)
+        (run_dir / WORK_DIR / "latest").mkdir(parents=True, exist_ok=True)
 
         created: list[str] = []
 
@@ -512,7 +520,7 @@ class EmseAdapter(SimulatorAdapter):
                 elif src.name != "plasma.toml":
                     dest = input_dir / src.name
                     shutil.copy2(src, dest)
-                    created.append(str(dest.relative_to(run_dir)))
+                    created.append(_relative_to_run(dest, run_dir))
 
         # Apply parameter overrides
         if params and template_config:
@@ -526,7 +534,7 @@ class EmseAdapter(SimulatorAdapter):
             plasma_toml = input_dir / "plasma.toml"
             with open(plasma_toml, "wb") as f:
                 tomli_w.dump(template_config, f)
-            created.append(str(plasma_toml.relative_to(run_dir)))
+            created.append(_relative_to_run(plasma_toml, run_dir))
 
         # Copy additional input files (e.g., mesh files)
         for src_str in input_files:
@@ -538,7 +546,7 @@ class EmseAdapter(SimulatorAdapter):
                 continue  # Already handled
             dest = input_dir / src.name
             shutil.copy2(src, dest)
-            created.append(str(dest.relative_to(run_dir)))
+            created.append(_relative_to_run(dest, run_dir))
 
         return created
 
@@ -616,9 +624,8 @@ class EmseAdapter(SimulatorAdapter):
             Command as a list of strings.
         """
         executable = runtime_info.get("executable", "mpiemses3D")
-        # Path relative to work/ (sbatch --chdir=work)
-        plasma_toml = f"../{INPUT_DIR}/plasma.toml"
-        return [executable, plasma_toml]
+        plasma_toml = f"{INPUT_DIR}/plasma.toml"
+        return [executable, plasma_toml, "-o", LATEST_OUTPUT_DIR]
 
     def detect_outputs(self, run_dir: Path) -> dict[str, Any]:
         """Detect EMSES output files in ``work/``.
@@ -637,35 +644,43 @@ class EmseAdapter(SimulatorAdapter):
 
         outputs: dict[str, Any] = {}
 
-        # HDF5 field files
-        h5_files = sorted(work_dir.glob("*.h5"))
-        if h5_files:
-            outputs["hdf5_fields"] = [str(f.relative_to(run_dir)) for f in h5_files]
-
-        # ASCII diagnostics (non-HDF5, non-log files directly in work/)
         log_patterns = {"*.out", "*.err", "*.log"}
-        diag_files: list[str] = []
-        for f in sorted(work_dir.iterdir()):
-            if not f.is_file() or f.suffix == ".h5":
+        for output_dir in (work_dir / "latest", work_dir):
+            if not output_dir.is_dir():
                 continue
-            if any(f.match(p) for p in log_patterns):
-                continue
-            diag_files.append(str(f.relative_to(run_dir)))
-        if diag_files:
-            outputs["diagnostics"] = diag_files
 
-        # SNAPSHOT data
-        snapshot_dir = work_dir / "SNAPSHOT1"
-        if snapshot_dir.is_dir():
-            snap_files = sorted(snapshot_dir.glob("esdat*.h5"))
-            if snap_files:
-                outputs["snapshots"] = [str(f.relative_to(run_dir)) for f in snap_files]
+            h5_files = sorted(output_dir.glob("*.h5"))
+            if h5_files:
+                outputs["hdf5_fields"] = [
+                    _relative_to_run(f, run_dir) for f in h5_files
+                ]
+
+            diag_files: list[str] = []
+            for f in sorted(output_dir.iterdir()):
+                if not f.is_file() or f.suffix == ".h5":
+                    continue
+                if any(f.match(p) for p in log_patterns):
+                    continue
+                diag_files.append(_relative_to_run(f, run_dir))
+            if diag_files:
+                outputs["diagnostics"] = diag_files
+
+            snapshot_dir = output_dir / "SNAPSHOT1"
+            if snapshot_dir.is_dir():
+                snap_files = sorted(snapshot_dir.glob("esdat*.h5"))
+                if snap_files:
+                    outputs["snapshots"] = [
+                        _relative_to_run(f, run_dir) for f in snap_files
+                    ]
+
+            if outputs:
+                break
 
         # Log files
         logs: list[str] = []
         for pattern in ("stdout.*.log", "stderr.*.log", "*.out", "*.err"):
             for f in sorted(work_dir.glob(pattern)):
-                logs.append(str(f.relative_to(run_dir)))
+                logs.append(_relative_to_run(f, run_dir))
         if logs:
             outputs["logs"] = logs
 
@@ -705,8 +720,10 @@ class EmseAdapter(SimulatorAdapter):
                     pass
 
         # Check energy file for simulation progress
-        energy_file = work_dir / "energy"
-        if energy_file.is_file():
+        for output_dir in (work_dir / "latest", work_dir):
+            energy_file = output_dir / "energy"
+            if not energy_file.is_file():
+                continue
             try:
                 nstep = self._get_expected_nstep(run_dir)
                 lines = [
@@ -725,8 +742,9 @@ class EmseAdapter(SimulatorAdapter):
                 pass
 
         # Fallback: check for any output files
-        if list(work_dir.glob("*.h5")):
-            return "running"
+        for output_dir in (work_dir / "latest", work_dir):
+            if list(output_dir.glob("*.h5")):
+                return "running"
 
         return "unknown"
 
@@ -752,8 +770,10 @@ class EmseAdapter(SimulatorAdapter):
         }
 
         # Energy diagnostics
-        energy_file = work_dir / "energy"
-        if energy_file.is_file():
+        for output_dir in (work_dir / "latest", work_dir):
+            energy_file = output_dir / "energy"
+            if not energy_file.is_file():
+                continue
             try:
                 lines = [
                     line
@@ -767,6 +787,7 @@ class EmseAdapter(SimulatorAdapter):
                         summary["last_step"] = int(float(last_parts[0]))
             except (ValueError, OSError):
                 pass
+            break
 
         # Simulation parameters from plasma.toml
         config = self._load_input_config(run_dir)

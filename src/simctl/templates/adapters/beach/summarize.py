@@ -13,7 +13,12 @@ def _append_figure(summary: dict[str, Any], rel_path: str, caption: str) -> None
 
 
 def _find_output_dir(work_dir: Path) -> Path:
-    for candidate in (work_dir / "outputs" / "latest", work_dir / "outputs", work_dir):
+    for candidate in (
+        work_dir / "latest",
+        work_dir / "outputs" / "latest",
+        work_dir / "outputs",
+        work_dir,
+    ):
         if candidate.is_dir():
             return candidate
     return work_dir

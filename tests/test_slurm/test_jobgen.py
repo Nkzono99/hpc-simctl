@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -135,13 +136,16 @@ class TestGenerateJobScript:
         content = path.read_text()
         assert "export OMP_NUM_THREADS=4" in content
 
-    def test_cd_to_work_dir(self, run_dir: Path, job_config: dict[str, object]) -> None:
+    def test_cd_to_run_dir(self, run_dir: Path, job_config: dict[str, object]) -> None:
         path = generate_job_script(run_dir, job_config, "srun ./solver")
         content = path.read_text()
-        assert f"cd {run_dir / 'work'}" in content
+        assert f"cd {run_dir}" in content
 
     def test_executable_bit(self, run_dir: Path, job_config: dict[str, object]) -> None:
         path = generate_job_script(run_dir, job_config, "srun ./solver")
+        if os.name == "nt":
+            assert path.exists()
+            return
         assert path.stat().st_mode & 0o100  # owner execute bit
 
     def test_missing_walltime_raises(self, run_dir: Path) -> None:

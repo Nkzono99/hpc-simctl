@@ -210,12 +210,22 @@ class TestResolveRuntime:
 class TestBuildProgramCommand:
     def test_basic_command(self, adapter: EmseAdapter, run_dir: Path) -> None:
         cmd = adapter.build_program_command({"executable": "/opt/mpiemses3D"}, run_dir)
-        assert cmd[0] == "/opt/mpiemses3D"
-        assert "plasma.toml" in cmd[1]
+        assert cmd == [
+            "/opt/mpiemses3D",
+            "input/plasma.toml",
+            "-o",
+            "work/latest",
+        ]
 
     def test_default_executable(self, adapter: EmseAdapter, run_dir: Path) -> None:
         cmd = adapter.build_program_command({}, run_dir)
         assert cmd[0] == "mpiemses3D"
+
+    def test_creates_latest_output_dir(
+        self, adapter: EmseAdapter, run_dir: Path, case_data: dict[str, Any]
+    ) -> None:
+        adapter.render_inputs(case_data, run_dir)
+        assert (run_dir / "work" / "latest").is_dir()
 
 
 # ===================================================================
@@ -254,6 +264,17 @@ class TestDetectOutputs:
         (run_dir / "work" / "stdout.12345.log").write_text("output")
         outputs = adapter.detect_outputs(run_dir)
         assert "logs" in outputs
+
+    def test_detects_outputs_in_latest_dir(
+        self, adapter: EmseAdapter, run_dir: Path
+    ) -> None:
+        latest_dir = run_dir / "work" / "latest"
+        latest_dir.mkdir(parents=True, exist_ok=True)
+        (latest_dir / "energy").write_text("100 1.0 2.0")
+        (latest_dir / "ex00_0000.h5").write_bytes(b"")
+        outputs = adapter.detect_outputs(run_dir)
+        assert outputs["hdf5_fields"] == ["work/latest/ex00_0000.h5"]
+        assert "work/latest/energy" in outputs["diagnostics"]
 
 
 # ===================================================================

@@ -538,7 +538,7 @@ set -euo pipefail
 # module load ... (任意)
 # export ENV_VAR=value (任意)
 
-cd <run_dir>/work
+cd <run_dir>
 
 exec srun ./solver input/params.json
 ```
@@ -650,4 +650,3 @@ insights のインポート       ← プロジェクト横断の知識共有
 - **ファイルシステム**: pytest の `tmp_path` fixture を使った一時ディレクトリでの統合テスト
 - **CLI**: typer の `CliRunner` による CLI テスト
 - **Adapter / Launcher**: 抽象基底クラスの contract test で実装の正しさを検証
-

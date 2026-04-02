@@ -252,9 +252,10 @@ def _render_script(
             lines.append(f"export {key}={value}")
         lines.append("")
 
-    # --- Change to work directory ---
-    # Use absolute path so the script works regardless of sbatch cwd
-    lines.append(f"cd {work_dir}")
+    # --- Change to run directory ---
+    # Use absolute path so the script works regardless of sbatch cwd.
+    # Simulators refer to input/ and work/ relative to the run root.
+    lines.append(f"cd {run_dir}")
     lines.append("")
 
     lines.append("date")

@@ -33,6 +33,13 @@ logger = logging.getLogger(__name__)
 
 INPUT_DIR = "input"
 WORK_DIR = "work"
+LATEST_OUTPUT_DIR = f"{WORK_DIR}/latest"
+
+
+def _relative_to_run(path: Path, run_dir: Path) -> str:
+    """Return a stable POSIX-style relative path under the run directory."""
+    return path.relative_to(run_dir).as_posix()
+
 
 # Known BEACH output files (label -> filename)
 _OUTPUT_FILES = {
@@ -404,6 +411,7 @@ class BeachAdapter(SimulatorAdapter):
         params = case_data.get("params", {})
         input_dir = run_dir / INPUT_DIR
         input_dir.mkdir(parents=True, exist_ok=True)
+        (run_dir / WORK_DIR / "latest").mkdir(parents=True, exist_ok=True)
 
         created: list[str] = []
 
@@ -437,16 +445,16 @@ class BeachAdapter(SimulatorAdapter):
                 elif src.name not in ("beach.toml", "beach_template.toml"):
                     dest = input_dir / src.name
                     shutil.copy2(src, dest)
-                    created.append(str(dest.relative_to(run_dir)))
+                    created.append(_relative_to_run(dest, run_dir))
 
         # Apply parameter overrides
         if params and template_config:
             template_config = apply_dotted_overrides(template_config, params)
 
-        # Set output directory to work/ subdirectory
+        # Set output directory relative to the run root.
         if "output" not in template_config:
             template_config["output"] = {}
-        template_config["output"]["dir"] = str(run_dir / WORK_DIR / "outputs")
+        template_config["output"]["dir"] = LATEST_OUTPUT_DIR
 
         # Write beach.toml
         if template_config:
@@ -456,7 +464,7 @@ class BeachAdapter(SimulatorAdapter):
             beach_toml = input_dir / "beach.toml"
             with open(beach_toml, "wb") as f:
                 tomli_w.dump(template_config, f)
-            created.append(str(beach_toml.relative_to(run_dir)))
+            created.append(_relative_to_run(beach_toml, run_dir))
 
         # Copy OBJ mesh files if referenced
         obj_path_str = template_config.get("mesh", {}).get("obj_path", "")
@@ -465,7 +473,7 @@ class BeachAdapter(SimulatorAdapter):
             if obj_path.is_file():
                 dest = input_dir / obj_path.name
                 shutil.copy2(obj_path, dest)
-                created.append(str(dest.relative_to(run_dir)))
+                created.append(_relative_to_run(dest, run_dir))
 
         return created
 
@@ -542,8 +550,8 @@ class BeachAdapter(SimulatorAdapter):
             Command as a list of strings.
         """
         executable = runtime_info.get("executable", "beach")
-        beach_toml = run_dir / INPUT_DIR / "beach.toml"
-        return [executable, str(beach_toml)]
+        beach_toml = f"{INPUT_DIR}/beach.toml"
+        return [executable, beach_toml]
 
     def detect_outputs(self, run_dir: Path) -> dict[str, Any]:
         """Detect BEACH output files.
@@ -561,8 +569,9 @@ class BeachAdapter(SimulatorAdapter):
 
         # Search candidate output directories
         for output_dir in (
-            work_dir / "outputs",
+            work_dir / "latest",
             work_dir / "outputs" / "latest",
+            work_dir / "outputs",
             work_dir,
         ):
             if not output_dir.is_dir():
@@ -570,7 +579,7 @@ class BeachAdapter(SimulatorAdapter):
             for label, filename in _OUTPUT_FILES.items():
                 f = output_dir / filename
                 if f.is_file():
-                    outputs[label] = str(f.relative_to(run_dir))
+                    outputs[label] = _relative_to_run(f, run_dir)
             if outputs:
                 break
 
@@ -578,7 +587,7 @@ class BeachAdapter(SimulatorAdapter):
         logs: list[str] = []
         for pattern in ("stdout.*.log", "stderr.*.log", "*.out", "*.err"):
             for f in sorted(work_dir.glob(pattern)):
-                logs.append(str(f.relative_to(run_dir)))
+                logs.append(_relative_to_run(f, run_dir))
         if logs:
             outputs["logs"] = logs
 
@@ -604,8 +613,9 @@ class BeachAdapter(SimulatorAdapter):
 
         # Check for summary.txt (written on normal completion)
         for output_dir in (
-            work_dir / "outputs",
+            work_dir / "latest",
             work_dir / "outputs" / "latest",
+            work_dir / "outputs",
             work_dir,
         ):
             if (output_dir / "summary.txt").is_file():
@@ -626,8 +636,9 @@ class BeachAdapter(SimulatorAdapter):
 
         # Partial outputs indicate running
         for output_dir in (
-            work_dir / "outputs",
+            work_dir / "latest",
             work_dir / "outputs" / "latest",
+            work_dir / "outputs",
             work_dir,
         ):
             if (output_dir / "charges.csv").is_file():
@@ -657,8 +668,9 @@ class BeachAdapter(SimulatorAdapter):
 
         # Parse summary.txt
         for output_dir in (
-            work_dir / "outputs",
+            work_dir / "latest",
             work_dir / "outputs" / "latest",
+            work_dir / "outputs",
             work_dir,
         ):
             summary_file = output_dir / "summary.txt"
@@ -777,7 +789,7 @@ class BeachAdapter(SimulatorAdapter):
 
     def get_post_commands(self, run_dir: Path) -> list[str]:
         """Return post-execution commands for the BEACH job script."""
-        output_dir = run_dir / WORK_DIR / "outputs"
+        output_dir = run_dir / WORK_DIR / "latest"
         return [
             "date",
             f"beach-inspect {output_dir}"

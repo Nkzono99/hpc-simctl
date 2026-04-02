@@ -84,9 +84,9 @@ camphor のサイトプロファイルで自動ロードされるモジュール
 
 module load intel/2023.2 intelmpi/2023.2 hdf5/1.12.2_intel-2023.2-impi fftw/3.3.10_intel-2022.3-impi
 
-cd /path/to/run/work
+cd /path/to/run
 date
-srun ./mpiemses3D plasma.toml
+srun ./mpiemses3D input/plasma.toml -o work/latest
 date
 ```
 

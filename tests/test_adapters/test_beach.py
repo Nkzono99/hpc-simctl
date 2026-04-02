@@ -131,7 +131,13 @@ class TestRenderInputs:
 
         with open(run_dir / "input" / "beach.toml", "rb") as f:
             config = tomli.load(f)
-        assert "outputs" in config["output"]["dir"]
+        assert config["output"]["dir"] == "work/latest"
+
+    def test_creates_latest_output_dir(
+        self, adapter: BeachAdapter, run_dir: Path, case_data: dict[str, Any]
+    ) -> None:
+        adapter.render_inputs(case_data, run_dir)
+        assert (run_dir / "work" / "latest").is_dir()
 
     def test_no_case_section_raises(self, adapter: BeachAdapter, run_dir: Path) -> None:
         with pytest.raises(ValueError, match="case"):
@@ -188,8 +194,7 @@ class TestResolveRuntime:
 class TestBuildProgramCommand:
     def test_basic_command(self, adapter: BeachAdapter, run_dir: Path) -> None:
         cmd = adapter.build_program_command({"executable": "/opt/beach"}, run_dir)
-        assert cmd[0] == "/opt/beach"
-        assert "beach.toml" in cmd[1]
+        assert cmd == ["/opt/beach", "input/beach.toml"]
 
 
 # ===================================================================
@@ -202,7 +207,7 @@ class TestDetectOutputs:
         assert adapter.detect_outputs(tmp_path) == {}
 
     def test_detects_summary(self, adapter: BeachAdapter, run_dir: Path) -> None:
-        out_dir = run_dir / "work" / "outputs"
+        out_dir = run_dir / "work" / "latest"
         out_dir.mkdir(parents=True)
         (out_dir / "summary.txt").write_text("mesh_nelem=400\nbatches=100\n")
         (out_dir / "charges.csv").write_text("elem_idx,charge_C\n1,1e-12\n")
@@ -255,7 +260,7 @@ class TestSummarize:
     def test_summary_parses_summary_txt(
         self, adapter: BeachAdapter, run_dir: Path
     ) -> None:
-        out_dir = run_dir / "work" / "outputs"
+        out_dir = run_dir / "work" / "latest"
         out_dir.mkdir(parents=True)
         (out_dir / "summary.txt").write_text(
             "mesh_nelem=400\nbatches=100\nprocessed_particles=12345\n"
