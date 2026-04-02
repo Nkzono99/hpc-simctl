@@ -1,262 +1,273 @@
-# AGENTS.md — hpc-simctl Agent Operating Rules
+# CLAUDE.md — hpc-simctl
 
-AI エージェントが `simctl init` 済みプロジェクトで作業する際の運用ルール。
+## プロジェクト概要
 
-## 目的と前提
+HPC 環境における Slurm ベースのシミュレーション実行管理 CLI ツール。
+run ディレクトリを日常運用の主単位とし、パラメータサーベイ展開・job 投入・状態追跡・provenance 記録・解析補助を一貫して管理する。
 
-- 本プロジェクトの運用モードは **完全自動ではなく半自動** である
-- 人間は少なくとも以下を与える
-  - 利用する simulator / launcher の設定
-  - ベースとなる入力テンプレート (`plasma.toml`, `beach.toml` など)
-- エージェントは以下を支援してよい
-  - `campaign.toml` の作成・更新
-  - `case.toml` / `survey.toml` の作成・更新
-  - run 生成、投入、同期、ログ確認、解析、知識記録
-- コストの高い実行、破壊的操作、研究上の意味が変わる編集は **人間の確認を挟む**
+仕様書: `SPEC.md`
 
-## 最重要ルール
+## プロジェクトでの利用方法
 
-1. **最初に context を読む**
-   - 作業開始時に `simctl context --json` を実行して現在状態を把握する
-2. **実行前に plan を明示する**
-   - action 実行や重要ファイル編集の前に、何をするかを plan として示す
-3. **plan にない action は実行しない**
-   - 途中で方針変更が必要になったら plan を更新してから進む
-4. **高コスト / 破壊的 / 意味変更の大きい操作は確認を挟む**
-   - 特に bulk submit、resource 増加、archive、purge は確認対象
-5. **run より上流を優先して直す**
-   - 再利用される変更は `campaign.toml` / `case.toml` / `survey.toml` に反映し、生成済み run の入力を場当たり的に直し続けない
+simctl はプロジェクトごとにブートストラップインストールする。事前のグローバルインストールは不要。
 
-## 作業フェーズ
+```bash
+# 新規プロジェクト作成
+mkdir my-project && cd my-project
+uvx --from hpc-simctl simctl init
 
-### Phase 0: Context
-
-- `simctl context --json` で project 状態を読む
-- 必要に応じて以下も確認する
-  - `campaign.toml`
-  - `cases/*/case.toml`
-  - `runs/**/survey.toml`
-  - `.simctl/facts.toml`
-  - 最近失敗した run の `manifest.toml` と log
-
-### Phase 1: Planning
-
-- まず不足を分類する
-  - **design**: campaign / case / survey が未整備
-  - **execution**: create / submit / sync / retry / log
-  - **analysis**: summarize / collect / fact / insight
-- 実行予定を JSON で示す
-
-```json
-{
-  "assumptions": [
-    "base input template already exists in cases/flat_surface/plasma.toml"
-  ],
-  "plan": [
-    {
-      "kind": "edit",
-      "target": "campaign.toml",
-      "reason": "研究仮説と観測量を明文化する"
-    },
-    {
-      "kind": "edit",
-      "target": "runs/angle_scan/survey.toml",
-      "reason": "campaign の independent variables を survey 軸に反映する"
-    },
-    {
-      "kind": "action",
-      "action": "create_run",
-      "target": "runs/angle_scan",
-      "reason": "survey から run を展開する"
-    },
-    {
-      "kind": "action",
-      "action": "submit_run",
-      "target": "runs/angle_scan/R20260330-0001",
-      "reason": "レビュー済み run を投入する",
-      "requires_confirmation": true
-    }
-  ]
-}
+# activate
+source .venv/bin/activate
+simctl doctor
 ```
 
-### Phase 2: Execution
+`simctl init` が `.venv/` と `tools/hpc-simctl/` を自動構築し、editable install する。
+Agent は `tools/hpc-simctl/docs/` や `tools/hpc-simctl/SPEC.md` を直接参照できる。
 
-- plan の項目を順に実行する
-- action 実行時は `simctl.core.actions.execute_action()` または対応 CLI を使う
-- 各 action の結果で以下を確認する
-  - `status == success`
-  - `precondition_failed`
-  - `error`
-- `precondition_failed` / `error` が出たら、そのまま次へ進まず plan を更新する
+```bash
+# 既存プロジェクトを clone + セットアップ
+uvx --from hpc-simctl simctl setup https://github.com/user/my-project.git
+source my-project/.venv/bin/activate
+simctl doctor
+```
 
-## どのファイルをどう編集するか
+## 技術スタック
 
-### 優先順位
+- 言語: Python 3.10+
+- パッケージ管理: uv (pyproject.toml)
+- CLI フレームワーク: typer (click ベース)
+- 設定ファイル形式: TOML (tomli / tomli-w)
+- テスト: pytest
+- Lint/Format: ruff
+- 型チェック: mypy (strict)
 
-1. `campaign.toml`
-   - 研究意図、仮説、変数、観測量を定義する
-2. `cases/*/case.toml`
-   - ベース条件、job 設定、共通 params を定義する
-3. `runs/**/survey.toml`
-   - 探索軸、命名、survey 単位の job override を定義する
-4. `runs/**/input/*`
-   - その run だけの診断的修正に限定する
+## ディレクトリ構成
 
-### 編集ルール
+```
+hpc-simctl/
+  pyproject.toml
+  src/
+    simctl/
+      __init__.py
+      cli/              # CLI エントリポイント (typer)
+        __init__.py
+        main.py
+        init.py         # simctl init / doctor
+        setup.py        # simctl setup (clone + bootstrap)
+        context.py      # simctl context
+        new.py          # simctl case new
+        create.py       # simctl runs create / sweep
+        submit.py       # simctl runs submit
+        status.py       # simctl runs status / sync
+        log.py          # simctl runs log
+        jobs.py         # simctl runs jobs
+        history.py      # simctl runs history
+        list.py         # simctl runs list
+        clone.py        # simctl runs clone
+        extend.py       # simctl runs extend
+        analyze.py      # simctl analyze summarize / collect / plot
+        manage.py       # simctl runs archive / purge-work
+        knowledge.py    # simctl knowledge / knowledge source
+        config.py       # simctl config
+        update.py       # simctl update
+        update_refs.py  # simctl update-refs
+        run_lookup.py   # run path / id lookup helper
+      core/             # ドメインロジック
+        __init__.py
+        project.py      # Project 読込・検証
+        case.py         # Case 読込・展開
+        survey.py       # Survey 展開・parameter 直積
+        run.py          # Run 生成・run_id 採番
+        manifest.py     # manifest.toml 読書き
+        state.py        # 状態遷移管理
+        provenance.py   # コード provenance 取得
+        discovery.py    # runs/ 再帰探索・run_id 一意性検証
+        knowledge_source.py # 外部知識ソース管理
+      adapters/         # Simulator Adapter
+        __init__.py
+        base.py         # SimulatorAdapter 抽象基底クラス
+        registry.py     # Adapter 登録・lookup
+      launchers/        # Launcher Profile
+        __init__.py
+        base.py         # Launcher 抽象基底クラス
+        srun.py
+        mpirun.py
+        mpiexec.py
+      jobgen/           # job.sh 生成
+        __init__.py
+        generator.py
+        templates/
+      slurm/            # Slurm 連携 (sbatch / squeue / sacct)
+        __init__.py
+        submit.py
+        query.py
+  tests/
+    conftest.py
+    test_core/
+    test_cli/
+    test_adapters/
+    test_launchers/
+    test_slurm/
+    fixtures/           # テスト用 TOML ファイル等
+```
 
-- 再利用したい変更は run ではなく case / survey に戻す
-- 生成済み run の `input/*` を直接編集するのは以下に限定する
-  - 単発の失敗診断
-  - continuation / retry 前の一時調整
-  - survey に戻すと過去 run の provenance が不明瞭になる場合
-- run の `input/*` を直接編集したら plan に理由を書く
+## 主要コマンド
 
-## Action Registry の使い方
+| コマンド | 説明 |
+|---------|------|
+| `simctl init [SIMS...] -y` | Project 初期化 (対話型がデフォルト) |
+| `simctl setup [URL]` | 既存プロジェクトを clone + 環境セットアップ |
+| `simctl doctor` | 環境検査 |
+| `simctl context --json` | Agent 向け project context を JSON で取得 |
+| `simctl case new CASE` | case のスキャフォールド生成 |
+| `simctl runs create CASE` | case から単一 run を生成 |
+| `simctl runs sweep [DIR]` | survey.toml からパラメータ直積で全 run 生成 |
+| `simctl runs submit [RUN]` | run を sbatch で投入 |
+| `simctl runs submit --all [DIR]` | created な run を一括投入 |
+| `simctl runs log [RUN]` | 最新 job の stdout/stderr 表示 + 進捗% |
+| `simctl runs status [RUN]` | run 状態確認 |
+| `simctl runs sync [RUN]` | Slurm 状態を manifest に反映 |
+| `simctl runs jobs [PATH]` | プロジェクト内の実行中ジョブ一覧 |
+| `simctl runs history [PATH]` | 投入履歴表示 |
+| `simctl runs list [PATH]` | run 一覧表示 |
+| `simctl runs clone` | run 複製・派生 |
+| `simctl runs extend` | スナップショットから継続 run 生成 |
+| `simctl analyze summarize [RUN]` | run 解析 summary 生成 |
+| `simctl analyze collect [DIR]` | survey 集計 |
+| `simctl runs archive [RUN]` | run アーカイブ |
+| `simctl runs purge-work [RUN]` | work/ 内の不要ファイル削除 |
+| `simctl config show` | 設定表示 |
+| `simctl config add-simulator` | シミュレータ追加 (対話型) |
+| `simctl config add-launcher` | ランチャー追加 (対話型) |
+| `simctl update-refs` | refs/ リポジトリ更新 + ナレッジインデックス再生成 |
+| `simctl knowledge save` | 知見を .simctl/insights/ に保存 |
+| `simctl knowledge add-fact` | 構造化 fact を .simctl/facts.toml に追加 |
+| `simctl knowledge list` | 知見一覧表示 |
+| `simctl knowledge facts` | 構造化 fact 一覧表示 |
+| `simctl knowledge show` | 知見の詳細表示 |
+| `simctl knowledge source list` | 外部知識ソース一覧表示 |
+| `simctl knowledge source attach` | 外部知識ソースを接続 (git / path) |
+| `simctl knowledge source detach` | 外部知識ソースを切断 |
+| `simctl knowledge source sync` | 知識ソース同期 + 外部知見取り込み |
+| `simctl knowledge source render` | 有効な profile から imports.md を生成 |
+| `simctl knowledge source status` | 知識統合の状態表示 |
 
-利用可能な action は `simctl.core.actions.ACTION_SPECS` に従う。
+全コマンドは引数省略時にカレントディレクトリをデフォルトとする。
 
-| Action | 用途 | 主な前提条件 |
-|--------|------|-------------|
-| `create_run` | case から run 生成 | project loaded, case exists |
-| `create_survey` | survey.toml から複数 run を展開 | project loaded, survey.toml exists, base case exists |
-| `submit_run` | created run を Slurm に投入 | state == created, job.sh exists |
-| `sync_run` | submitted / running run の状態同期 | state in {submitted, running}, job_id recorded |
-| `show_log` | 最新 log の確認 | run has been submitted at least once |
-| `summarize_run` | completed run の解析 summary 生成 | state == completed |
-| `collect_survey` | survey 集計 | at least one completed run exists |
-| `retry_run` | failed run を retry 用に `created` に戻す | state == failed |
-| `archive_run` | completed run を archived にする | state == completed |
-| `purge_work` | archived run の purgeable な work を削除する | state == archived |
-| `save_insight` | Markdown insight を `.simctl/insights/` に保存する | project loaded |
-| `add_fact` | structured fact を追加する | project loaded |
+## 開発ルール
 
-### 注意
+### コーディング規約
 
-- `ACTION_SPECS` には `risk_level` / `cost_class` / `requires_confirmation` /
-  `confirmation_reason` / `confirmation_conditions` が含まれる
-  - Agent は prose だけでなく metadata も見て確認境界を判断する
-- `retry_run` は **再投入そのものではない**
-  - `failed -> created` に戻すだけで、必要なら次に `submit_run` を行う
-- `collect_survey` は completed run が 1 件もない状態では実行しない
-- `archive_run` / `purge_work` は action registry でも confirmation metadata を持つ
-  - CLI では `simctl runs archive` / `simctl runs purge-work` が対話確認を行う
+- ruff format / ruff check を CI で強制
+- mypy strict モード
+- テストカバレッジ 80% 以上を目標
+- docstring は Google style
 
-## Retry Policy
+### 設計原則
 
-失敗 run の対処は `simctl.core.retry.suggest_retry()` の提案に従う。
+- **run ディレクトリが主単位**: すべての操作は run_id または run ディレクトリを基点とする
+- **不変と可変の分離**: run_id は不変、パスは可変（分類・整理用）
+- **Simulator Adapter パターン**: simulator 固有処理は Adapter に閉じ込める。core は simulator に依存しない
+- **Launcher Profile パターン**: MPI 起動方式は Launcher に閉じ込める
+- **MPI に介入しない**: Python ツールは rank ごとのラッパにならない。job.sh で srun/mpirun を直接実行
+- **manifest.toml が正本**: run の状態・由来・provenance はすべて manifest.toml に記録
+- **cwd ベース**: 全コマンドはカレントディレクトリをデフォルトターゲットとする
 
-| failure_reason | 第一候補 | confidence |
-|---------------|----------|------------|
-| `timeout` | `retry_run` + walltime 延長 | high |
-| `oom` | `retry_run` + memory 増加 | high |
-| `preempted` | `retry_run` + 同一設定 | high |
-| `node_fail` | `retry_run` + 同一設定 | high |
-| `boot_fail` | `retry_run` + 同一設定 | high |
-| `exit_error` | `show_log` | high |
+### 後方互換性
 
-### retry の必須ルール
+- **現在は private リポジトリ**のため、後方互換性は気にしなくてよい
+- コマンド名・引数・ファイル形式は自由に変更可能
+- エイリアスや互換レイヤーは不要。古いインタフェースは削除する
+- 将来 public 化する際に API を固める
 
-- 最大試行回数は 3
-  - それ以上は手動検査に切り替える
-- `exit_error` は必ず log を確認してから判断する
-- `retry_run` 実行前に以下を plan に書く
-  - failure_reason
-  - 現在の attempt 数
-  - 変更する resource / parameter
-  - 変更しない理由
+### テスト方針
 
-## Human-in-the-loop の確認ポイント
+- Slurm 依存部分はモック化 (実 HPC なしでテスト可能にする)
+- TOML 読書きは fixtures ディレクトリのサンプルファイルを使用
+- CLI テストは typer の CliRunner を使用
+- Adapter / Launcher は抽象基底クラスの contract test を用意
 
-以下は原則として人間の確認を挟む。
+### Git 管理
 
-### 必須確認
+- run の大容量出力 (work/outputs/, work/restart/, work/tmp/) は .gitignore で除外
+- テスト fixtures の TOML ファイルは Git 管理対象
 
-- 新しい survey の初回 bulk submit
-- `simctl runs submit --all` 相当の一括投入
-- walltime / memory / node 数を増やす retry
-- `simctl runs archive`
-- `simctl runs purge-work`
-- 研究仮説の意味が変わる `campaign.toml` 編集
+## ビルド・実行
 
-### 推奨確認
+```bash
+# 開発環境セットアップ
+uv sync --dev
 
-- 新しい case の初回作成
-- baseline template (`plasma.toml`, `beach.toml` など) の大幅変更
-- completed run の集計結果から high confidence fact を作る前
+# テスト
+uv run pytest
 
-## Facts と Insights の扱い
+# Lint
+uv run ruff check src/ tests/
+uv run ruff format --check src/ tests/
 
-### 使い分け
+# 型チェック
+uv run mypy src/
 
-- `insight`
-  - 人間向け Markdown の考察、結果要約、分析メモ
-- `fact`
-  - AI / ツール向け structured claim
+# CLI 実行 (開発中)
+uv run simctl --help
+```
 
-### Confidence の基準
+## 状態遷移
 
-| Level | 基準 |
-|-------|------|
-| `high` | 2件以上の独立 run で再現、または deterministic check で検証済み |
-| `medium` | 1件の明確な run 観測 |
-| `low` | 解釈を含む暫定知見 |
+```
+created → submitted → running → completed
+created/submitted/running → failed
+submitted/running → cancelled
+completed → archived → purged
+```
 
-### fact を作る条件
+## Adapter 実装時の注意
 
-- run の結果から得られた定量的知見
-- パラメータ制約条件
-- 安定性条件 (CFL, 解像度要件)
-- 実験間の依存関係
-- 運用ポリシーとして再利用したい知見
+新しい Simulator Adapter を追加する場合:
+1. `src/simctl/adapters/base.py` の `SimulatorAdapter` を継承
+2. 全抽象メソッドを実装: render_inputs, resolve_runtime, build_program_command, detect_outputs, detect_status, summarize, collect_provenance
+3. オプションメソッドの実装: parameter_schema, validate_params, knowledge_sources, agent_guide, case_template, doc_repos, pip_packages
+4. `adapters/registry.py` に登録
+5. `simulators.toml` に設定エントリを追加
+6. テストを `tests/test_adapters/` に追加
 
-### fact を作らない条件
+## 知識層 (Knowledge Layer)
 
-- 一時的なエラー (`node_fail`, `preempted`)
-- 環境依存の問題 (特定ノードのみの不具合)
-- 1回しか観測していない現象を high confidence の `constraint` として残すこと
+AI エージェントがシミュレーションを自律的に行うための知識管理。
+詳細は `docs/knowledge-layer.md` を参照。
 
-### fact 作成時の推奨フィールド
+- **シミュレータ知識**: `refs/` + `.simctl/knowledge/` (update-refs で更新)
+- **外部共有知識**: `simproject.toml` の `[knowledge]` に基づき外部ソースを接続し、必要に応じて `refs/knowledge/` 配下へ同期 (`knowledge source attach/sync` で管理)
+- **実行環境**: `.simctl/environment.toml` (doctor で自動検出)
+- **研究意図**: `campaign.toml` (ユーザーが記述)
+- **実験知見**: `.simctl/insights/` (knowledge save / knowledge source sync で管理)
+- **構造化知識**: `.simctl/facts.toml` (knowledge add-fact / knowledge facts で管理)
 
-- `fact_type`
-- `simulator`
-- `scope_case`
-- `scope_text`
-- `param_name`
-- `confidence`
-- `source_run`
-- `evidence_kind`
-- `evidence_ref`
-- `supersedes`
+### 外部知識ソース
 
-### supersedes ルール
+複数プロジェクト間で共有する知識を外部リポジトリとして管理し、project に接続できる。
+`simproject.toml` の `[knowledge]` セクションで設定する。
 
-- 既存 fact は直接編集しない
-- 修正時は新しい fact を追加し `supersedes = "f001"` を設定する
-- `query_facts()` はデフォルトで superseded fact を除外する
+```bash
+# 外部知識ソースの接続
+simctl knowledge source attach git shared-kb git@github.com:lab/hpc-shared-knowledge.git
+simctl knowledge source attach path local-kb ../hpc-knowledge
 
-## 優先順位の判断基準
+# 同期・レンダリング
+simctl knowledge source sync
+simctl knowledge source render
 
-1. **Context 不足の解消**
-   - campaign / case / survey が未整備なら先に整える
-2. **active run の同期**
-   - submitted / running のまま止まっている run を `sync_run`
-3. **failed run の診断**
-   - `show_log` と failure_reason を確認する
-4. **retry 候補の準備**
-   - timeout / oom / preempted / node_fail を優先
-5. **created run の投入**
-   - review 済み run のみ `submit_run`
-6. **completed run の解析**
-   - `summarize_run`、必要なら `collect_survey`
-7. **知識の記録**
-   - facts / insights を追加する
+# 状態確認
+simctl knowledge source status
+simctl knowledge source list
+```
 
-## 禁止事項
+`simctl init` 時に GitHub の `*shared_knowledge*` リポジトリを自動検索し、対話的に接続できる。
+`simctl setup` 時は `simproject.toml` に設定された知識ソースを自動同期する。
 
-- context を読まずに作業を始めること
-- plan なしで複数 action を連続実行すること
-- `exit_error` の run を log 確認なしで retry すること
-- `archive` / `purge-work` を確認なしで実行すること
-- `hypothesis` をそのまま high confidence fact にすること
-- 本来 case / survey に戻すべき変更を、run の `input/*` にだけ積み続けること
+主要コマンド:
+- `simctl update-refs` — refs/ リポジトリ更新 + ナレッジインデックス再生成
+- `simctl knowledge source attach/detach/sync/render/status` — 外部知識ソース管理
+- `simctl knowledge save/list/show` — Markdown 知見の管理
+- `simctl knowledge add-fact/facts` — 構造化知識の管理
+- `simctl doctor` — 環境検出・保存
