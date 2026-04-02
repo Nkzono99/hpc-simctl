@@ -26,7 +26,7 @@ source .venv/bin/activate
 `simctl init` が以下を自動的に行います:
 
 1. 設定ファイル群を生成 (`simproject.toml`, `simulators.toml`, `launchers.toml`, `campaign.toml`)
-2. `.simctl/` 骨格を作成 (`insights/`, `facts.toml`, `links.toml`)
+2. `.simctl/` 骨格を作成 (`insights/`, `facts.toml`, `knowledge/`)
 3. `.venv/` を作成 (uv venv)
 4. `tools/hpc-simctl/` に simctl リポジトリを clone
 5. simctl を `.venv` に editable install (`uv pip install -e`)
@@ -62,18 +62,11 @@ Usage: simctl [OPTIONS] COMMAND [ARGS]...
 Commands:
   init        Initialize a new simctl project.
   doctor      Check the environment and project configuration.
-  create      Create a single run from a case definition.
-  sweep       Generate all runs from a survey.toml parameter sweep.
-  submit      Submit a run or all runs in a survey via sbatch.
-  status      Check run status.
-  sync        Synchronize Slurm state to manifest.
-  list        List runs.
-  clone       Clone a run.
-  summarize   Generate run analysis summary.
-  collect     Collect survey-level summary.
-  plot        Render a survey plot from collected summaries.
-  archive     Archive a run.
-  purge-work  Purge work directory files.
+  case        Manage case definitions.
+  runs        Manage run creation, submission, status, and archival.
+  analyze     Summarize, collect, and plot analysis results.
+  knowledge   Manage project knowledge and external knowledge sources.
+  update      Update reference and generated project knowledge.
 ```
 
 ---
@@ -100,7 +93,6 @@ Initialized project 'my-hpc-project' in /home/user/my-hpc-project
     .simctl/
     .simctl/insights/
     .simctl/facts.toml
-    .simctl/links.toml
     cases/
     runs/
     .gitignore
@@ -155,10 +147,9 @@ tools/
 # Reference repos
 refs/
 
-# Auto-generated (insights/, facts.toml, links.toml are tracked)
+# Auto-generated (insights/ and facts.toml are tracked)
 .simctl/knowledge/
 .simctl/environment.toml
-.simctl/shared/
 
 # heavy run outputs
 runs/**/work/outputs/

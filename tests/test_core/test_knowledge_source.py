@@ -56,6 +56,7 @@ mount_dir = "refs/knowledge"
 [[knowledge.sources]]
 name = "shared-kb"
 type = "git"
+kind = "profiles"
 url = "https://github.com/lab/kb.git"
 ref = "main"
 mount = "refs/knowledge/shared-kb"
@@ -64,8 +65,8 @@ profiles = ["common", "emses"]
 [[knowledge.sources]]
 name = "local-kb"
 type = "path"
+kind = "project"
 path = "../my-kb"
-mount = "refs/knowledge/local-kb"
 """
     _create_project(tmp_path, toml)
     config = load_knowledge_config(tmp_path)
@@ -77,6 +78,7 @@ mount = "refs/knowledge/local-kb"
     git_src = config.sources[0]
     assert git_src.name == "shared-kb"
     assert git_src.source_type == "git"
+    assert git_src.kind == "profiles"
     assert git_src.url == "https://github.com/lab/kb.git"
     assert git_src.ref == "main"
     assert git_src.profiles == ["common", "emses"]
@@ -84,7 +86,9 @@ mount = "refs/knowledge/local-kb"
     path_src = config.sources[1]
     assert path_src.name == "local-kb"
     assert path_src.source_type == "path"
+    assert path_src.kind == "project"
     assert path_src.url == "../my-kb"
+    assert path_src.mount == ""
 
 
 def test_load_knowledge_config_defaults(tmp_path: Path) -> None:
@@ -109,6 +113,7 @@ def test_save_knowledge_source_creates_section(tmp_path: Path) -> None:
         name="test-kb",
         source_type="git",
         url="https://github.com/lab/kb.git",
+        kind="profiles",
         mount="refs/knowledge/test-kb",
         profiles=["common"],
     )
@@ -125,12 +130,14 @@ def test_save_knowledge_source_replaces_existing(tmp_path: Path) -> None:
     _create_project(tmp_path)
     source1 = KnowledgeSource(
         name="kb", source_type="git", url="https://old.git",
+        kind="profiles",
         mount="refs/knowledge/kb",
     )
     save_knowledge_source(tmp_path, source1)
 
     source2 = KnowledgeSource(
         name="kb", source_type="git", url="https://new.git",
+        kind="profiles",
         mount="refs/knowledge/kb", profiles=["updated"],
     )
     save_knowledge_source(tmp_path, source2)
@@ -146,13 +153,14 @@ def test_save_knowledge_source_path_type(tmp_path: Path) -> None:
     _create_project(tmp_path)
     source = KnowledgeSource(
         name="local-kb", source_type="path", url="../my-kb",
-        mount="refs/knowledge/local-kb",
+        kind="project",
     )
     save_knowledge_source(tmp_path, source)
 
     config = load_knowledge_config(tmp_path)
     assert config is not None
     assert config.sources[0].source_type == "path"
+    assert config.sources[0].kind == "project"
     assert config.sources[0].url == "../my-kb"
 
 
@@ -163,6 +171,7 @@ def test_remove_knowledge_source_removes(tmp_path: Path) -> None:
     _create_project(tmp_path)
     source = KnowledgeSource(
         name="kb", source_type="git", url="https://x.git",
+        kind="profiles",
         mount="refs/knowledge/kb",
     )
     save_knowledge_source(tmp_path, source)
@@ -188,6 +197,7 @@ def test_sync_source_path_exists(tmp_path: Path) -> None:
 
     source = KnowledgeSource(
         name="test-kb", source_type="path", url=str(kb_dir),
+        kind="profiles",
         mount="refs/knowledge/test-kb",
     )
     status = sync_source(project, source)
@@ -202,6 +212,7 @@ def test_sync_source_path_not_found(tmp_path: Path) -> None:
 
     source = KnowledgeSource(
         name="missing", source_type="path", url="/nonexistent/path",
+        kind="project",
         mount="refs/knowledge/missing",
     )
     with pytest.raises(KnowledgeSourceError, match="not found"):
@@ -215,6 +226,7 @@ def test_sync_source_git_clone(tmp_path: Path) -> None:
     source = KnowledgeSource(
         name="git-kb", source_type="git",
         url="https://github.com/lab/kb.git",
+        kind="profiles",
         mount="refs/knowledge/git-kb",
     )
 
@@ -239,6 +251,7 @@ def test_sync_source_git_pull(tmp_path: Path) -> None:
     source = KnowledgeSource(
         name="git-kb", source_type="git",
         url="https://github.com/lab/kb.git",
+        kind="profiles",
         mount="refs/knowledge/git-kb",
     )
 
@@ -297,10 +310,29 @@ def test_discover_profiles_no_dir(tmp_path: Path) -> None:
     assert discover_profiles(tmp_path) == []
 
 
-def test_collect_external_knowledge_includes_sources_and_legacy_links(
+def test_sync_source_path_project_marks_source_available(tmp_path: Path) -> None:
+    kb_dir = _create_knowledge_source(tmp_path)
+    project = tmp_path / "project"
+    project.mkdir()
+
+    source = KnowledgeSource(
+        name="upstream-project",
+        source_type="path",
+        kind="project",
+        url=str(kb_dir),
+    )
+
+    status = sync_source(project, source)
+    assert status == "available"
+
+
+def test_collect_external_knowledge_includes_project_and_profile_sources(
     tmp_path: Path,
 ) -> None:
     kb_dir = _create_knowledge_source(tmp_path, "kb")
+    other_project = tmp_path / "other-project"
+    other_project.mkdir()
+    (other_project / ".simctl" / "insights").mkdir(parents=True)
     project = tmp_path / "project"
     project.mkdir()
     _create_project(
@@ -312,9 +344,16 @@ enabled = true
 [[knowledge.sources]]
 name = "kb"
 type = "path"
+kind = "profiles"
 path = "../kb"
 mount = "refs/knowledge/kb"
 profiles = ["common"]
+
+[[knowledge.sources]]
+name = "other-project"
+type = "path"
+kind = "project"
+path = "../other-project"
 """,
     )
 
@@ -323,19 +362,13 @@ profiles = ["common"]
     import shutil
 
     shutil.copytree(kb_dir, mount_dir)
-    (project / ".simctl").mkdir()
-    (project / ".simctl" / "links.toml").write_text(
-        '[projects]\nother-project = "../other-project"\n',
-        encoding="utf-8",
-    )
-    (tmp_path / "other-project").mkdir()
 
     entries = collect_external_knowledge(project)
 
     assert [entry.name for entry in entries] == ["kb", "other-project"]
-    assert entries[0].origin == "source"
+    assert entries[0].kind == "profiles"
     assert entries[0].profiles_available == ["advanced", "common"]
-    assert entries[1].origin == "legacy_link"
+    assert entries[1].kind == "project"
     assert entries[1].exists is True
 
 

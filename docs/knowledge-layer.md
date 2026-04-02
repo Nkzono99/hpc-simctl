@@ -46,7 +46,6 @@ project/
       mag_scan_results.md        # 実験結果サマリー
       heating_mechanism.md       # 物理的考察
     environment.toml             # 実行環境記述
-    links.toml                   # 他プロジェクトへの参照
     facts.toml                   # 構造化された知識 (AI 向け)
 ```
 
@@ -242,16 +241,17 @@ generate_claude_imports = true
 [[knowledge.sources]]
 name = "shared-lab-knowledge"
 type = "git"
+kind = "profiles"
 url = "git@github.com:lab/hpc-shared-knowledge.git"
 ref = "main"
 mount = "refs/knowledge/shared-lab-knowledge"
 profiles = ["common-analysis", "emses-basic"]
 
 [[knowledge.sources]]
-name = "personal-knowledge"
+name = "previous-campaign"
 type = "path"
-path = "../hpc-knowledge"
-mount = "refs/knowledge/personal-knowledge"
+kind = "project"
+path = "../previous-campaign"
 ```
 
 ### 操作
@@ -259,7 +259,8 @@ mount = "refs/knowledge/personal-knowledge"
 ```bash
 # 外部知識ソースの接続
 simctl knowledge source attach git shared-kb git@github.com:lab/hpc-shared-knowledge.git
-simctl knowledge source attach path local-kb ../hpc-knowledge
+simctl knowledge source attach path previous-campaign ../previous-campaign --kind project
+simctl knowledge source attach path shared-insights ../shared-insights --kind insights
 
 # 同期 (git clone/pull + imports.md 再生成)
 simctl knowledge source sync                    # 全ソース
@@ -379,51 +380,40 @@ AI エージェントは `/learn` スキルを使って知見を保存する。
 
 ## プロジェクト間の知識共有
 
-### links.toml
+`knowledge.sources` は `kind` に応じて役割が分かれる:
 
-`.simctl/links.toml` で他プロジェクトや共有知識ストアへの参照を定義する。
-`simctl knowledge link` コマンドで追加できる:
-
-```bash
-# ローカルプロジェクトをリンク
-simctl knowledge link ../surface-charging
-simctl knowledge link ../magnetosphere-v1
-
-# Git リポジトリをリンク (.simctl/shared/ に clone される)
-simctl knowledge link https://github.com/user/knowledge-base.git
-
-# 名前を指定してリンク
-simctl knowledge link ../shared-data --name my-shared
-
-# リンク解除
-simctl knowledge unlink surface-charging
-
-# リンク一覧
-simctl knowledge links
-```
-
-結果の `links.toml`:
+| `kind` | 用途 | 同期時の扱い |
+|--------|------|-------------|
+| `profiles` | 共有 knowledge repo を mount して `profiles/` を読む | `refs/knowledge/<name>/` に同期し、`imports.md` を再生成 |
+| `project` | 別の simctl project の `.simctl/insights/` を参照 | insights を自プロジェクトへコピー |
+| `insights` | `insights/` ディレクトリを持つ共有 knowledge store を参照 | insights を自プロジェクトへコピー |
 
 ```toml
-[projects]
-surface-charging = "../surface-charging"
-magnetosphere-v1 = "../magnetosphere-v1"
+[[knowledge.sources]]
+name = "surface-charging"
+type = "path"
+kind = "project"
+path = "../surface-charging"
 
-[shared]
-knowledge-base = ".simctl/shared/knowledge-base"
+[[knowledge.sources]]
+name = "analysis-notes"
+type = "git"
+kind = "insights"
+url = "git@github.com:lab/analysis-notes.git"
+mount = "refs/knowledge/analysis-notes"
 ```
 
-### sync の流れ
+`simctl knowledge source sync` の流れ:
 
 ```
 simctl knowledge source sync
-  → .simctl/links.toml を読む
-  → 各リンク先の .simctl/insights/ を走査
-  → 自プロジェクトにない insight をコピー
+  → 各 knowledge source を同期 (git clone/pull or path validate)
+  → kind=profiles の source から imports.md を再生成
+  → kind=project / kind=insights の source から insight を取り込む
   → 結果を報告
 ```
 
-同名の insight が既に存在する場合はスキップされる (上書きしない)。
+同名の insight が既に存在する場合はスキップされる。
 
 ## AI エージェントの推奨ワークフロー
 

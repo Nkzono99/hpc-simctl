@@ -9,7 +9,7 @@ from typing import Annotated, Optional
 
 import typer
 
-from simctl.core.knowledge import _repo_name_from_url
+from simctl.core.knowledge_source import _repo_name_from_url
 
 _DEFAULT_SIMCTL_REPO = "https://github.com/Nkzono99/hpc-simctl.git"
 

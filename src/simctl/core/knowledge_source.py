@@ -1,7 +1,7 @@
-"""Knowledge source management: external shared knowledge repo integration.
+"""Knowledge source management: external knowledge integration.
 
-Handles attaching, syncing, validating, and rendering knowledge sources
-defined in simproject.toml's ``[knowledge]`` section.
+Handles attaching, syncing, validating, rendering, and importing
+knowledge sources defined in simproject.toml's ``[knowledge]`` section.
 """
 
 from __future__ import annotations
@@ -31,6 +31,8 @@ logger = logging.getLogger(__name__)
 _PROJECT_FILE = "simproject.toml"
 _DEFAULT_MOUNT_DIR = "refs/knowledge"
 _DEFAULT_DERIVED_DIR = ".simctl/knowledge"
+_SOURCE_TYPES = frozenset({"git", "path"})
+_SOURCE_KINDS = frozenset({"profiles", "project", "insights"})
 
 
 # ---------- Data model ----------
@@ -43,15 +45,22 @@ class KnowledgeSource:
     Attributes:
         name: Source identifier (e.g. ``"shared-lab-knowledge"``).
         source_type: ``"git"`` or ``"path"``.
+        kind: How the source is consumed.
+            ``"profiles"`` mounts shared knowledge profiles and agent docs.
+            ``"project"`` imports insights from another simctl project.
+            ``"insights"`` imports insights from a shared knowledge store.
         url: Git URL or filesystem path to the source.
         ref: Git ref to checkout (default ``"main"``).
-        mount: Relative mount path from project root.
-        profiles: List of enabled profile names from this source.
+        mount: Relative checkout/mount path from project root.
+            Required for git sources and ``profiles`` sources.
+        profiles: List of enabled profile names from this source
+            (``profiles`` kind only).
     """
 
     name: str
     source_type: str
     url: str
+    kind: str = "profiles"
     ref: str = "main"
     mount: str = ""
     profiles: list[str] = field(default_factory=list)
@@ -80,29 +89,94 @@ class KnowledgeConfig:
 
 @dataclass(frozen=True)
 class ExternalKnowledgeMount:
-    """Normalized view of an attached knowledge source or legacy link.
+    """Normalized view of an attached knowledge source.
 
     Attributes:
         name: User-facing identifier.
-        origin: ``"source"`` for ``[knowledge.sources]`` entries or
-            ``"legacy_link"`` for ``.simctl/links.toml`` entries.
-        source_type: Concrete backend type such as ``"git"``, ``"path"``,
-            ``"project"``, or ``"shared"``.
-        path: Resolved absolute path for this external knowledge entry.
-        display_path: Relative mount path or resolved link path to show in CLI.
-        exists: Whether the mounted path currently exists.
-        profiles_enabled: Enabled profile names for mounted sources.
-        profiles_available: Discovered profile names at the mounted location.
+        source_type: Concrete transport type such as ``"git"`` or ``"path"``.
+        kind: Content shape such as ``"profiles"``, ``"project"``,
+            or ``"insights"``.
+        path: Resolved absolute path for this source.
+        display_path: Relative mount path or resolved source path to show in CLI.
+        exists: Whether the source is currently available locally.
+        profiles_enabled: Enabled profile names for ``profiles`` sources.
+        profiles_available: Discovered profile names for ``profiles`` sources.
     """
 
     name: str
-    origin: str
     source_type: str
+    kind: str
     path: Path
     display_path: str
     exists: bool
     profiles_enabled: list[str] = field(default_factory=list)
     profiles_available: list[str] = field(default_factory=list)
+
+
+def _normalize_source_type(value: Any) -> str:
+    source_type = str(value or "git")
+    if source_type not in _SOURCE_TYPES:
+        logger.warning("Unknown knowledge source type '%s'; using 'git'", value)
+        return "git"
+    return source_type
+
+
+def _normalize_source_kind(value: Any) -> str:
+    kind = str(value or "profiles")
+    if kind not in _SOURCE_KINDS:
+        logger.warning(
+            "Unknown knowledge source kind '%s'; using 'profiles'",
+            value,
+        )
+        return "profiles"
+    return kind
+
+
+def _default_mount(name: str, mount_dir: str, *, source_type: str, kind: str) -> str:
+    if source_type == "git" or kind == "profiles":
+        return f"{mount_dir}/{name}"
+    return ""
+
+
+def _resolve_path_source(project_root: Path, raw_path: str) -> Path:
+    resolved = Path(raw_path).expanduser()
+    if not resolved.is_absolute():
+        resolved = (project_root / resolved).resolve()
+    return resolved
+
+
+def _mount_path(project_root: Path, source: KnowledgeSource) -> Path | None:
+    if not source.mount:
+        return None
+    return project_root / source.mount
+
+
+def _source_root(project_root: Path, source: KnowledgeSource) -> Path:
+    if source.source_type == "path" and source.kind != "profiles":
+        return _resolve_path_source(project_root, source.url)
+
+    mount_path = _mount_path(project_root, source)
+    if mount_path is None:
+        msg = f"Knowledge source '{source.name}' requires a mount path"
+        raise KnowledgeSourceError(msg)
+    return mount_path
+
+
+def _insight_source_dir(project_root: Path, source: KnowledgeSource) -> Path | None:
+    root = _source_root(project_root, source)
+    if source.kind == "project":
+        return root / ".simctl" / "insights"
+    if source.kind == "insights":
+        return root / "insights"
+    return None
+
+
+def _repo_name_from_url(url: str) -> str:
+    """Extract repository name from a git URL."""
+    stem = url.rsplit("/", 1)[-1].rsplit(":", 1)[-1]
+    if stem.endswith(".git"):
+        stem = stem[:-4]
+    return stem
 
 
 # ---------- Config I/O ----------
@@ -126,22 +200,30 @@ def load_knowledge_config(project_root: Path) -> KnowledgeConfig | None:
         return None
 
     sources: list[KnowledgeSource] = []
+    mount_dir = str(knowledge_raw.get("mount_dir", _DEFAULT_MOUNT_DIR))
     for src in knowledge_raw.get("sources", []):
         if not isinstance(src, dict):
             continue
         name = src.get("name", "")
         if not name:
             continue
-        source_type = src.get("type", "git")
+        source_type = _normalize_source_type(src.get("type", "git"))
+        kind = _normalize_source_kind(src.get("kind", "profiles"))
         url = str(src.get("url") or src.get("path") or "")
         ref = src.get("ref", "main")
-        default_mount = f"{knowledge_raw.get('mount_dir', _DEFAULT_MOUNT_DIR)}/{name}"
-        mount = src.get("mount", default_mount)
-        profiles = list(src.get("profiles", []))
+        default_mount = _default_mount(
+            name,
+            mount_dir,
+            source_type=source_type,
+            kind=kind,
+        )
+        mount = str(src.get("mount", default_mount))
+        profiles = list(src.get("profiles", [])) if kind == "profiles" else []
         sources.append(
             KnowledgeSource(
                 name=name,
                 source_type=source_type,
+                kind=kind,
                 url=url,
                 ref=ref,
                 mount=mount,
@@ -151,7 +233,7 @@ def load_knowledge_config(project_root: Path) -> KnowledgeConfig | None:
 
     return KnowledgeConfig(
         enabled=knowledge_raw.get("enabled", True),
-        mount_dir=knowledge_raw.get("mount_dir", _DEFAULT_MOUNT_DIR),
+        mount_dir=mount_dir,
         derived_dir=knowledge_raw.get("derived_dir", _DEFAULT_DERIVED_DIR),
         auto_sync_on_setup=knowledge_raw.get("auto_sync_on_setup", True),
         generate_claude_imports=knowledge_raw.get("generate_claude_imports", True),
@@ -196,6 +278,7 @@ def save_knowledge_source(project_root: Path, source: KnowledgeSource) -> None:
     entry: dict[str, Any] = {
         "name": source.name,
         "type": source.source_type,
+        "kind": source.kind,
     }
     if source.source_type == "git":
         entry["url"] = source.url
@@ -205,7 +288,7 @@ def save_knowledge_source(project_root: Path, source: KnowledgeSource) -> None:
         entry["path"] = source.url
     if source.mount:
         entry["mount"] = source.mount
-    if source.profiles:
+    if source.profiles and source.kind == "profiles":
         entry["profiles"] = source.profiles
 
     # Replace existing source with same name, or append
@@ -246,51 +329,38 @@ def remove_knowledge_source(project_root: Path, name: str) -> bool:
 
 
 def collect_external_knowledge(project_root: Path) -> list[ExternalKnowledgeMount]:
-    """Return configured knowledge sources and legacy links in one list."""
+    """Return configured knowledge sources."""
     entries: list[ExternalKnowledgeMount] = []
 
     config = load_knowledge_config(project_root)
     if config is not None:
         for source in config.sources:
-            mount_path = project_root / source.mount
-            mounted = mount_path.is_dir()
+            try:
+                source_path = _source_root(project_root, source)
+            except KnowledgeSourceError:
+                fallback_mount = _mount_path(project_root, source)
+                source_path = fallback_mount or project_root
+            available = source_path.is_dir()
             entries.append(
                 ExternalKnowledgeMount(
                     name=source.name,
-                    origin="source",
                     source_type=source.source_type,
-                    path=mount_path,
-                    display_path=source.mount,
-                    exists=mounted,
-                    profiles_enabled=list(source.profiles),
+                    kind=source.kind,
+                    path=source_path,
+                    display_path=source.mount or str(source_path),
+                    exists=available,
+                    profiles_enabled=(
+                        list(source.profiles) if source.kind == "profiles" else []
+                    ),
                     profiles_available=(
-                        discover_profiles(mount_path) if mounted else []
+                        discover_profiles(source_path)
+                        if available and source.kind == "profiles"
+                        else []
                     ),
                 )
             )
 
-    try:
-        from simctl.core.knowledge import load_links
-    except Exception:
-        load_links = None
-
-    if load_links is not None:
-        for link in load_links(project_root):
-            entries.append(
-                ExternalKnowledgeMount(
-                    name=link.name,
-                    origin="legacy_link",
-                    source_type=link.link_type,
-                    path=link.path,
-                    display_path=str(link.path),
-                    exists=link.path.is_dir(),
-                )
-            )
-
-    return sorted(
-        entries,
-        key=lambda entry: (entry.origin != "source", entry.name.lower()),
-    )
+    return sorted(entries, key=lambda entry: entry.name.lower())
 
 
 # ---------- Source sync ----------
@@ -308,15 +378,19 @@ def sync_source(project_root: Path, source: KnowledgeSource) -> str:
     Raises:
         KnowledgeSourceError: If sync fails.
     """
-    mount_path = project_root / source.mount
-
     if source.source_type == "path":
-        resolved = Path(source.url).expanduser()
-        if not resolved.is_absolute():
-            resolved = (project_root / resolved).resolve()
+        resolved = _resolve_path_source(project_root, source.url)
         if not resolved.is_dir():
             raise KnowledgeSourceError(
                 f"Knowledge source path not found: {resolved}"
+            )
+        if source.kind != "profiles":
+            return "available"
+
+        mount_path = _mount_path(project_root, source)
+        if mount_path is None:
+            raise KnowledgeSourceError(
+                f"Knowledge source '{source.name}' requires a mount path"
             )
         mount_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -342,6 +416,11 @@ def sync_source(project_root: Path, source: KnowledgeSource) -> str:
             return "copied"
 
     # git source
+    mount_path = _mount_path(project_root, source)
+    if mount_path is None:
+        raise KnowledgeSourceError(
+            f"Knowledge source '{source.name}' requires a mount path"
+        )
     if mount_path.is_dir() and (mount_path / ".git").exists():
         # Pull
         result = subprocess.run(
@@ -395,6 +474,42 @@ def sync_all_sources(
             status = f"error: {e}"
         results.append((source.name, status))
     return results
+
+
+def import_external_insights(
+    project_root: Path,
+    sources: list[KnowledgeSource],
+    *,
+    simulator: str = "",
+) -> tuple[int, int]:
+    """Import insights from configured external sources."""
+    from simctl.core.knowledge import get_insights_dir, parse_insight
+
+    our_insights_dir = get_insights_dir(project_root)
+    imported = 0
+    skipped = 0
+
+    for source in sources:
+        source_dir = _insight_source_dir(project_root, source)
+        if source_dir is None or not source_dir.is_dir():
+            continue
+
+        for md_file in sorted(source_dir.glob("*.md")):
+            insight = parse_insight(md_file)
+            if insight is None:
+                continue
+            if simulator and insight.simulator != simulator:
+                continue
+
+            dest = our_insights_dir / md_file.name
+            if dest.exists():
+                skipped += 1
+                continue
+
+            shutil.copy2(md_file, dest)
+            imported += 1
+
+    return imported, skipped
 
 
 # ---------- Validation ----------
@@ -470,7 +585,13 @@ def render_imports(
     ]
 
     for source in config.sources:
-        mount_path = project_root / source.mount
+        if source.kind != "profiles":
+            continue
+
+        mount_path = _mount_path(project_root, source)
+        if mount_path is None:
+            lines.append(f"<!-- source {source.name}: mount not configured -->")
+            continue
         if not mount_path.is_dir():
             lines.append(f"<!-- source {source.name}: not mounted -->")
             continue

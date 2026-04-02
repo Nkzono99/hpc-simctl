@@ -118,13 +118,13 @@ simctl knowledge add-fact "claim" -t constraint -s emses \
 simctl knowledge facts
 simctl knowledge facts --scope emses --tag stability -c medium
 
-# プロジェクト間リンク
-simctl knowledge link ../other-project              # ローカルプロジェクト
-simctl knowledge link https://github.com/u/repo.git # git リポジトリ
-simctl knowledge link ../shared -n my-shared        # 名前指定
-simctl knowledge unlink other-project               # リンク解除
-simctl knowledge links                              # リンク一覧
-simctl knowledge source sync                               # リンク先から知見をインポート
+# 外部 knowledge source
+simctl knowledge source attach path other-project ../other-project --kind project
+simctl knowledge source attach git shared-kb https://github.com/u/repo.git
+simctl knowledge source attach path analysis-notes ../shared-notes --kind insights
+simctl knowledge source detach other-project
+simctl knowledge source list
+simctl knowledge source sync                        # 接続先から知見をインポート
 simctl knowledge source sync -s emses
 ```
 

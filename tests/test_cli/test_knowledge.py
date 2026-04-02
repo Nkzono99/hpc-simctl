@@ -155,13 +155,44 @@ def test_attach_path_source(tmp_path: Path) -> None:
         )
 
     assert result.exit_code == 0
-    assert "Attached [path] my-kb" in result.output
+    assert "Attached [profiles/path] my-kb" in result.output
 
     config = load_knowledge_config(project_root)
     assert config is not None
     assert len(config.sources) == 1
     assert config.sources[0].name == "my-kb"
     assert config.sources[0].source_type == "path"
+    assert config.sources[0].kind == "profiles"
+
+
+def test_attach_path_project_source(tmp_path: Path) -> None:
+    project_root = _create_project(tmp_path)
+    upstream = tmp_path / "other-project"
+    (upstream / ".simctl" / "insights").mkdir(parents=True)
+
+    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+        result = runner.invoke(
+            app,
+            [
+                "knowledge",
+                "source",
+                "attach",
+                "path",
+                "other-project",
+                str(upstream),
+                "--kind",
+                "project",
+                "--no-sync",
+            ],
+        )
+
+    assert result.exit_code == 0
+    assert "Attached [project/path] other-project" in result.output
+
+    config = load_knowledge_config(project_root)
+    assert config is not None
+    assert config.sources[0].kind == "project"
+    assert config.sources[0].mount == ""
 
 
 def test_attach_git_source_with_profiles(tmp_path: Path) -> None:
@@ -181,6 +212,7 @@ def test_attach_git_source_with_profiles(tmp_path: Path) -> None:
     assert result.exit_code == 0
     config = load_knowledge_config(project_root)
     assert config is not None
+    assert config.sources[0].kind == "profiles"
     assert config.sources[0].profiles == ["common", "emses"]
 
 
@@ -205,6 +237,30 @@ def test_attach_invalid_type(tmp_path: Path) -> None:
     assert "Invalid source type" in result.output
 
 
+def test_attach_rejects_profiles_for_project_source(tmp_path: Path) -> None:
+    project_root = _create_project(tmp_path)
+
+    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+        result = runner.invoke(
+            app,
+            [
+                "knowledge",
+                "source",
+                "attach",
+                "path",
+                "upstream",
+                "../upstream",
+                "--kind",
+                "project",
+                "--profiles",
+                "common",
+            ],
+        )
+
+    assert result.exit_code == 1
+    assert "--profiles is only valid" in result.output
+
+
 def test_detach_source(tmp_path: Path) -> None:
     toml = """
 [knowledge]
@@ -213,6 +269,7 @@ enabled = true
 [[knowledge.sources]]
 name = "test-kb"
 type = "path"
+kind = "profiles"
 path = "/some/path"
 mount = "refs/knowledge/test-kb"
 """
@@ -252,6 +309,7 @@ enabled = true
 [[knowledge.sources]]
 name = "kb"
 type = "path"
+kind = "profiles"
 path = "."
 mount = "refs/knowledge/kb"
 profiles = ["common"]
@@ -302,6 +360,7 @@ enabled = true
 [[knowledge.sources]]
 name = "kb"
 type = "path"
+kind = "profiles"
 path = "."
 mount = "refs/knowledge/kb"
 profiles = ["common"]
@@ -316,25 +375,6 @@ profiles = ["common"]
     assert "kb" in result.output
 
 
-def test_status_reports_legacy_links_without_knowledge_config(tmp_path: Path) -> None:
-    project_root = _create_project(tmp_path)
-    linked_project = tmp_path.parent / "legacy-project"
-    linked_project.mkdir(parents=True, exist_ok=True)
-    (project_root / ".simctl").mkdir()
-    (project_root / ".simctl" / "links.toml").write_text(
-        '[projects]\nlegacy-project = "../legacy-project"\n',
-        encoding="utf-8",
-    )
-
-    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
-        result = runner.invoke(app, ["knowledge", "source", "status"])
-
-    assert result.exit_code == 0
-    assert "not configured" in result.output
-    assert "legacy_links: 1" in result.output
-    assert "legacy-project" in result.output
-
-
 def test_source_list_shows_configured_sources(tmp_path: Path) -> None:
     toml = """
 [knowledge]
@@ -343,6 +383,7 @@ enabled = true
 [[knowledge.sources]]
 name = "kb"
 type = "git"
+kind = "profiles"
 url = "https://github.com/lab/kb.git"
 mount = "refs/knowledge/kb"
 """
@@ -356,7 +397,7 @@ mount = "refs/knowledge/kb"
     assert "git" in result.output
 
 
-def test_source_list_includes_legacy_links(tmp_path: Path) -> None:
+def test_source_list_includes_project_sources(tmp_path: Path) -> None:
     toml = """
 [knowledge]
 enabled = true
@@ -364,17 +405,19 @@ enabled = true
 [[knowledge.sources]]
 name = "kb"
 type = "git"
+kind = "profiles"
 url = "https://github.com/lab/kb.git"
 mount = "refs/knowledge/kb"
+
+[[knowledge.sources]]
+name = "legacy-project"
+type = "path"
+kind = "project"
+path = "../legacy-project"
 """
     project_root = _create_project(tmp_path, toml)
     linked_project = tmp_path.parent / "legacy-project"
     linked_project.mkdir(parents=True, exist_ok=True)
-    (project_root / ".simctl").mkdir()
-    (project_root / ".simctl" / "links.toml").write_text(
-        '[projects]\nlegacy-project = "../legacy-project"\n',
-        encoding="utf-8",
-    )
 
     with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
         result = runner.invoke(app, ["knowledge", "source", "list"])
@@ -382,7 +425,7 @@ mount = "refs/knowledge/kb"
     assert result.exit_code == 0
     assert "kb" in result.output
     assert "legacy-project" in result.output
-    assert "Legacy knowledge links" in result.output
+    assert "project/path" in result.output
 
 
 def test_source_list_no_config(tmp_path: Path) -> None:
@@ -392,7 +435,7 @@ def test_source_list_no_config(tmp_path: Path) -> None:
         result = runner.invoke(app, ["knowledge", "source", "list"])
 
     assert result.exit_code == 0
-    assert "No external knowledge" in result.output
+    assert "No knowledge sources" in result.output
 
 
 def test_source_group_list(tmp_path: Path) -> None:
@@ -403,6 +446,7 @@ enabled = true
 [[knowledge.sources]]
 name = "kb"
 type = "git"
+kind = "profiles"
 url = "https://github.com/lab/kb.git"
 mount = "refs/knowledge/kb"
 """
@@ -416,10 +460,7 @@ mount = "refs/knowledge/kb"
     assert "kb" in result.output
 
 
-def test_sync_supports_named_legacy_link(tmp_path: Path) -> None:
-    project_root = _create_project(tmp_path)
-    project_simctl = project_root / ".simctl"
-    project_simctl.mkdir()
+def test_sync_supports_named_project_source(tmp_path: Path) -> None:
     linked_a = tmp_path.parent / "linked-a"
     linked_b = tmp_path.parent / "linked-b"
     for linked_root, insight_name in (
@@ -438,16 +479,31 @@ def test_sync_supports_named_legacy_link(tmp_path: Path) -> None:
             encoding="utf-8",
         )
 
-    (project_simctl / "links.toml").write_text(
-        '[projects]\nalpha = "../linked-a"\nbeta = "../linked-b"\n',
-        encoding="utf-8",
+    project_root = _create_project(
+        tmp_path,
+        """
+[knowledge]
+enabled = true
+
+[[knowledge.sources]]
+name = "alpha"
+type = "path"
+kind = "project"
+path = "../linked-a"
+
+[[knowledge.sources]]
+name = "beta"
+type = "path"
+kind = "project"
+path = "../linked-b"
+""",
     )
 
     with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
         result = runner.invoke(app, ["knowledge", "source", "sync", "alpha"])
 
     assert result.exit_code == 0
-    assert "legacy linked projects" in result.output
+    assert "Importing insights from external sources" in result.output
     assert "alpha" in result.output
     assert "beta" not in result.output
     assert (project_root / ".simctl" / "insights" / "alpha-note.md").is_file()
@@ -459,6 +515,17 @@ def test_removed_flat_source_commands_are_unavailable() -> None:
         ["knowledge", "attach", "--help"],
         ["knowledge", "status"],
         ["knowledge", "render"],
+    ):
+        result = runner.invoke(app, argv)
+        assert result.exit_code != 0
+        assert "No such command" in result.output
+
+
+def test_removed_link_commands_are_unavailable() -> None:
+    for argv in (
+        ["knowledge", "link", "--help"],
+        ["knowledge", "unlink", "--help"],
+        ["knowledge", "links"],
     ):
         result = runner.invoke(app, argv)
         assert result.exit_code != 0

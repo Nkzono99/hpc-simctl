@@ -94,7 +94,7 @@ def _mkdir_if_missing(path: Path) -> bool:
 
 
 def _create_simctl_skeleton(project_dir: Path, created: list[str]) -> None:
-    """Create .simctl/ skeleton (insights/, facts.toml, links.toml, knowledge/).
+    """Create .simctl/ skeleton (insights/, facts.toml, knowledge/).
 
     Args:
         project_dir: Project root directory.
@@ -109,10 +109,6 @@ def _create_simctl_skeleton(project_dir: Path, created: list[str]) -> None:
 
     if _write_if_missing(simctl_dir / "facts.toml", load_static("scaffold/facts.toml")):
         created.append(".simctl/facts.toml")
-    if _write_if_missing(
-        simctl_dir / "links.toml", load_static("scaffold/links.toml")
-    ):
-        created.append(".simctl/links.toml")
     # Knowledge integration directories
     if _mkdir_if_missing(simctl_dir / "knowledge"):
         created.append(".simctl/knowledge/")

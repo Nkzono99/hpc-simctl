@@ -14,19 +14,16 @@ from simctl.core.knowledge import (
     FACT_TYPES,
     INSIGHT_TYPES,
     Insight,
-    add_link,
     get_insights_dir,
     list_insights,
-    load_links,
     query_facts,
-    remove_link,
-    sync_insights,
     write_insight,
 )
 from simctl.core.knowledge_source import (
     ExternalKnowledgeMount,
     KnowledgeSource,
     collect_external_knowledge,
+    import_external_insights,
     load_knowledge_config,
     remove_knowledge_source,
     render_imports,
@@ -39,7 +36,7 @@ from simctl.core.project import find_project_root
 
 knowledge_app = typer.Typer(
     name="knowledge",
-    help="Manage project knowledge, external sources, and legacy links.",
+    help="Manage project knowledge and external knowledge sources.",
     no_args_is_help=True,
 )
 
@@ -182,22 +179,13 @@ def list_cmd(
 
 
 def _list_sources(root: Path) -> None:
-    """Display external knowledge sources and legacy links."""
+    """Display external knowledge sources."""
     entries = collect_external_knowledge(root)
     if not entries:
-        typer.echo("No external knowledge configured.")
+        typer.echo("No knowledge sources configured.")
         return
 
     _print_external_status(entries, detailed=False)
-
-
-def _split_external_entries(
-    entries: list[ExternalKnowledgeMount],
-) -> tuple[list[ExternalKnowledgeMount], list[ExternalKnowledgeMount]]:
-    """Split normalized external knowledge entries by origin."""
-    sources = [entry for entry in entries if entry.origin == "source"]
-    legacy_links = [entry for entry in entries if entry.origin == "legacy_link"]
-    return sources, legacy_links
 
 
 def _print_external_status(
@@ -205,12 +193,35 @@ def _print_external_status(
     *,
     detailed: bool,
 ) -> None:
-    """Render configured sources and legacy links from a shared view."""
-    sources, legacy_links = _split_external_entries(entries)
+    """Render configured sources from a shared view."""
+    typer.echo("Configured knowledge sources:")
+    for entry in entries:
+        status = "OK" if entry.exists else "NOT READY"
+        location_label = "mount" if entry.kind == "profiles" else "location"
+        if detailed:
+            long_status = "ready" if entry.exists else "not ready"
+            typer.echo(
+                f"\n  [{entry.kind}/{entry.source_type}] {entry.name} ({long_status})"
+            )
+            typer.echo(f"    {location_label}: {entry.display_path}")
+            if entry.kind == "profiles":
+                enabled = (
+                    ", ".join(entry.profiles_enabled)
+                    if entry.profiles_enabled
+                    else "(none)"
+                )
+                available = (
+                    ", ".join(entry.profiles_available)
+                    if entry.profiles_available
+                    else "(none)"
+                )
+                typer.echo(f"    available profiles: {available}")
+                typer.echo(f"    enabled profiles: {enabled}")
+            continue
 
-    if sources:
-        typer.echo("Configured knowledge sources:")
-        for entry in sources:
+        typer.echo(f"  {entry.name} [{entry.kind}/{entry.source_type}] ({status})")
+        typer.echo(f"    {location_label}: {entry.display_path}")
+        if entry.kind == "profiles":
             enabled = (
                 ", ".join(entry.profiles_enabled)
                 if entry.profiles_enabled
@@ -221,36 +232,8 @@ def _print_external_status(
                 if entry.profiles_available
                 else "(none)"
             )
-            if detailed:
-                status = "mounted" if entry.exists else "not mounted"
-                typer.echo(f"\n  [{entry.source_type}] {entry.name} ({status})")
-                typer.echo(f"    mount: {entry.display_path}")
-                typer.echo(f"    available profiles: {available}")
-                typer.echo(f"    enabled profiles: {enabled}")
-                continue
-
-            status = "OK" if entry.exists else "NOT MOUNTED"
-            typer.echo(f"  {entry.name} [{entry.source_type}] ({status})")
-            typer.echo(f"    mount: {entry.display_path}")
             typer.echo(f"    available profiles: {available}")
             typer.echo(f"    enabled profiles:   {enabled}")
-
-    if legacy_links:
-        if sources:
-            typer.echo("")
-        typer.echo("Legacy knowledge links:")
-        for entry in legacy_links:
-            if detailed:
-                status = "available" if entry.exists else "not found"
-                typer.echo(
-                    f"\n  [{entry.source_type}] {entry.name} (legacy, {status})"
-                )
-                typer.echo(f"    path: {entry.display_path}")
-                continue
-
-            status = "OK" if entry.exists else "NOT FOUND"
-            typer.echo(f"  {entry.name} [legacy {entry.source_type}] ({status})")
-            typer.echo(f"    path: {entry.display_path}")
 
 
 @knowledge_app.command("show")
@@ -290,12 +273,11 @@ def sync(
         ),
     ] = None,
 ) -> None:
-    """Sync knowledge sources and import insights from linked projects.
+    """Sync knowledge sources and import insights from external sources.
 
     When a source name is given, only that source is synced.
-    Otherwise, all knowledge sources are synced, then insight
-    links are imported. Legacy links from ``.simctl/links.toml``
-    are still supported and can be synced by name.
+    Otherwise, all knowledge sources are synced, then insights are
+    imported from sources with ``kind = "project"`` or ``"insights"``.
 
     Examples:
       simctl knowledge source sync
@@ -303,152 +285,54 @@ def sync(
       simctl knowledge source sync -s emses
     """
     root = _find_root()
-    matched_source = False
-    matched_link = False
-
-    # Sync knowledge sources
     config = load_knowledge_config(root)
-    if config is not None and config.sources:
-        if source_name:
-            # Sync single source
-            matched = [s for s in config.sources if s.name == source_name]
-            for src in matched:
-                matched_source = True
-                try:
-                    status = sync_source(root, src)
-                    typer.echo(f"  [{src.source_type}] {src.name}: {status}")
-                except KnowledgeSourceError as e:
-                    typer.echo(f"  [{src.source_type}] {src.name}: error - {e}")
-        else:
-            # Sync all sources
-            matched_source = True
-            typer.echo("Syncing knowledge sources...")
-            results = sync_all_sources(root, config)
-            for name, status in results:
-                typer.echo(f"  {name}: {status}")
-
-        if matched_source:
-            # Re-render imports after source sync
-            try:
-                render_imports(root, config)
-                typer.echo("Rendered imports.md")
-            except Exception as e:
-                typer.echo(f"Warning: failed to render imports: {e}", err=True)
-
-    # Sync insights from project links (existing behavior)
-    links = load_links(root)
-    selected_links = (
-        [link for link in links if link.name == source_name] if source_name else links
-    )
-    if selected_links:
-        matched_link = True
-        typer.echo("Syncing insights from legacy linked projects...")
-        for link in selected_links:
-            exists = link.path.is_dir()
-            status_str = "" if exists else " (not found)"
-            typer.echo(f"  [{link.link_type}] {link.name}: {link.path}{status_str}")
-        imported, skipped = sync_insights(
-            root,
-            simulator=simulator or "",
-            link_names=[link.name for link in selected_links],
-        )
-        typer.echo(f"Imported: {imported}, Skipped (exists): {skipped}")
-
-    if source_name and not matched_source and not matched_link:
-        typer.echo(f"Source or legacy link not found: {source_name}", err=True)
-        raise typer.Exit(code=1)
-    if not matched_source and not matched_link:
-        typer.echo("No knowledge sources or links configured.")
-
-
-@knowledge_app.command("links")
-def links_cmd() -> None:
-    """Show configured legacy project links.
-
-    Examples:
-      simctl knowledge links
-    """
-    root = _find_root()
-    links = load_links(root)
-
-    if not links:
-        typer.echo(
-            "No legacy links configured. Use "
-            "'simctl knowledge link <path_or_url>' to add one."
-        )
+    if config is None or not config.sources:
+        typer.echo("No knowledge sources configured.")
         return
 
-    for link in links:
-        exists = link.path.is_dir()
-        status = "OK" if exists else "NOT FOUND"
-        typer.echo(f"  [{link.link_type}] {link.name}: {link.path} ({status})")
-
-
-@knowledge_app.command("link")
-def link_cmd(
-    target: Annotated[
-        str,
-        typer.Argument(
-            help="Local path or git URL (https://*.git).",
-        ),
-    ],
-    name: Annotated[
-        Optional[str],
-        typer.Option(
-            "--name",
-            "-n",
-            help="Link name (auto-detected from path/URL).",
-        ),
-    ] = None,
-) -> None:
-    """Add a link to another project or shared knowledge repo.
-
-    Local paths are added as project links.
-    Git URLs are cloned to .simctl/shared/ and added as shared links.
-
-    Examples:
-      simctl knowledge link ../other-experiment
-      simctl knowledge link https://github.com/user/knowledge-base.git
-      simctl knowledge link ../shared-data --name shared-kb
-    """
-    root = _find_root()
-    try:
-        link_name, link_type, resolved = add_link(
-            root,
-            target,
-            name=name or "",
-        )
-    except RuntimeError as e:
-        typer.echo(f"Error: {e}", err=True)
-        raise typer.Exit(code=1) from None
-
-    typer.echo(f"Linked [{link_type}] {link_name}: {resolved}")
-
-
-@knowledge_app.command("unlink")
-def unlink_cmd(
-    name: Annotated[
-        str,
-        typer.Argument(help="Link name to remove."),
-    ],
-) -> None:
-    """Remove a project link.
-
-    Examples:
-      simctl knowledge unlink other-experiment
-    """
-    root = _find_root()
-    try:
-        removed = remove_link(root, name)
-    except RuntimeError as e:
-        typer.echo(f"Error: {e}", err=True)
-        raise typer.Exit(code=1) from None
-
-    if removed:
-        typer.echo(f"Unlinked: {name}")
-    else:
-        typer.echo(f"Link not found: {name}", err=True)
+    selected_sources = (
+        [source for source in config.sources if source.name == source_name]
+        if source_name
+        else list(config.sources)
+    )
+    if source_name and not selected_sources:
+        typer.echo(f"Knowledge source not found: {source_name}", err=True)
         raise typer.Exit(code=1)
+
+    typer.echo("Syncing knowledge sources...")
+    if source_name:
+        for src in selected_sources:
+            try:
+                status = sync_source(root, src)
+                typer.echo(f"  [{src.kind}/{src.source_type}] {src.name}: {status}")
+            except KnowledgeSourceError as e:
+                typer.echo(
+                    f"  [{src.kind}/{src.source_type}] {src.name}: error - {e}"
+                )
+    else:
+        for name, status in sync_all_sources(root, config):
+            typer.echo(f"  {name}: {status}")
+
+    if any(source.kind == "profiles" for source in config.sources):
+        try:
+            render_imports(root, config)
+            typer.echo("Rendered imports.md")
+        except Exception as e:
+            typer.echo(f"Warning: failed to render imports: {e}", err=True)
+
+    importable_sources = [
+        source for source in selected_sources if source.kind in {"project", "insights"}
+    ]
+    if importable_sources:
+        typer.echo("Importing insights from external sources...")
+        for source in importable_sources:
+            typer.echo(f"  [{source.kind}/{source.source_type}] {source.name}")
+        imported, skipped = import_external_insights(
+            root,
+            importable_sources,
+            simulator=simulator or "",
+        )
+        typer.echo(f"Imported: {imported}, Skipped (exists): {skipped}")
 
 
 @knowledge_app.command("add-fact")
@@ -651,6 +535,13 @@ def attach(
         str,
         typer.Option("--ref", help="Git ref to checkout (git sources only)."),
     ] = "main",
+    kind: Annotated[
+        str,
+        typer.Option(
+            "--kind",
+            help="Source kind: profiles, project, or insights.",
+        ),
+    ] = "profiles",
     mount: Annotated[
         Optional[str],
         typer.Option("--mount", help="Override mount path."),
@@ -668,7 +559,7 @@ def attach(
 
     Examples:
       simctl knowledge source attach git shared-kb git@github.com:lab/kb.git
-      simctl knowledge source attach path personal-kb ../hpc-knowledge
+      simctl knowledge source attach path old-project ../old-project --kind project
       simctl knowledge source attach git lab-kb \\
         https://github.com/lab/kb.git --profiles common,emses
     """
@@ -676,9 +567,30 @@ def attach(
         msg = f"Invalid source type: {source_type}. Must be 'git' or 'path'."
         typer.echo(msg, err=True)
         raise typer.Exit(code=1)
+    if kind not in ("profiles", "project", "insights"):
+        msg = (
+            f"Invalid source kind: {kind}. "
+            "Must be 'profiles', 'project', or 'insights'."
+        )
+        typer.echo(msg, err=True)
+        raise typer.Exit(code=1)
+    if kind != "profiles" and profiles:
+        typer.echo(
+            "Error: --profiles is only valid for sources with --kind profiles.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+    if source_type == "path" and kind != "profiles" and mount:
+        typer.echo(
+            "Error: --mount is not used for path sources with --kind project|insights.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
 
     root = _find_root()
-    mount_path = mount or f"refs/knowledge/{name}"
+    mount_path = mount or (
+        f"refs/knowledge/{name}" if source_type == "git" or kind == "profiles" else ""
+    )
     profile_list = (
         [p.strip() for p in profiles.split(",") if p.strip()] if profiles else []
     )
@@ -686,6 +598,7 @@ def attach(
     source = KnowledgeSource(
         name=name,
         source_type=source_type,
+        kind=kind,
         url=url_or_path,
         ref=ref if source_type == "git" else "main",
         mount=mount_path,
@@ -698,9 +611,10 @@ def attach(
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=1) from None
 
-    typer.echo(f"Attached [{source_type}] {name}: {url_or_path}")
-    typer.echo(f"  mount: {mount_path}")
-    if profile_list:
+    typer.echo(f"Attached [{kind}/{source_type}] {name}: {url_or_path}")
+    if mount_path:
+        typer.echo(f"  mount: {mount_path}")
+    if kind == "profiles" and profile_list:
         typer.echo(f"  profiles: {', '.join(profile_list)}")
 
     if not no_sync:
@@ -711,9 +625,9 @@ def attach(
         except KnowledgeSourceError as e:
             typer.echo(f"  Sync failed: {e}", err=True)
 
-        # Validate structure
-        source_dir = root / mount_path
-        if source_dir.is_dir():
+        # Validate profile sources after they are synced locally.
+        source_dir = root / mount_path if mount_path else None
+        if kind == "profiles" and source_dir and source_dir.is_dir():
             issues = validate_source_structure(source_dir)
             if issues:
                 typer.echo("Validation warnings:")
@@ -806,26 +720,27 @@ def status_cmd() -> None:
     root = _find_root()
     config = load_knowledge_config(root)
     external_entries = collect_external_knowledge(root)
-    configured_sources, legacy_links = _split_external_entries(external_entries)
 
     if config is None:
         typer.echo("Knowledge integration: not configured")
         typer.echo(
             "  Add [knowledge] section to simproject.toml"
-            " or use 'simctl knowledge source attach'. Legacy links remain supported."
+            " or use 'simctl knowledge source attach'."
         )
     else:
         status = "enabled" if config.enabled else "disabled"
         typer.echo(f"Knowledge integration: {status}")
         typer.echo(f"  mount_dir: {config.mount_dir}")
         typer.echo(f"  derived_dir: {config.derived_dir}")
-    typer.echo(f"  sources: {len(configured_sources)}")
-    typer.echo(f"  legacy_links: {len(legacy_links)}")
+        typer.echo(f"  sources: {len(config.sources)}")
 
     if external_entries:
         _print_external_status(external_entries, detailed=True)
 
     if config is None:
+        return
+
+    if not any(source.kind == "profiles" for source in config.sources):
         return
 
     # Check imports.md status
@@ -841,7 +756,7 @@ def status_cmd() -> None:
 
 @source_app.command("list")
 def source_list_cmd() -> None:
-    """Show configured external knowledge sources and legacy links."""
+    """Show configured external knowledge sources."""
     root = _find_root()
     _list_sources(root)
 

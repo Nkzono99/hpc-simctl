@@ -258,8 +258,8 @@ def _collect_knowledge_paths(root: Path) -> dict[str, Any]:
             result["external_knowledge"] = [
                 {
                     "name": entry.name,
-                    "origin": entry.origin,
                     "type": entry.source_type,
+                    "kind": entry.kind,
                     "path": str(entry.path),
                     "display_path": entry.display_path,
                     "exists": entry.exists,
@@ -272,23 +272,13 @@ def _collect_knowledge_paths(root: Path) -> dict[str, Any]:
                 {
                     "name": entry.name,
                     "type": entry.source_type,
-                    "mount": entry.display_path,
-                    "mounted": entry.exists,
+                    "kind": entry.kind,
+                    "location": entry.display_path,
+                    "available": entry.exists,
                     "profiles_enabled": list(entry.profiles_enabled),
                     "profiles_available": list(entry.profiles_available),
                 }
                 for entry in external_entries
-                if entry.origin == "source"
-            ]
-            result["links"] = [
-                {
-                    "name": entry.name,
-                    "type": entry.source_type,
-                    "path": str(entry.path),
-                    "exists": entry.exists,
-                }
-                for entry in external_entries
-                if entry.origin == "legacy_link"
             ]
     except Exception:
         logger.debug("Failed to collect knowledge integration details", exc_info=True)

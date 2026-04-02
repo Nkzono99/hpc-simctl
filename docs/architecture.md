@@ -632,7 +632,7 @@ campaign.toml              ← ユーザーが記述
 
 ```
 .simctl/insights/*.md      ← /learn で保存
-.simctl/links.toml         ← 他プロジェクトへの参照
+simproject.toml:[knowledge.sources] ← 外部 knowledge source 定義
     ↓ simctl knowledge source sync
 insights のインポート       ← プロジェクト横断の知識共有
 ```

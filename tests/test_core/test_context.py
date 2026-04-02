@@ -28,9 +28,16 @@ def test_context_includes_knowledge_integration_details(tmp_path: Path) -> None:
                     {
                         "name": "shared-kb",
                         "type": "path",
+                        "kind": "profiles",
                         "path": "../shared-kb",
                         "mount": "refs/knowledge/shared-kb",
                         "profiles": ["common"],
+                    },
+                    {
+                        "name": "other-project",
+                        "type": "path",
+                        "kind": "project",
+                        "path": "../other-project",
                     }
                 ],
             },
@@ -59,12 +66,6 @@ def test_context_includes_knowledge_integration_details(tmp_path: Path) -> None:
 
     other_project = tmp_path.parent / "other-project"
     other_project.mkdir(parents=True, exist_ok=True)
-    _write_toml(
-        tmp_path / ".simctl" / "links.toml",
-        {
-            "projects": {"other-project": "../other-project"},
-        },
-    )
 
     _write_toml(
         tmp_path / ".simctl" / "facts.toml",
@@ -101,9 +102,18 @@ def test_context_includes_knowledge_integration_details(tmp_path: Path) -> None:
     assert knowledge["insights_count"] == 1
     assert knowledge["recent_insights"][0]["name"] == "result_note"
     assert len(knowledge["external_knowledge"]) == 2
-    assert knowledge["external_knowledge"][0]["origin"] == "source"
-    assert knowledge["knowledge_sources"][0]["name"] == "shared-kb"
-    assert knowledge["knowledge_sources"][0]["mounted"] is True
-    assert knowledge["knowledge_sources"][0]["profiles_available"] == ["common"]
-    assert knowledge["links"][0]["name"] == "other-project"
-    assert knowledge["links"][0]["exists"] is True
+    assert knowledge["external_knowledge"][0]["kind"] == "project"
+    shared = next(
+        source
+        for source in knowledge["knowledge_sources"]
+        if source["name"] == "shared-kb"
+    )
+    assert shared["kind"] == "profiles"
+    assert shared["available"] is True
+    assert shared["profiles_available"] == ["common"]
+    other = next(
+        source
+        for source in knowledge["knowledge_sources"]
+        if source["name"] == "other-project"
+    )
+    assert other["kind"] == "project"
