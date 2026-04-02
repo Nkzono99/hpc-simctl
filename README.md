@@ -411,7 +411,7 @@ uv run simctl --help
 
 ## ドキュメント
 
-- [はじめに (Getting Started)](docs/getting-started.md) -- チュートリアル形式のウォークスルー
+- [AI エージェントではじめる](docs/get-started-with-agent.md) -- `simctl init` 済み project を Agent と進める最短導線
 - [アーキテクチャ](docs/architecture.md) -- システム設計とモジュール構成
 - [拡張ガイド](docs/extending.md) -- Adapter / Launcher の追加方法
 - [知識層](docs/knowledge-layer.md) -- AI エージェント向け知識管理アーキテクチャ
