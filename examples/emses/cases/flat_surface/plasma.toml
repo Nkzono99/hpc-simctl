@@ -7,6 +7,37 @@ format_version = 2
 dx = 0.5
 to_c = 10000.0
 
+[meta.physical]
+density_m3 = 5000000.15038414
+particles_per_cell = 30
+magnetic_field_T = 0.0
+
+[[meta.physical.species]]
+mass_ratio = 1.0
+qm_sign = -1
+temperature_eV = 10
+
+[[meta.physical.species]]
+mass_ratio = 1836.0536645468228
+qm_sign = 1
+temperature_eV = 10
+
+[[species]]
+wp = 2.10390362104881
+qm = -1.0
+vdthz = 1414.213562
+vdthxy = 1414.213562
+npin = 96000000
+ipadig = 1024
+
+[[species]]
+wp = 0.04909886429062906
+qm = 0.00054464638986836
+vdthz = 30.39968
+vdthxy = 30.39968
+npin = 96000000
+ipadig = 1024
+
 [esorem]
 emflag = 0
 
@@ -40,29 +71,11 @@ ionchg = 0
 nfbnd = [1, 0, 1]
 nflag_ecrct = 1
 
-[[species]]
-wp = 2.10390362104881
-qm = -1.0
-npin = 96000000
-vdthz = 1414.213562
-vdthxy = 1414.213562
-ipadig = [1024, 1024, 1024]
-
-[[species]]
-wp = 0.04909886429062906
-qm = 0.00054464638986836
-npin = 96000000
-vdthz = 30.39968
-vdthxy = 30.39968
-ipadig = [1024, 1024, 1024]
-
 [ptcond]
 zssurf = 60.0
 
 [[ptcond.boundaries]]
-boundary_type = "flat-surface"
+type = "flat-surface"
 
 [mpi]
 nodes = [40, 1, 20]
-
-[verbose]
