@@ -27,7 +27,7 @@ from diagram_utils import (
 )
 
 
-DOC_PATH = DOCS_ROOT / "agent-project-flow.md"
+DOC_PATH = DOCS_ROOT / "project-flow.md"
 
 CONCEPT_ROWS: tuple[tuple[str, str, str], ...] = (
     (
