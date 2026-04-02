@@ -8,14 +8,12 @@ from pathlib import Path
 import typer
 
 from simctl.cli.run_lookup import resolve_run_or_cwd
+from simctl.core.actions import ActionStatus, execute_action
 from simctl.core.analysis import (
-    collect_survey_summaries,
-    generate_run_summary,
     load_survey_plot_table,
     render_survey_plot,
 )
 from simctl.core.exceptions import SimctlError
-from simctl.core.manifest import read_manifest
 
 
 def summarize(
@@ -25,24 +23,26 @@ def summarize(
     run_dir = resolve_run_or_cwd(run, search_dir=Path.cwd())
 
     try:
-        result = generate_run_summary(run_dir)
-        manifest = read_manifest(run_dir)
-    except KeyError as e:
-        typer.echo(f"Error: {e}", err=True)
-        raise typer.Exit(code=1) from None
+        result = execute_action("summarize_run", run_dir=run_dir)
     except (OSError, TypeError, json.JSONDecodeError, SimctlError) as e:
         typer.echo(f"Error generating summary: {e}", err=True)
         raise typer.Exit(code=1) from None
 
-    if result.script_path is not None:
-        typer.echo(f"  Applied script: {result.script_path.name}")
-    for warning in result.warnings:
+    if result.status is not ActionStatus.SUCCESS:
+        typer.echo(f"Error generating summary: {result.message}", err=True)
+        raise typer.Exit(code=1)
+
+    script_path = str(result.data.get("script_path", ""))
+    if script_path:
+        typer.echo(f"  Applied script: {Path(script_path).name}")
+    for warning in result.data.get("warnings", []):
         typer.echo(f"Warning: {warning}", err=True)
 
-    run_id = manifest.run.get("id", "???")
-    typer.echo(f"Summary written: {result.summary_path}")
+    summary = result.data.get("summary", {})
+    run_id = result.data.get("run_id", "???")
+    typer.echo(f"Summary written: {result.data.get('summary_path', '')}")
     typer.echo(f"  Run: {run_id}")
-    typer.echo(f"  Keys: {', '.join(sorted(result.summary.keys()))}")
+    typer.echo(f"  Keys: {', '.join(sorted(summary.keys()))}")
 
 
 def collect(
@@ -56,24 +56,30 @@ def collect(
         raise typer.Exit(code=1)
 
     try:
-        result = collect_survey_summaries(survey_dir)
+        result = execute_action("collect_survey", survey_dir=survey_dir)
     except (OSError, TypeError, json.JSONDecodeError, SimctlError) as e:
         typer.echo(f"Error collecting summaries: {e}", err=True)
         raise typer.Exit(code=1) from None
 
-    typer.echo(f"Collected {result.summaries_collected} summaries")
-    typer.echo(f"  CSV: {result.csv_path}")
-    typer.echo(f"  JSON: {result.json_path}")
-    typer.echo(f"  Figures: {result.figures_path}")
-    typer.echo(f"  Report: {result.report_path}")
-    if result.generated_summaries > 0:
+    if result.status is not ActionStatus.SUCCESS:
+        typer.echo(f"Error collecting summaries: {result.message}", err=True)
+        raise typer.Exit(code=1)
+
+    typer.echo(f"Collected {result.message.removeprefix('Collected ').strip()}")
+    typer.echo(f"  CSV: {result.data.get('csv_path', '')}")
+    typer.echo(f"  JSON: {result.data.get('json_path', '')}")
+    typer.echo(f"  Figures: {result.data.get('figures_path', '')}")
+    typer.echo(f"  Report: {result.data.get('report_path', '')}")
+    generated_summaries = int(result.data.get("generated_summaries", 0))
+    if generated_summaries > 0:
         typer.echo(
             "  Auto-summarized:"
-            f" {result.generated_summaries} completed runs during collect"
+            f" {generated_summaries} completed runs during collect"
         )
-    if result.missing_summaries > 0:
-        typer.echo(f"  ({result.missing_summaries} runs missing summary.json)")
-    for warning in result.warnings:
+    missing_summaries = int(result.data.get("missing_summaries", 0))
+    if missing_summaries > 0:
+        typer.echo(f"  ({missing_summaries} runs missing summary.json)")
+    for warning in result.data.get("warnings", []):
         typer.echo(f"Warning: {warning}", err=True)
 
 

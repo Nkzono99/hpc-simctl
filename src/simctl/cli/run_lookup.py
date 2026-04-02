@@ -7,17 +7,18 @@ from pathlib import Path
 import typer
 
 from simctl.core.discovery import resolve_run
-from simctl.core.exceptions import RunNotFoundError, SimctlError
+from simctl.core.exceptions import ProjectNotFoundError, RunNotFoundError, SimctlError
+from simctl.core.project import find_project_root
 
 
 def find_project_runs_dir(start: Path | None = None) -> Path:
     """Walk upward from ``start`` to find the project's ``runs/`` directory."""
-    cwd = (start or Path.cwd()).resolve()
-    for parent in [cwd, *cwd.parents]:
-        if (parent / "simproject.toml").exists():
-            return parent / "runs"
-    typer.echo("Error: Could not find simproject.toml in any parent directory.")
-    raise typer.Exit(code=1)
+    try:
+        project_root = find_project_root((start or Path.cwd()).resolve())
+    except ProjectNotFoundError as exc:
+        typer.echo(f"Error: {exc}")
+        raise typer.Exit(code=1) from None
+    return project_root / "runs"
 
 
 def resolve_project_run_dir(identifier: str, *, start: Path | None = None) -> Path:

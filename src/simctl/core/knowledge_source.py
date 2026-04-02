@@ -179,6 +179,24 @@ def _repo_name_from_url(url: str) -> str:
     return stem
 
 
+def _safe_namespace(value: str) -> str:
+    """Return a filesystem-safe namespace token for imported knowledge."""
+    normalized = [
+        ch.lower() if ch.isalnum() else "_"
+        for ch in value.strip()
+    ]
+    token = "".join(normalized).strip("_")
+    while "__" in token:
+        token = token.replace("__", "_")
+    return token or "source"
+
+
+def _namespaced_insight_filename(source: KnowledgeSource, insight_name: str) -> str:
+    """Build the destination filename for an imported insight."""
+    namespace = _safe_namespace(source.name)
+    return f"{namespace}__{insight_name}.md"
+
+
 # ---------- Config I/O ----------
 
 
@@ -482,7 +500,11 @@ def import_external_insights(
     *,
     simulator: str = "",
 ) -> tuple[int, int]:
-    """Import insights from configured external sources."""
+    """Import insights from configured external sources.
+
+    Imported insight filenames are namespaced by source name to avoid
+    collisions across multiple upstream projects or knowledge stores.
+    """
     from simctl.core.knowledge import get_insights_dir, parse_insight
 
     our_insights_dir = get_insights_dir(project_root)
@@ -501,7 +523,7 @@ def import_external_insights(
             if simulator and insight.simulator != simulator:
                 continue
 
-            dest = our_insights_dir / md_file.name
+            dest = our_insights_dir / _namespaced_insight_filename(source, md_file.stem)
             if dest.exists():
                 skipped += 1
                 continue

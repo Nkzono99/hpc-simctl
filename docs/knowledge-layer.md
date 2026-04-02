@@ -413,6 +413,8 @@ simctl knowledge source sync
   → 結果を報告
 ```
 
+取り込まれた insight は source 名で namespace されたファイル名
+(`alpha__stability.md` など) で保存される。同じ namespace 内で
 同名の insight が既に存在する場合はスキップされる。
 
 ## AI エージェントの推奨ワークフロー
@@ -439,5 +441,4 @@ simctl knowledge source sync
 7. ITERATE: 知見に基づいてパラメータを改善
    → 次の実験サイクルへ
 ```
-
 

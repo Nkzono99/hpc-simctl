@@ -3,6 +3,7 @@
 このプロジェクトは simctl で管理されています。
 人が研究目的・ベース入力・計算資源上限を決め、Agent はその範囲で
 campaign 設計、case / survey 編集、run 生成、投入、監視、解析、知見整理を進めます。
+現在の標準ハーネスは Claude Code / `CLAUDE.md` です。`AGENTS.md` は同じ運用ルールを共有する補助ファイルとして置いています。
 
 ## まずやること
 
@@ -78,4 +79,3 @@ Agent 自身の memory に保存してはいけない。`/learn` スキルを使
 
 @{{ knowledge_imports_path }}
 {% endif %}
-

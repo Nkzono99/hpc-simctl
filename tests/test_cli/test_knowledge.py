@@ -593,8 +593,12 @@ path = "../linked-b"
     assert "Importing insights from external sources" in result.output
     assert "alpha" in result.output
     assert "beta" not in result.output
-    assert (project_root / ".simctl" / "insights" / "alpha-note.md").is_file()
-    assert not (project_root / ".simctl" / "insights" / "beta-note.md").exists()
+    assert (
+        project_root / ".simctl" / "insights" / "alpha__alpha-note.md"
+    ).is_file()
+    assert not (
+        project_root / ".simctl" / "insights" / "beta__beta-note.md"
+    ).exists()
 
 
 def test_removed_flat_source_commands_are_unavailable() -> None:

@@ -92,6 +92,15 @@ class ActionSpec:
         preconditions: Human-readable preconditions list.
         state_change: Expected state transition (e.g. ``"created -> submitted"``).
         destructive: Whether the action is hard to reverse.
+        risk_level: Relative operational risk (``"low"``, ``"medium"``,
+            or ``"high"``).
+        cost_class: Relative execution/storage cost (``"low"``,
+            ``"medium"``, or ``"high"``).
+        requires_confirmation: Whether this action always requires
+            human confirmation before execution.
+        confirmation_reason: Human-readable reason for the confirmation.
+        confirmation_conditions: Dynamic cases that should trigger
+            confirmation even if the action is not always gated.
     """
 
     name: str
@@ -101,6 +110,11 @@ class ActionSpec:
     preconditions: tuple[str, ...] = ()
     state_change: str = ""
     destructive: bool = False
+    risk_level: str = "low"
+    cost_class: str = "low"
+    requires_confirmation: bool = False
+    confirmation_reason: str = ""
+    confirmation_conditions: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize metadata for machine-readable agent consumption."""
@@ -111,9 +125,16 @@ class ActionSpec:
             "optional_params": list(self.optional_params),
             "preconditions": list(self.preconditions),
             "destructive": self.destructive,
+            "risk_level": self.risk_level,
+            "cost_class": self.cost_class,
+            "requires_confirmation": self.requires_confirmation,
         }
         if self.state_change:
             data["state_change"] = self.state_change
+        if self.confirmation_reason:
+            data["confirmation_reason"] = self.confirmation_reason
+        if self.confirmation_conditions:
+            data["confirmation_conditions"] = list(self.confirmation_conditions)
         return data
 
 
@@ -129,6 +150,17 @@ ACTION_SPECS: dict[str, ActionSpec] = {
         optional_params=("dest_dir", "display_name", "params"),
         preconditions=("project loaded", "case exists"),
         state_change="-> created",
+        risk_level="medium",
+        cost_class="medium",
+    ),
+    "create_survey": ActionSpec(
+        name="create_survey",
+        description="Expand a survey.toml into created run directories.",
+        required_params=("project_root", "survey_dir"),
+        preconditions=("project loaded", "survey.toml exists", "base case exists"),
+        state_change="N x -> created",
+        risk_level="medium",
+        cost_class="medium",
     ),
     "submit_run": ActionSpec(
         name="submit_run",
@@ -137,6 +169,12 @@ ACTION_SPECS: dict[str, ActionSpec] = {
         optional_params=("queue_name", "afterok"),
         preconditions=("run state == created", "job.sh exists"),
         state_change="created -> submitted",
+        risk_level="high",
+        cost_class="high",
+        confirmation_conditions=(
+            "required for first bulk submit of a new survey",
+            "required after a retry that increases walltime, memory, or nodes",
+        ),
     ),
     "sync_run": ActionSpec(
         name="sync_run",
@@ -144,6 +182,8 @@ ACTION_SPECS: dict[str, ActionSpec] = {
         required_params=("run_dir",),
         preconditions=("run state in {submitted, running}", "job_id recorded"),
         state_change="submitted/running -> completed/failed/cancelled",
+        risk_level="low",
+        cost_class="low",
     ),
     "show_log": ActionSpec(
         name="show_log",
@@ -151,18 +191,24 @@ ACTION_SPECS: dict[str, ActionSpec] = {
         required_params=("run_dir",),
         optional_params=("lines",),
         preconditions=("run has been submitted at least once",),
+        risk_level="low",
+        cost_class="low",
     ),
     "summarize_run": ActionSpec(
         name="summarize_run",
         description="Generate analysis summary for a completed run.",
         required_params=("run_dir",),
         preconditions=("run state == completed",),
+        risk_level="low",
+        cost_class="medium",
     ),
     "collect_survey": ActionSpec(
         name="collect_survey",
         description="Aggregate results across all runs in a survey.",
         required_params=("survey_dir",),
         preconditions=("survey directory contains at least one completed run",),
+        risk_level="low",
+        cost_class="medium",
     ),
     "retry_run": ActionSpec(
         name="retry_run",
@@ -171,6 +217,11 @@ ACTION_SPECS: dict[str, ActionSpec] = {
         optional_params=("adjustments", "reviewed_log"),
         preconditions=("run state == failed",),
         state_change="failed -> created",
+        risk_level="medium",
+        cost_class="medium",
+        confirmation_conditions=(
+            "required when retry adjustments increase walltime, memory, or nodes",
+        ),
     ),
     "archive_run": ActionSpec(
         name="archive_run",
@@ -179,6 +230,10 @@ ACTION_SPECS: dict[str, ActionSpec] = {
         preconditions=("run state == completed",),
         state_change="completed -> archived",
         destructive=True,
+        risk_level="high",
+        cost_class="low",
+        requires_confirmation=True,
+        confirmation_reason="Archiving changes lifecycle state and is treated as a review gate.",
     ),
     "purge_work": ActionSpec(
         name="purge_work",
@@ -187,6 +242,10 @@ ACTION_SPECS: dict[str, ActionSpec] = {
         preconditions=("run state == archived",),
         state_change="archived -> purged",
         destructive=True,
+        risk_level="high",
+        cost_class="high",
+        requires_confirmation=True,
+        confirmation_reason="Purging deletes generated work files and is intentionally gated.",
     ),
     "save_insight": ActionSpec(
         name="save_insight",
@@ -194,6 +253,8 @@ ACTION_SPECS: dict[str, ActionSpec] = {
         required_params=("project_root", "name", "content"),
         optional_params=("insight_type", "simulator", "tags", "source_project"),
         preconditions=("project loaded",),
+        risk_level="low",
+        cost_class="low",
     ),
     "add_fact": ActionSpec(
         name="add_fact",
@@ -213,6 +274,11 @@ ACTION_SPECS: dict[str, ActionSpec] = {
             "supersedes",
         ),
         preconditions=("project loaded",),
+        risk_level="medium",
+        cost_class="low",
+        confirmation_conditions=(
+            "recommended before recording a new high-confidence fact from fresh survey results",
+        ),
     ),
 }
 
@@ -322,6 +388,63 @@ def create_run(
         )
     except SimctlError as e:
         return _error("create_run", str(e))
+
+
+def create_survey(project_root: Path, survey_dir: Path) -> ActionResult:
+    """Expand a survey.toml into created run directories."""
+    from simctl.core.project import load_project
+    from simctl.core.run_creation import create_survey_runs
+
+    try:
+        project = load_project(project_root)
+        created_runs = create_survey_runs(project, survey_dir)
+    except SimctlError as e:
+        return _error("create_survey", str(e))
+
+    run_payload: list[dict[str, Any]] = []
+    aggregated_warnings: list[dict[str, str]] = []
+    for result in created_runs:
+        run_payload.append(
+            {
+                "run_id": result.run_info.run_id,
+                "run_dir": str(result.run_info.run_dir),
+                "display_name": result.run_info.display_name,
+                "warnings": list(result.warnings),
+            }
+        )
+        for warning in result.warnings:
+            aggregated_warnings.append(
+                {
+                    "display_name": result.run_info.display_name,
+                    "message": warning,
+                }
+            )
+
+    if not run_payload:
+        return ActionResult(
+            action="create_survey",
+            status=ActionStatus.SUCCESS,
+            message=f"No parameter combinations to expand in {survey_dir}",
+            data={
+                "survey_dir": str(survey_dir),
+                "created_count": 0,
+                "runs": [],
+                "warnings": [],
+            },
+        )
+
+    return ActionResult(
+        action="create_survey",
+        status=ActionStatus.SUCCESS,
+        message=f"Created {len(run_payload)} runs",
+        data={
+            "survey_dir": str(survey_dir),
+            "created_count": len(run_payload),
+            "runs": run_payload,
+            "warnings": aggregated_warnings,
+        },
+        state_after=RunState.CREATED.value,
+    )
 
 
 def submit_run(
@@ -850,6 +973,7 @@ def add_fact(
 #: Map action name -> callable.
 _DISPATCH: dict[str, Any] = {
     "create_run": create_run,
+    "create_survey": create_survey,
     "submit_run": submit_run,
     "sync_run": sync_run,
     "show_log": show_log,

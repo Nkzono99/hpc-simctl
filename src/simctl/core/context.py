@@ -16,6 +16,24 @@ from simctl.core.exceptions import SimctlError
 logger = logging.getLogger(__name__)
 
 
+def _record_diagnostic(
+    diagnostics: list[dict[str, str]],
+    section_status: dict[str, str],
+    *,
+    section: str,
+    message: str,
+    level: str = "error",
+) -> None:
+    diagnostics.append(
+        {
+            "section": section,
+            "level": level,
+            "message": message,
+        }
+    )
+    section_status[section] = level
+
+
 def build_project_context(project_root: Path) -> dict[str, Any]:
     """Build a lightweight context bundle for the current project.
 
@@ -30,33 +48,63 @@ def build_project_context(project_root: Path) -> dict[str, Any]:
         JSON-serializable dictionary with project overview.
     """
     ctx: dict[str, Any] = {}
+    diagnostics: list[dict[str, str]] = []
+    section_status: dict[str, str] = {}
 
     # -- Project basics --
-    ctx["project"] = _load_project_info(project_root)
+    ctx["project"] = _load_project_info(project_root, diagnostics, section_status)
 
     # -- Campaign --
-    ctx["campaign"] = _load_campaign_info(project_root)
+    ctx["campaign"] = _load_campaign_info(project_root, diagnostics, section_status)
 
     # -- Simulators & Launchers --
-    ctx["simulators"] = _load_simulator_names(project_root)
-    ctx["launchers"] = _load_launcher_names(project_root)
+    ctx["simulators"] = _load_simulator_names(project_root, diagnostics, section_status)
+    ctx["launchers"] = _load_launcher_names(project_root, diagnostics, section_status)
 
     # -- Run statistics --
-    ctx["runs"] = _collect_run_stats(project_root)
+    ctx["runs"] = _collect_run_stats(project_root, diagnostics, section_status)
 
     # -- Recent failures --
-    ctx["recent_failures"] = _collect_recent_failures(project_root)
+    ctx["recent_failures"] = _collect_recent_failures(
+        project_root, diagnostics, section_status
+    )
 
     # -- Facts --
-    ctx["facts"] = _collect_facts_summary(project_root)
+    ctx["facts"] = _collect_facts_summary(project_root, diagnostics, section_status)
 
     # -- Knowledge index --
-    ctx["knowledge"] = _collect_knowledge_paths(project_root)
+    ctx["knowledge"] = _collect_knowledge_paths(project_root, diagnostics, section_status)
 
     # -- Available actions --
-    from simctl.core.actions import list_actions
+    try:
+        from simctl.core.actions import list_actions
 
-    ctx["available_actions"] = [a.to_dict() for a in list_actions()]
+        ctx["available_actions"] = [a.to_dict() for a in list_actions()]
+    except Exception as exc:
+        _record_diagnostic(
+            diagnostics,
+            section_status,
+            section="available_actions",
+            message=f"Failed to list action registry: {exc}",
+        )
+        ctx["available_actions"] = []
+
+    ctx["status"] = "degraded" if diagnostics else "ok"
+    ctx["diagnostics"] = diagnostics
+    ctx["section_status"] = {
+        section: section_status.get(section, "ok")
+        for section in (
+            "project",
+            "campaign",
+            "simulators",
+            "launchers",
+            "runs",
+            "recent_failures",
+            "facts",
+            "knowledge",
+            "available_actions",
+        )
+    }
 
     return ctx
 
@@ -66,7 +114,11 @@ def build_project_context(project_root: Path) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def _load_project_info(root: Path) -> dict[str, Any]:
+def _load_project_info(
+    root: Path,
+    diagnostics: list[dict[str, str]],
+    section_status: dict[str, str],
+) -> dict[str, Any]:
     try:
         from simctl.core.project import load_project
 
@@ -76,11 +128,21 @@ def _load_project_info(root: Path) -> dict[str, Any]:
             "description": proj.description,
             "root": str(root),
         }
-    except SimctlError:
+    except SimctlError as exc:
+        _record_diagnostic(
+            diagnostics,
+            section_status,
+            section="project",
+            message=f"Failed to load project metadata: {exc}",
+        )
         return {"name": "", "root": str(root)}
 
 
-def _load_campaign_info(root: Path) -> dict[str, Any]:
+def _load_campaign_info(
+    root: Path,
+    diagnostics: list[dict[str, str]],
+    section_status: dict[str, str],
+) -> dict[str, Any]:
     try:
         from simctl.core.campaign import load_campaign
 
@@ -101,31 +163,61 @@ def _load_campaign_info(root: Path) -> dict[str, Any]:
                 {"name": o.name, "description": o.description} for o in camp.observables
             ]
         return result
-    except SimctlError:
+    except SimctlError as exc:
+        _record_diagnostic(
+            diagnostics,
+            section_status,
+            section="campaign",
+            message=f"Failed to load campaign metadata: {exc}",
+        )
         return {}
 
 
-def _load_simulator_names(root: Path) -> list[str]:
+def _load_simulator_names(
+    root: Path,
+    diagnostics: list[dict[str, str]],
+    section_status: dict[str, str],
+) -> list[str]:
     try:
         from simctl.core.project import load_project
 
         proj = load_project(root)
         return sorted(proj.simulators.keys())
-    except SimctlError:
+    except SimctlError as exc:
+        _record_diagnostic(
+            diagnostics,
+            section_status,
+            section="simulators",
+            message=f"Failed to load simulator list: {exc}",
+        )
         return []
 
 
-def _load_launcher_names(root: Path) -> list[str]:
+def _load_launcher_names(
+    root: Path,
+    diagnostics: list[dict[str, str]],
+    section_status: dict[str, str],
+) -> list[str]:
     try:
         from simctl.core.project import load_project
 
         proj = load_project(root)
         return sorted(proj.launchers.keys())
-    except SimctlError:
+    except SimctlError as exc:
+        _record_diagnostic(
+            diagnostics,
+            section_status,
+            section="launchers",
+            message=f"Failed to load launcher list: {exc}",
+        )
         return []
 
 
-def _collect_run_stats(root: Path) -> dict[str, Any]:
+def _collect_run_stats(
+    root: Path,
+    diagnostics: list[dict[str, str]],
+    section_status: dict[str, str],
+) -> dict[str, Any]:
     from simctl.core.state import RunState
 
     runs_dir = root / "runs"
@@ -149,11 +241,23 @@ def _collect_run_stats(root: Path) -> dict[str, Any]:
         non_zero = {k: v for k, v in counts.items() if v > 0}
         non_zero["total"] = len(run_dirs)
         return non_zero
-    except Exception:
+    except Exception as exc:
+        _record_diagnostic(
+            diagnostics,
+            section_status,
+            section="runs",
+            message=f"Failed to summarize run states: {exc}",
+        )
         return {"total": 0}
 
 
-def _collect_recent_failures(root: Path, *, limit: int = 10) -> list[dict[str, str]]:
+def _collect_recent_failures(
+    root: Path,
+    diagnostics: list[dict[str, str]],
+    section_status: dict[str, str],
+    *,
+    limit: int = 10,
+) -> list[dict[str, str]]:
     runs_dir = root / "runs"
     if not runs_dir.is_dir():
         return []
@@ -177,11 +281,23 @@ def _collect_recent_failures(root: Path, *, limit: int = 10) -> list[dict[str, s
             except SimctlError:
                 continue
         return failures[:limit]
-    except Exception:
+    except Exception as exc:
+        _record_diagnostic(
+            diagnostics,
+            section_status,
+            section="recent_failures",
+            message=f"Failed to collect recent failures: {exc}",
+        )
         return []
 
 
-def _collect_facts_summary(root: Path, *, limit: int = 20) -> list[dict[str, Any]]:
+def _collect_facts_summary(
+    root: Path,
+    diagnostics: list[dict[str, str]],
+    section_status: dict[str, str],
+    *,
+    limit: int = 20,
+) -> list[dict[str, Any]]:
     try:
         from simctl.core.knowledge import query_facts
 
@@ -198,11 +314,21 @@ def _collect_facts_summary(root: Path, *, limit: int = 20) -> list[dict[str, Any
             }
             for f in facts[:limit]
         ]
-    except Exception:
+    except Exception as exc:
+        _record_diagnostic(
+            diagnostics,
+            section_status,
+            section="facts",
+            message=f"Failed to summarize facts: {exc}",
+        )
         return []
 
 
-def _collect_knowledge_paths(root: Path) -> dict[str, Any]:
+def _collect_knowledge_paths(
+    root: Path,
+    diagnostics: list[dict[str, str]],
+    section_status: dict[str, str],
+) -> dict[str, Any]:
     result: dict[str, Any] = {}
     knowledge_dir = root / ".simctl" / "knowledge"
 
@@ -278,7 +404,14 @@ def _collect_knowledge_paths(root: Path) -> dict[str, Any]:
                 }
                 for entry in external_entries
             ]
-    except Exception:
+    except Exception as exc:
+        _record_diagnostic(
+            diagnostics,
+            section_status,
+            section="knowledge",
+            message=f"Failed to collect knowledge integration details: {exc}",
+            level="warning",
+        )
         logger.debug("Failed to collect knowledge integration details", exc_info=True)
 
     return result

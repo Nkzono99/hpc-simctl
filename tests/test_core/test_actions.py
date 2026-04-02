@@ -13,6 +13,7 @@ from simctl.core.actions import (
     ActionStatus,
     add_fact,
     collect_survey,
+    create_survey,
     purge_work,
     retry_run,
     save_insight,
@@ -110,6 +111,35 @@ def test_create_run_action_generates_full_run_artifacts(tmp_path: Path) -> None:
         params = json.load(f)
     assert params["nx"] == 128
     assert params["ny"] == 64
+
+
+def test_create_survey_action_expands_all_combinations(tmp_path: Path) -> None:
+    _create_project_with_case(tmp_path)
+    survey_dir = tmp_path / "runs" / "scan"
+    survey_dir.mkdir(parents=True)
+    (survey_dir / "survey.toml").write_text(
+        "[survey]\n"
+        'id = "S20260402-scan"\n'
+        'name = "scan"\n'
+        'base_case = "my_case"\n'
+        'simulator = "test_sim"\n'
+        'launcher = "slurm_srun"\n'
+        "\n"
+        "[axes]\n"
+        "nx = [32, 64]\n"
+        "ny = [16, 32]\n"
+        "\n"
+        "[naming]\n"
+        'display_name = "nx{nx}_ny{ny}"\n',
+        encoding="utf-8",
+    )
+
+    result = create_survey(tmp_path, survey_dir)
+
+    assert result.status is ActionStatus.SUCCESS
+    assert result.state_after == "created"
+    assert result.data["created_count"] == 4
+    assert len(result.data["runs"]) == 4
 
 
 def test_collect_survey_writes_aggregate_artifacts(tmp_path: Path) -> None:

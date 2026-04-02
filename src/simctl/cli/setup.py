@@ -101,40 +101,21 @@ def setup(
 
     _create_simctl_skeleton(project_dir, created)
 
-    # 6. Knowledge integration: sync sources and render imports
-    if project is not None and project.knowledge is not None:
-        kc = project.knowledge
-        if kc.auto_sync_on_setup and kc.sources:
-            from simctl.core.knowledge_source import (
-                render_imports,
-                sync_all_sources,
-                validate_source_structure,
-            )
+    # 6. Knowledge integration: sync sources and always refresh imports.md
+    from simctl.cli.init import _prepare_knowledge_imports
 
-            typer.echo("Syncing knowledge sources...")
-            for name, status in sync_all_sources(project_dir, kc):
-                typer.echo(f"  {name}: {status}")
-
-            # Validate (warnings only)
-            for src in kc.sources:
-                src_path = project_dir / src.mount
-                if src_path.is_dir():
-                    issues = validate_source_structure(src_path)
-                    for issue in issues:
-                        typer.echo(f"  Warning ({src.name}): {issue}")
-
-            # Discover agent docs and include in imports.md
-            from simctl.cli.init import (
-                _collect_doc_repos,
-                _discover_agent_docs,
-            )
-
-            doc_repos = _collect_doc_repos(sim_names) if sim_names else []
-            agent_docs = _discover_agent_docs(project_dir, doc_repos)
-            render_imports(
-                project_dir, kc, extra_imports=agent_docs or None
-            )
-            typer.echo("  Rendered knowledge imports")
+    sync_sources = bool(
+        project is not None
+        and project.knowledge is not None
+        and project.knowledge.auto_sync_on_setup
+        and project.knowledge.sources
+    )
+    _prepare_knowledge_imports(
+        project_dir,
+        sim_names,
+        sync_sources=sync_sources,
+        validate_sources=sync_sources,
+    )
 
     # Print results
     typer.echo(f"\nProject '{project_dir.name}' is ready.")

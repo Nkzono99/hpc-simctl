@@ -7,19 +7,15 @@ from typing import Annotated, Optional
 
 import typer
 
+from simctl.core.actions import ActionStatus, execute_action
 from simctl.core.exceptions import SimctlError
-from simctl.core.run_creation import (
-    CreatedRunResult,
-    create_case_run,
-    create_survey_runs,
-    load_project_from_path,
-)
+from simctl.core.project import find_project_root
 
 
-def _echo_warnings(result: CreatedRunResult, *, context: str = "") -> None:
+def _echo_warnings(warnings: list[str], *, context: str = "") -> None:
     """Print non-fatal validation warnings emitted during run creation."""
     prefix = f"{context}: " if context else ""
-    for warning in result.warnings:
+    for warning in warnings:
         typer.echo(f"  Warning: {prefix}{warning}", err=True)
 
 
@@ -56,42 +52,59 @@ def create(
 def _create_single(case_name: str, target_dir: Path) -> None:
     """Create a single run from a case template."""
     try:
-        project = load_project_from_path(target_dir)
-        result = create_case_run(
-            project,
-            case_name,
+        project_root = find_project_root(target_dir)
+        result = execute_action(
+            "create_run",
+            project_root=project_root,
+            case_name=case_name,
             dest_dir=target_dir,
         )
     except SimctlError as exc:
         typer.echo(f"Error creating run: {exc}", err=True)
         raise typer.Exit(code=1) from exc
 
-    _echo_warnings(result)
-    typer.echo(f"Created run: {result.run_info.run_id}")
-    typer.echo(f"  Path: {result.run_info.run_dir}")
+    if result.status is not ActionStatus.SUCCESS:
+        typer.echo(f"Error creating run: {result.message}", err=True)
+        raise typer.Exit(code=1)
+
+    _echo_warnings(list(result.data.get("warnings", [])))
+    typer.echo(f"Created run: {result.data.get('run_id', '???')}")
+    typer.echo(f"  Path: {result.data.get('run_dir', target_dir)}")
 
 
 def _create_survey(survey_dir: Path) -> None:
     """Expand survey.toml into multiple runs."""
     try:
-        project = load_project_from_path(survey_dir)
-        created_runs = create_survey_runs(project, survey_dir)
+        project_root = find_project_root(survey_dir)
+        result = execute_action(
+            "create_survey",
+            project_root=project_root,
+            survey_dir=survey_dir,
+        )
     except SimctlError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1) from exc
 
+    if result.status is not ActionStatus.SUCCESS:
+        typer.echo(f"Error: {result.message}", err=True)
+        raise typer.Exit(code=1)
+
+    created_runs = list(result.data.get("runs", []))
     if not created_runs:
         typer.echo("No parameter combinations to expand.")
         raise typer.Exit(code=0)
 
-    for result in created_runs:
-        _echo_warnings(result, context=result.run_info.display_name)
+    for created_run in created_runs:
+        _echo_warnings(
+            list(created_run.get("warnings", [])),
+            context=str(created_run.get("display_name", "")),
+        )
 
     typer.echo(f"Created {len(created_runs)} runs in {survey_dir}")
-    for result in created_runs:
-        run_info = result.run_info
-        name_part = f" ({run_info.display_name})" if run_info.display_name else ""
-        typer.echo(f"  {run_info.run_id}{name_part}")
+    for created_run in created_runs:
+        display_name = str(created_run.get("display_name", ""))
+        name_part = f" ({display_name})" if display_name else ""
+        typer.echo(f"  {created_run.get('run_id', '???')}{name_part}")
 
 
 def sweep(

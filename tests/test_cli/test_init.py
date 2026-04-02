@@ -283,6 +283,33 @@ class TestInit:
         # docs/ directory should NOT be generated
         assert not (tmp_path / "docs").exists()
 
+    def test_init_renders_imports_after_bootstrap(self, tmp_path: Path, monkeypatch) -> None:
+        """Init discovers tool docs only after bootstrap and wires imports.md."""
+
+        def _fake_bootstrap(
+            project_dir: Path,
+            _sim_names: list[str],
+            _simctl_repo: str,
+            created: list[str],
+            _skipped: list[str],
+        ) -> None:
+            docs_dir = project_dir / "tools" / "hpc-simctl" / "docs"
+            docs_dir.mkdir(parents=True, exist_ok=True)
+            (docs_dir / "agent-user-guide.md").write_text("# Agent guide\n")
+            created.append("tools/hpc-simctl")
+
+        monkeypatch.setattr("simctl.cli.init._bootstrap_environment", _fake_bootstrap)
+
+        result = runner.invoke(app, ["init", "-y", "--path", str(tmp_path)])
+
+        assert result.exit_code == 0
+        imports_path = tmp_path / ".simctl" / "knowledge" / "enabled" / "imports.md"
+        assert imports_path.is_file()
+        imports = imports_path.read_text(encoding="utf-8")
+        assert "@tools/hpc-simctl/docs/agent-user-guide.md" in imports
+        claude = (tmp_path / "CLAUDE.md").read_text(encoding="utf-8")
+        assert "@.simctl/knowledge/enabled/imports.md" in claude
+
     def test_init_default_is_interactive(self, tmp_path: Path) -> None:
         """Init without -y is interactive (prompts for project name)."""
         user_input = "\n" * 20

@@ -12,6 +12,7 @@ from simctl.core.knowledge_source import (
     KnowledgeSource,
     collect_external_knowledge,
     discover_profiles,
+    import_external_insights,
     load_knowledge_config,
     remove_knowledge_source,
     render_imports,
@@ -442,3 +443,77 @@ def test_render_imports_missing_profile_adds_comment(tmp_path: Path) -> None:
     imports_path = render_imports(project, config)
     content = imports_path.read_text()
     assert "<!-- profile nonexistent not found" in content
+
+
+def test_import_external_insights_namespaces_by_source(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    _create_project(project)
+
+    source_a = tmp_path / "alpha-project"
+    source_b = tmp_path / "beta-project"
+    for source_root in (source_a, source_b):
+        insights_dir = source_root / ".simctl" / "insights"
+        insights_dir.mkdir(parents=True, exist_ok=True)
+        (insights_dir / "stability.md").write_text(
+            "---\n"
+            "type: result\n"
+            "simulator: emses\n"
+            "created: 2026-04-02\n"
+            "---\n\n"
+            "Stable run.\n",
+            encoding="utf-8",
+        )
+
+    imported, skipped = import_external_insights(
+        project,
+        [
+            KnowledgeSource(
+                name="alpha",
+                source_type="path",
+                kind="project",
+                url=str(source_a),
+            ),
+            KnowledgeSource(
+                name="beta",
+                source_type="path",
+                kind="project",
+                url=str(source_b),
+            ),
+        ],
+    )
+
+    assert imported == 2
+    assert skipped == 0
+    assert (project / ".simctl" / "insights" / "alpha__stability.md").is_file()
+    assert (project / ".simctl" / "insights" / "beta__stability.md").is_file()
+
+
+def test_import_external_insights_skips_existing_namespaced_file(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    _create_project(project)
+    source_root = tmp_path / "alpha-project"
+    insights_dir = source_root / ".simctl" / "insights"
+    insights_dir.mkdir(parents=True, exist_ok=True)
+    (insights_dir / "stability.md").write_text(
+        "---\n"
+        "type: result\n"
+        "simulator: emses\n"
+        "created: 2026-04-02\n"
+        "---\n\n"
+        "Stable run.\n",
+        encoding="utf-8",
+    )
+
+    source = KnowledgeSource(
+        name="alpha",
+        source_type="path",
+        kind="project",
+        url=str(source_root),
+    )
+    first = import_external_insights(project, [source])
+    second = import_external_insights(project, [source])
+
+    assert first == (1, 0)
+    assert second == (0, 1)

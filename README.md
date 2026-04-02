@@ -71,8 +71,8 @@ my-simulation-project/
   launchers.toml       # Launcher Profile 定義
   campaign.toml        # 研究意図 (仮説・変数・観測量)
   .gitignore           # 大容量出力の除外設定
-  CLAUDE.md            # Claude 向け AI エージェント指示
-  AGENTS.md            # Codex / 汎用 Agent 向け AI エージェント指示
+  CLAUDE.md            # 現在の標準 Agent ハーネス (Claude Code) 向け指示
+  AGENTS.md            # CLAUDE.md と同内容の補助ミラー
   cases/               # Case 定義の格納場所
   runs/                # run の格納場所
   refs/                # シミュレータリファレンス / 外部知識ソース

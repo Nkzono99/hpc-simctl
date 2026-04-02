@@ -1,7 +1,7 @@
 # simctl Agent ユーザーガイド
 
-simctl プロジェクトにおける Agent (Claude Code 等) の作業ガイド。
-プロジェクトの CLAUDE.md から `@docs/agent-user-guide.md` で参照される。
+simctl プロジェクトにおける Agent の作業ガイド。
+現時点の標準ハーネスは Claude Code で、プロジェクトの `CLAUDE.md` から `@docs/agent-user-guide.md` で参照される。
 
 ## simctl の基本原則
 
@@ -54,4 +54,3 @@ completed → archived → purged
 各シミュレータは `refs/<repo>/docs/agent-*.md` に固有のガイドを置く。
 CLAUDE.md から `@import` で参照されるため、シミュレータ固有のパラメータ設定・
 トラブルシューティング・ベストプラクティスはそちらを参照すること。
-

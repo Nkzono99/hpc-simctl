@@ -126,8 +126,32 @@ def test_context_includes_knowledge_integration_details(tmp_path: Path) -> None:
     ]
     assert actions["archive_run"]["destructive"] is True
     assert actions["purge_work"]["state_change"] == "archived -> purged"
+    assert actions["archive_run"]["requires_confirmation"] is True
+    assert actions["submit_run"]["risk_level"] == "high"
+    assert "confirmation_conditions" in actions["retry_run"]
     assert actions["save_insight"]["required_params"] == [
         "project_root",
         "name",
         "content",
     ]
+
+
+def test_context_reports_diagnostics_for_broken_sections(tmp_path: Path) -> None:
+    _write_toml(
+        tmp_path / "simproject.toml",
+        {
+            "project": {"name": "broken-project"},
+        },
+    )
+    facts_path = tmp_path / ".simctl" / "facts.toml"
+    facts_path.parent.mkdir(parents=True, exist_ok=True)
+    facts_path.write_text("not valid toml", encoding="utf-8")
+
+    ctx = build_project_context(tmp_path)
+
+    assert ctx["status"] == "degraded"
+    assert ctx["facts"] == []
+    assert ctx["section_status"]["facts"] == "error"
+    assert any(
+        diagnostic["section"] == "facts" for diagnostic in ctx["diagnostics"]
+    )

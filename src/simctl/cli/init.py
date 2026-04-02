@@ -296,6 +296,62 @@ def _discover_agent_docs(
     return paths
 
 
+def _prepare_knowledge_imports(
+    project_dir: Path,
+    simulator_names: list[str],
+    *,
+    sync_sources: bool = False,
+    validate_sources: bool = False,
+) -> str:
+    """Sync knowledge sources and render the unified imports.md bundle."""
+    from simctl.core.knowledge_source import (
+        KnowledgeConfig,
+        load_knowledge_config,
+        render_imports,
+        sync_all_sources,
+        validate_source_structure,
+    )
+
+    knowledge_imports_path = ""
+    config = load_knowledge_config(project_dir)
+
+    if sync_sources and config is not None and config.sources:
+        typer.echo("Syncing knowledge sources...")
+        for name, status in sync_all_sources(project_dir, config):
+            typer.echo(f"  {name}: {status}")
+
+        if validate_sources:
+            for source in config.sources:
+                if not source.mount:
+                    continue
+                source_path = project_dir / source.mount
+                if not source_path.is_dir():
+                    continue
+                issues = validate_source_structure(source_path)
+                for issue in issues:
+                    typer.echo(f"  Warning ({source.name}): {issue}")
+
+    doc_repos = _collect_doc_repos(simulator_names) if simulator_names else []
+    agent_doc_imports = _discover_agent_docs(project_dir, doc_repos)
+
+    render_config = config if config is not None else KnowledgeConfig()
+    should_render = bool(agent_doc_imports or (config is not None and config.sources))
+    if should_render:
+        render_imports(
+            project_dir,
+            render_config,
+            extra_imports=agent_doc_imports or None,
+        )
+        typer.echo("  Rendered knowledge imports")
+
+    if render_config.generate_claude_imports:
+        imports_file = project_dir / render_config.derived_dir / "enabled" / "imports.md"
+        if imports_file.is_file():
+            knowledge_imports_path = f"{render_config.derived_dir}/enabled/imports.md"
+
+    return knowledge_imports_path
+
+
 def _build_agent_md(
     doc_name: str,
     project_name: str,
@@ -1248,43 +1304,15 @@ def init(
             for ks in knowledge_sources:
                 save_knowledge_source(project_dir, ks)
 
-    # Discover agent docs from refs/ and tools/hpc-simctl/docs/
-    doc_repos = _collect_doc_repos(sim_names) if sim_names else []
-    agent_doc_imports = _discover_agent_docs(project_dir, doc_repos)
+    # Bootstrap: .venv + tools/hpc-simctl + editable install
+    _bootstrap_environment(project_dir, sim_names, simctl_repo, created, skipped)
 
-    # Knowledge integration: sync sources and render imports if configured
-    knowledge_imports_path = ""
-    from simctl.core.knowledge_source import (
-        KnowledgeConfig,
+    # Discover agent docs after bootstrap so tools/hpc-simctl/docs/ can be imported.
+    knowledge_imports_path = _prepare_knowledge_imports(
+        project_dir,
+        sim_names,
+        sync_sources=True,
     )
-    from simctl.core.knowledge_source import (
-        load_knowledge_config as _load_kc,
-    )
-    from simctl.core.knowledge_source import (
-        render_imports as _render_imports,
-    )
-    from simctl.core.knowledge_source import (
-        sync_all_sources as _sync_all,
-    )
-
-    kc = _load_kc(project_dir)
-    if kc is not None and kc.sources:
-        typer.echo("Syncing knowledge sources...")
-        for name, status in _sync_all(project_dir, kc):
-            typer.echo(f"  {name}: {status}")
-    # Render imports.md with external sources + agent docs unified.
-    # Use default config if none exists but agent docs were discovered.
-    render_kc = kc if kc is not None else KnowledgeConfig()
-    if agent_doc_imports or (kc is not None and kc.sources):
-        _render_imports(
-            project_dir, render_kc, extra_imports=agent_doc_imports or None
-        )
-    if render_kc.generate_claude_imports:
-        imports_file = (
-            project_dir / render_kc.derived_dir / "enabled" / "imports.md"
-        )
-        if imports_file.is_file():
-            knowledge_imports_path = f"{render_kc.derived_dir}/enabled/imports.md"
 
     # CLAUDE.md (use sim_names from earlier — may come from args or interactive)
     claude_content = _build_claude_md(
@@ -1350,6 +1378,7 @@ def init(
         ("plan-before-act.md", load_static("scaffold/rules/plan-before-act.md")),
     ]
     # Add cookbook rule if any simulator has a cookbook
+    doc_repos = _collect_doc_repos(sim_names) if sim_names else []
     if doc_repos:
         cookbook_rule = _build_cookbook_rule()
         rules_to_write.append(("cookbook.md", cookbook_rule))
@@ -1395,9 +1424,6 @@ def init(
             fresh_git = True
         else:
             typer.echo(f"  Warning: git init failed: {(result.stderr or '').strip()}")
-
-    # Bootstrap: .venv + tools/hpc-simctl + editable install
-    _bootstrap_environment(project_dir, sim_names, simctl_repo, created, skipped)
 
     # Initial commit (only for freshly created repos)
     if fresh_git:
