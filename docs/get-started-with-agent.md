@@ -1,23 +1,21 @@
 # AI エージェントではじめる hpc-simctl
 
-このガイドは、`simctl init` 済みのプロジェクトを AI エージェントと一緒に立ち上げるための最短導線です。
-`campaign.toml`、`case.toml`、`survey.toml` の詳細を最初から手で書く前提ではなく、基本はエージェントに設計と更新を任せる使い方を想定しています。
+AI エージェントと一緒にシミュレーションプロジェクトを立ち上げるためのガイドです。
+TOML ファイルを最初から手で書く必要はありません。研究内容をエージェントに伝えれば、campaign・case・survey の設計から run 管理まで支援してもらえます。
 
-生成されるディレクトリ構造や初期ファイルの一覧は [README.md](../README.md) を参照してください。
+## あなたが用意するもの
 
-## 前提
+エージェントに渡す前に、次の 3 つだけ決めておいてください。
 
-人間が最初に用意するのは主に次の 3 点です。
+1. **シミュレータとランチャー** — 使う simulator と launcher の組み合わせ
+2. **入力テンプレート** — ベースとなる入力ファイル (`plasma.toml`, `beach.toml` など)
+3. **研究の方向性** — テーマ、仮説、探索したい変数、注目する観測量
 
-- 利用する simulator / launcher の設定
-- ベースとなる入力テンプレート (`plasma.toml`, `beach.toml` など)
-- 研究テーマ、仮説、探索したい変数、気になっている観測量
+あとはエージェントが campaign 設計、case 作成、survey 展開、run 生成・投入・解析・知見整理を進めます。
 
-この土台があれば、以降の campaign 設計、case 作成、survey 設計、run 生成、投入、解析、知見整理はエージェントに支援させられます。
+## プロジェクトを用意する
 
-## 1. プロジェクトを用意する
-
-新規プロジェクト:
+新規作成の場合:
 
 ```bash
 uvx --from hpc-simctl simctl init
@@ -25,7 +23,7 @@ source .venv/bin/activate
 simctl doctor
 ```
 
-既存プロジェクトのセットアップ:
+既存プロジェクトをセットアップする場合:
 
 ```bash
 uvx --from hpc-simctl simctl setup https://github.com/user/my-project.git
@@ -34,11 +32,12 @@ source .venv/bin/activate
 simctl doctor
 ```
 
-`simctl init` が基本的な骨格を作るため、初期セットアップの説明を細かく追うより、すぐにエージェントへ研究内容を渡して構成を整えてもらう方が早いです。
+`simctl init` がディレクトリ構造と初期ファイルを作ります（詳細は [README.md](../README.md) を参照）。
+初期セットアップを細かく確認するより、すぐにエージェントへ研究内容を渡して構成を整えてもらう方が早いです。
 
-## 2. 最初の依頼をそのまま渡す
+## 最初の依頼の出し方
 
-最初の依頼では、何を調べたいかと、どの入力を土台にするかをまとめて伝えるのが効果的です。
+何を調べたいか、どの入力を土台にするかをまとめて伝えるのが効果的です。
 
 ```text
 この simctl project を AI エージェント前提でセットアップしたい。
@@ -51,33 +50,27 @@ simulator は emses、launcher は slurm_srun。
 必要なら survey の雛形まで作って。
 ```
 
-この段階では SKILL 名を明示しなくても構いません。多くの Agent 環境では、依頼内容に応じて必要な SKILL が自動選択されます。
+SKILL 名を明示する必要はありません。依頼内容に応じて必要な SKILL は自動選択されます。
 
-## 3. よくある依頼パターン
+## よくある依頼パターン
 
-細かい TOML を説明する代わりに、やりたい作業をそのまま依頼します。
+細かい TOML 構文を知らなくても、やりたいことをそのまま伝えれば動きます。
 
-- 研究意図を整理したい
-  `campaign.toml を整えて。仮説、独立変数、観測量がわかる形にして。`
-- case を作りたい
-  `このテンプレートをベースに case を作って。共通 job 設定と params は case に寄せて。`
-- survey を作りたい
-  `campaign の independent variables をもとに survey.toml を作って。命名規則も入れて。`
-- run を展開したい
-  `この survey から run を生成して。created 状態まで進めて。`
-- 投入前レビューをしたい
-  `submit 前に plan と対象 run を確認して。初回 bulk submit なので確認を挟んで。`
-- 失敗 run を診断したい
-  `failed run を確認して。log を読んで failure_reason を整理し、retry 方針を提案して。`
-- 解析と知見整理をしたい
-  `completed run を summarize / collect して、insight と fact の候補を分けてまとめて。`
+| やりたいこと | 依頼の例 |
+|---|---|
+| 研究意図を整理する | `campaign.toml を整えて。仮説、独立変数、観測量がわかる形にして。` |
+| case を作る | `このテンプレートをベースに case を作って。共通 job 設定と params は case に寄せて。` |
+| survey を作る | `campaign の independent variables をもとに survey.toml を作って。命名規則も入れて。` |
+| run を展開する | `この survey から run を生成して。created 状態まで進めて。` |
+| 投入前にレビューする | `submit 前に plan と対象 run を確認して。初回 bulk submit なので確認を挟んで。` |
+| 失敗 run を診断する | `failed run を確認して。log を読んで failure_reason を整理し、retry 方針を提案して。` |
+| 解析・知見を整理する | `completed run を summarize / collect して、insight と fact の候補を分けてまとめて。` |
 
-重要なのは、run の場当たり修正ではなく、再利用すべき変更を `campaign.toml`、`case.toml`、`survey.toml` に戻すよう依頼することです。
+ポイントは、run の入力を場当たり的に直すのではなく、再利用すべき変更を `campaign.toml` → `case.toml` → `survey.toml` に戻すよう依頼することです。
 
-## 4. SKILL への言及は補助的でよい
+## SKILL を明示するとき
 
-通常は「何をしてほしいか」を書けば十分です。
-それでも意図がずれるときだけ、SKILL を使う前提をひと言添えてください。
+通常は「何をしてほしいか」を書けば十分です。意図がずれるときだけ、ひと言添えてください。
 
 ```text
 campaign 設計用の SKILL を使って campaign.toml を整理して。
@@ -87,21 +80,18 @@ campaign 設計用の SKILL を使って campaign.toml を整理して。
 知見整理用の SKILL を使って、今回の結果を insight として保存して。
 ```
 
-SKILL 名を厳密に覚える必要はありません。まずはタスクを自然言語で伝え、必要なときだけ補助的に明示する運用で十分です。
+## 人間が確認を入れる場面
 
-## 5. 人間が確認を入れる場面
+エージェント中心で進めても、以下の操作だけは確認を挟んでください。
 
-エージェント中心で進めても、次の操作は確認を挟む前提で使うのが安全です。
+- **コストが高い操作** — 新しい survey の初回 bulk submit、walltime / memory / node 数を増やす retry
+- **破壊的な操作** — `archive`、`purge-work`
+- **研究の意味が変わる操作** — 仮説の方向性が変わる `campaign.toml` の編集
 
-- 新しい survey の初回 bulk submit
-- walltime / memory / node 数を増やす retry
-- `archive` や `purge-work`
-- 研究仮説の意味が変わる `campaign.toml` の編集
-
-要するに、コストが高い操作、破壊的な操作、研究上の意味が変わる操作だけは人間が境界を握ります。
+それ以外はエージェントに任せて大丈夫です。
 
 ## 次に読む
 
-- [README.md](../README.md): 生成される構造と全体像
-- [agent-user-guide.md](agent-user-guide.md): Agent が守る基本ルール
-- [toml-reference.md](toml-reference.md): 個別フィールドを手で確認したいとき
+- [README.md](../README.md) — 生成される構造と全体像
+- [agent-user-guide.md](agent-user-guide.md) — Agent が守る基本ルール
+- [toml-reference.md](toml-reference.md) — TOML フィールドを手で確認したいとき
