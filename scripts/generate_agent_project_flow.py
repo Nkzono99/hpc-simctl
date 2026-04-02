@@ -1,52 +1,33 @@
-"""Generate an AI-agent-oriented project flow guide with Mermaid diagrams."""
+"""Generate the AI-agent project flow guide using Python Diagrams."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from pathlib import Path
+try:
+    from diagrams import Cluster, Edge
+    from diagrams.generic.compute import Rack
+    from diagrams.generic.storage import Storage
+    from diagrams.onprem.client import User
+    from diagrams.onprem.vcs import Git
+    from diagrams.programming.language import Python
+except ModuleNotFoundError as exc:
+    raise SystemExit(
+        "Python package 'diagrams' is not installed.\n"
+        "Use the Docker renderer instead:\n"
+        "  python scripts/render_diagrams_in_docker.py"
+    ) from exc
+
+from diagram_utils import (
+    DOCS_ROOT,
+    markdown_image,
+    make_diagram,
+    node_attrs,
+    png_path,
+    prepare_figure_dir,
+    require_graphviz,
+)
 
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-DOC_PATH = REPO_ROOT / "docs" / "agent-project-flow.md"
-
-
-@dataclass(frozen=True)
-class Node:
-    """One Mermaid node."""
-
-    node_id: str
-    label: str
-    style_class: str
-
-
-@dataclass(frozen=True)
-class Edge:
-    """One Mermaid edge."""
-
-    source: str
-    target: str
-    label: str = ""
-
-
-@dataclass(frozen=True)
-class Diagram:
-    """One Mermaid flowchart."""
-
-    title: str
-    direction: str
-    nodes: tuple[Node, ...]
-    edges: tuple[Edge, ...]
-
-
-STYLE_DEFS: dict[str, str] = {
-    "human": "fill:#e8f1ff,stroke:#4e79a7,stroke-width:1px,color:#132238;",
-    "agent": "fill:#eaf7ea,stroke:#59a14f,stroke-width:1px,color:#132238;",
-    "config": "fill:#fcebf1,stroke:#d37295,stroke-width:1px,color:#132238;",
-    "runtime": "fill:#fff4dd,stroke:#f28e2b,stroke-width:1px,color:#132238;",
-    "artifact": "fill:#f2f3f5,stroke:#7f7f7f,stroke-width:1px,color:#132238;",
-    "gate": "fill:#fde2e2,stroke:#e15759,stroke-width:1px,color:#132238;",
-}
-
+DOC_PATH = DOCS_ROOT / "agent-project-flow.md"
 
 CONCEPT_ROWS: tuple[tuple[str, str, str], ...] = (
     (
@@ -82,226 +63,7 @@ CONCEPT_ROWS: tuple[tuple[str, str, str], ...] = (
 )
 
 
-def _escape_label(text: str) -> str:
-    """Escape labels for Mermaid."""
-    return text.replace('"', "&quot;")
-
-
-def _render_mermaid(diagram: Diagram) -> str:
-    """Render a Mermaid flowchart."""
-    lines: list[str] = [f"flowchart {diagram.direction}"]
-
-    for node in diagram.nodes:
-        lines.append(f'    {node.node_id}["{_escape_label(node.label)}"]')
-
-    lines.append("")
-
-    for edge in diagram.edges:
-        if edge.label:
-            lines.append(
-                f"    {edge.source} -->|{_escape_label(edge.label)}| {edge.target}"
-            )
-        else:
-            lines.append(f"    {edge.source} --> {edge.target}")
-
-    lines.append("")
-
-    used_classes = {node.style_class for node in diagram.nodes}
-    for class_name in sorted(used_classes):
-        lines.append(f"    classDef {class_name} {STYLE_DEFS[class_name]}")
-
-    for node in diagram.nodes:
-        lines.append(f"    class {node.node_id} {node.style_class}")
-
-    return "\n".join(lines)
-
-
-def _init_structure_diagram() -> Diagram:
-    return Diagram(
-        title="`simctl init` 後の project と Agent の見る世界",
-        direction="LR",
-        nodes=(
-            Node("HUMAN", "研究者 / user<br/>研究テーマ・仮説・ベース入力の方針", "human"),
-            Node("INIT", "simctl init / simctl setup", "runtime"),
-            Node(
-                "PROJECT",
-                "生成された project root",
-                "artifact",
-            ),
-            Node(
-                "CONFIG",
-                "simproject.toml / simulators.toml / launchers.toml / site.toml",
-                "config",
-            ),
-            Node(
-                "CAMPAIGN",
-                "campaign.toml<br/>研究意図",
-                "config",
-            ),
-            Node(
-                "CASES",
-                "cases/<sim>/...<br/>再利用テンプレート",
-                "config",
-            ),
-            Node(
-                "RUNS",
-                "runs/...<br/>survey と run の置き場",
-                "artifact",
-            ),
-            Node(
-                "REFS",
-                "refs/<repo>/...<br/>simulator docs / shared knowledge",
-                "artifact",
-            ),
-            Node(
-                "MEMORY",
-                ".simctl/<br/>environment / insights / facts / knowledge",
-                "artifact",
-            ),
-            Node(
-                "AGENTBOOT",
-                "CLAUDE.md / AGENTS.md / skills / rules",
-                "artifact",
-            ),
-            Node(
-                "CONTEXT",
-                "simctl context --json<br/>Agent の最初の入口",
-                "agent",
-            ),
-            Node(
-                "AGENT",
-                "AI Agent<br/>設計、実行、解析、学習を支援",
-                "agent",
-            ),
-        ),
-        edges=(
-            Edge("HUMAN", "INIT", "初期条件を渡す"),
-            Edge("INIT", "PROJECT", "scaffold を生成"),
-            Edge("PROJECT", "CONFIG"),
-            Edge("PROJECT", "CAMPAIGN"),
-            Edge("PROJECT", "CASES"),
-            Edge("PROJECT", "RUNS"),
-            Edge("PROJECT", "REFS"),
-            Edge("PROJECT", "MEMORY"),
-            Edge("PROJECT", "AGENTBOOT"),
-            Edge("PROJECT", "CONTEXT", "context bundle を生成できる"),
-            Edge("CONFIG", "AGENT", "実行環境の制約"),
-            Edge("CAMPAIGN", "AGENT", "研究意図"),
-            Edge("CASES", "AGENT", "ベース設定"),
-            Edge("REFS", "AGENT", "simulator 知識"),
-            Edge("MEMORY", "AGENT", "過去の知見"),
-            Edge("AGENTBOOT", "AGENT", "作業ルール"),
-            Edge("CONTEXT", "AGENT", "最初の俯瞰"),
-        ),
-    )
-
-
-def _operation_loop_diagram() -> Diagram:
-    return Diagram(
-        title="AI Agent 前提の運用ループ",
-        direction="LR",
-        nodes=(
-            Node("INTENT", "1. 研究意図を確認<br/>campaign.toml を更新", "human"),
-            Node(
-                "UNDERSTAND",
-                "2. Agent が project を把握<br/>simctl context --json / refs / .simctl",
-                "agent",
-            ),
-            Node(
-                "DESIGN",
-                "3. 実験設計<br/>case.toml / survey.toml を整備",
-                "agent",
-            ),
-            Node(
-                "CREATE",
-                "4. run 生成<br/>simctl runs create / sweep",
-                "runtime",
-            ),
-            Node(
-                "SUBMIT",
-                "5. 実行<br/>simctl runs submit / submit --all",
-                "runtime",
-            ),
-            Node(
-                "OBSERVE",
-                "6. 観測<br/>status / sync / log",
-                "runtime",
-            ),
-            Node(
-                "ANALYZE",
-                "7. 解析<br/>analyze summarize / collect",
-                "runtime",
-            ),
-            Node(
-                "LEARN",
-                "8. 学習を保存<br/>knowledge save / add-fact",
-                "agent",
-            ),
-            Node(
-                "REFINE",
-                "9. 設計へ戻す<br/>campaign / case / survey を更新",
-                "agent",
-            ),
-            Node(
-                "FAIL",
-                "失敗時<br/>log を読んで retry 方針を作る",
-                "gate",
-            ),
-        ),
-        edges=(
-            Edge("INTENT", "UNDERSTAND", "テーマを渡す"),
-            Edge("UNDERSTAND", "DESIGN", "制約と既知知識を反映"),
-            Edge("DESIGN", "CREATE", "run を具体化"),
-            Edge("CREATE", "SUBMIT", "created 状態"),
-            Edge("SUBMIT", "OBSERVE", "submitted / running"),
-            Edge("OBSERVE", "ANALYZE", "completed"),
-            Edge("OBSERVE", "FAIL", "failed"),
-            Edge("FAIL", "DESIGN", "retry か設計修正"),
-            Edge("ANALYZE", "LEARN", "結果を構造化"),
-            Edge("LEARN", "REFINE", "知見を次回へ反映"),
-            Edge("REFINE", "DESIGN", "次のサーベイへ"),
-        ),
-    )
-
-
-def _gate_diagram() -> Diagram:
-    return Diagram(
-        title="人が確認を入れるべきゲート",
-        direction="TB",
-        nodes=(
-            Node("AGENTPLAN", "Agent が plan / 提案を作る", "agent"),
-            Node(
-                "COST",
-                "高コスト操作<br/>新しい survey の初回 bulk submit<br/>walltime / memory / node 数を増やす retry",
-                "gate",
-            ),
-            Node(
-                "MEANING",
-                "研究意味の変更<br/>campaign.toml の仮説や方向性を変える",
-                "gate",
-            ),
-            Node(
-                "DESTRUCTIVE",
-                "破壊的操作<br/>archive / purge-work",
-                "gate",
-            ),
-            Node("HUMAN", "研究者 / user が確認する", "human"),
-            Node("EXEC", "Agent が実行する", "runtime"),
-        ),
-        edges=(
-            Edge("AGENTPLAN", "COST"),
-            Edge("AGENTPLAN", "MEANING"),
-            Edge("AGENTPLAN", "DESTRUCTIVE"),
-            Edge("COST", "HUMAN", "確認"),
-            Edge("MEANING", "HUMAN", "確認"),
-            Edge("DESTRUCTIVE", "HUMAN", "確認"),
-            Edge("HUMAN", "EXEC", "合意後に実行"),
-        ),
-    )
-
-
 def _concept_table() -> str:
-    """Build a concept table."""
     lines = [
         "| 層 / file | 概念上の役割 | Agent から見た意味 |",
         "|---|---|---|",
@@ -311,25 +73,155 @@ def _concept_table() -> str:
     return "\n".join(lines)
 
 
-def _build_document() -> str:
-    diagrams = (
-        _init_structure_diagram(),
-        _operation_loop_diagram(),
-        _gate_diagram(),
-    )
+def _build_init_world(figure_dir: str) -> str:
+    base = prepare_figure_dir(figure_dir) / "init-world"
+    with make_diagram(
+        name="simctl init 後の project と Agent の見る世界",
+        filename=base,
+        direction="LR",
+        graph_attr={"nodesep": "0.8", "ranksep": "1.0"},
+    ):
+        human = User(
+            "研究者 / user\n研究テーマ・仮説\n・ベース入力の方針",
+            **node_attrs("human"),
+        )
+        init = Rack("simctl init / simctl setup", **node_attrs("runtime"))
+        context = Python("simctl context --json\nAgent の最初の入口", **node_attrs("agent"))
+        agent = Python("AI Agent\n設計、実行、解析、\n学習を支援", **node_attrs("agent"))
 
-    diagram_blocks: list[str] = []
-    for diagram in diagrams:
-        diagram_blocks.append(f"## {diagram.title}\n")
-        diagram_blocks.append("```mermaid")
-        diagram_blocks.append(_render_mermaid(diagram))
-        diagram_blocks.append("```")
-        diagram_blocks.append("")
+        with Cluster("生成された project root"):
+            config = Storage(
+                "simproject.toml\nsimulators.toml\nlaunchers.toml\nsite.toml",
+                **node_attrs("config"),
+            )
+            campaign = Storage("campaign.toml\n研究意図", **node_attrs("config"))
+            cases = Storage("cases/<sim>/...\n再利用テンプレート", **node_attrs("config"))
+            runs = Rack("runs/...\nsurvey と run の置き場", **node_attrs("artifact"))
+            refs = Git(
+                "refs/<repo>/...\nsimulator docs / shared knowledge",
+                **node_attrs("artifact"),
+            )
+            memory = Storage(
+                ".simctl/\nenvironment / insights / facts / knowledge",
+                **node_attrs("artifact"),
+            )
+            agent_boot = Rack(
+                "CLAUDE.md / AGENTS.md\nskills / rules",
+                **node_attrs("artifact"),
+            )
+
+        human >> Edge(label="初期条件を渡す") >> init
+        init >> Edge(label="scaffold を生成") >> config
+        config >> Edge(label="context bundle を生成") >> context
+        config >> Edge(label="実行環境の制約") >> agent
+        campaign >> Edge(label="研究意図") >> agent
+        cases >> Edge(label="ベース設定") >> agent
+        refs >> Edge(label="simulator 知識") >> agent
+        memory >> Edge(label="過去の知見") >> agent
+        agent_boot >> Edge(label="作業ルール") >> agent
+        context >> Edge(label="最初の俯瞰") >> agent
+
+    return markdown_image(DOC_PATH, png_path(base), "simctl init 後の project と Agent の見る世界")
+
+
+def _build_operation_loop(figure_dir: str) -> str:
+    base = prepare_figure_dir(figure_dir) / "operation-loop"
+    with make_diagram(
+        name="AI Agent 前提の運用ループ",
+        filename=base,
+        direction="LR",
+        graph_attr={"nodesep": "0.65", "ranksep": "0.95"},
+    ):
+        intent = User("1. 研究意図を確認\ncampaign.toml を更新", **node_attrs("human"))
+        understand = Python(
+            "2. Agent が project を把握\nsimctl context --json / refs / .simctl",
+            **node_attrs("agent"),
+        )
+        design = Python(
+            "3. 実験設計\ncase.toml / survey.toml を整備",
+            **node_attrs("agent"),
+        )
+        create = Rack("4. run 生成\nsimctl runs create / sweep", **node_attrs("runtime"))
+        submit = Rack(
+            "5. 実行\nsimctl runs submit / submit --all",
+            **node_attrs("runtime"),
+        )
+        observe = Rack("6. 観測\nstatus / sync / log", **node_attrs("runtime"))
+        analyze = Rack(
+            "7. 解析\nanalyze summarize / collect",
+            **node_attrs("runtime"),
+        )
+        learn = Python(
+            "8. 学習を保存\nknowledge save / add-fact",
+            **node_attrs("agent"),
+        )
+        refine = Python(
+            "9. 設計へ戻す\ncampaign / case \n/ survey を更新",
+            **node_attrs("agent"),
+        )
+        fail = Rack("失敗時\nlog を読んで retry 方針を作る", **node_attrs("gate"))
+
+        intent >> Edge(label="テーマを渡す") >> understand
+        understand >> Edge(label="制約と既知知識を反映") >> design
+        design >> Edge(label="run を具体化") >> create
+        create >> Edge(label="created 状態") >> submit
+        submit >> Edge(label="submitted / running") >> observe
+        observe >> Edge(label="completed") >> analyze
+        observe >> Edge(label="failed") >> fail
+        fail >> Edge(label="retry か設計修正") >> design
+        analyze >> Edge(label="結果を構造化") >> learn
+        learn >> Edge(label="知見を次回へ反映") >> refine
+        refine >> Edge(label="次のサーベイへ") >> design
+
+    return markdown_image(DOC_PATH, png_path(base), "AI Agent 前提の運用ループ")
+
+
+def _build_gates(figure_dir: str) -> str:
+    base = prepare_figure_dir(figure_dir) / "human-gates"
+    with make_diagram(
+        name="人が確認を入れるべきゲート",
+        filename=base,
+        direction="TB",
+        graph_attr={"nodesep": "0.95", "ranksep": "1.05", "splines": "spline"},
+    ):
+        agent_plan = Python("Agent の提案\nplan / proposal", **node_attrs("agent"))
+        cost = Rack(
+            "高コスト操作\n初回 bulk submit\n大きな retry",
+            **node_attrs("gate"),
+        )
+        meaning = Rack(
+            "研究意図の変更\ncampaign.toml\n仮説や方向性",
+            **node_attrs("gate"),
+        )
+        destructive = Rack(
+            "破壊的操作\narchive\npurge-work",
+            **node_attrs("gate"),
+        )
+        human = User("研究者 / user\n確認", **node_attrs("human"))
+        execute = Rack("Agent 実行", **node_attrs("runtime"))
+
+        agent_plan >> cost
+        agent_plan >> meaning
+        agent_plan >> destructive
+        cost >> human
+        meaning >> human
+        destructive >> human
+        human >> Edge(label="合意後") >> execute
+
+    return markdown_image(DOC_PATH, png_path(base), "人が確認を入れるべきゲート")
+
+
+def _build_document() -> str:
+    figure_dir = "agent-project-flow"
+    init_world = _build_init_world(figure_dir)
+    operation_loop = _build_operation_loop(figure_dir)
+    gates = _build_gates(figure_dir)
 
     lines = [
         "# AI Agent 前提の project 運用概念図",
         "",
         "> このファイルは `python scripts/generate_agent_project_flow.py` で生成しています。",
+        "> 標準の再生成手順は `python scripts/render_diagrams_in_docker.py` です。",
         "",
         "このガイドは、`simctl init` で生成された project を人間と AI Agent がどう運用していくかを",
         "概念図としてまとめたものです。",
@@ -341,7 +233,18 @@ def _build_document() -> str:
         "",
         _concept_table(),
         "",
-        *diagram_blocks,
+        "## `simctl init` 後の project と Agent の見る世界",
+        "",
+        init_world,
+        "",
+        "## AI Agent 前提の運用ループ",
+        "",
+        operation_loop,
+        "",
+        "## 人が確認を入れるべきゲート",
+        "",
+        gates,
+        "",
         "## 読み方の要点",
         "",
         "- `simctl init` 後の project は、Agent にとっての作業場であると同時に memory でもあります。",
@@ -362,9 +265,9 @@ def _build_document() -> str:
 
 
 def main() -> None:
-    """Write the generated guide."""
+    require_graphviz()
     DOC_PATH.write_text(_build_document(), encoding="utf-8")
-    print(f"Wrote {DOC_PATH.relative_to(REPO_ROOT)}")
+    print(f"Wrote {DOC_PATH.relative_to(DOCS_ROOT.parent)}")
 
 
 if __name__ == "__main__":

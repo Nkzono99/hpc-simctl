@@ -1,56 +1,36 @@
-"""Generate a Mermaid-based guide for the src/simctl package structure.
-
-This script writes docs/src-structure.md from declarative diagram definitions
-plus a lightweight scan of the current package tree.
-"""
+"""Generate the src/simctl structure guide using Python Diagrams."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 
+try:
+    from diagrams import Cluster, Edge
+    from diagrams.generic.compute import Rack
+    from diagrams.generic.storage import Storage
+    from diagrams.onprem.client import User
+    from diagrams.onprem.vcs import Git
+    from diagrams.programming.language import Python
+except ModuleNotFoundError as exc:
+    raise SystemExit(
+        "Python package 'diagrams' is not installed.\n"
+        "Use the Docker renderer instead:\n"
+        "  python scripts/render_diagrams_in_docker.py"
+    ) from exc
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-SRC_ROOT = REPO_ROOT / "src" / "simctl"
-DOC_PATH = REPO_ROOT / "docs" / "src-structure.md"
-
-
-@dataclass(frozen=True)
-class Node:
-    """One Mermaid node."""
-
-    node_id: str
-    label: str
-    style_class: str
-
-
-@dataclass(frozen=True)
-class Edge:
-    """One Mermaid edge."""
-
-    source: str
-    target: str
-    label: str = ""
-
-
-@dataclass(frozen=True)
-class Diagram:
-    """A flowchart diagram."""
-
-    title: str
-    direction: str
-    nodes: tuple[Node, ...]
-    edges: tuple[Edge, ...]
+from diagram_utils import (
+    DOCS_ROOT,
+    markdown_image,
+    make_diagram,
+    node_attrs,
+    png_path,
+    prepare_figure_dir,
+    require_graphviz,
+)
 
 
-STYLE_DEFS: dict[str, str] = {
-    "entry": "fill:#e8f1ff,stroke:#4e79a7,stroke-width:1px,color:#132238;",
-    "domain": "fill:#eaf7ea,stroke:#59a14f,stroke-width:1px,color:#132238;",
-    "plugin": "fill:#fff4dd,stroke:#f28e2b,stroke-width:1px,color:#132238;",
-    "config": "fill:#fcebf1,stroke:#d37295,stroke-width:1px,color:#132238;",
-    "artifact": "fill:#f2f3f5,stroke:#7f7f7f,stroke-width:1px,color:#132238;",
-}
-
+SRC_ROOT = Path(__file__).resolve().parent.parent / "src" / "simctl"
+DOC_PATH = DOCS_ROOT / "src-structure.md"
 
 DIRECTORY_LABELS: dict[str, str] = {
     "cli": "Typer ベースの CLI エントリポイントと対話 UX",
@@ -63,13 +43,9 @@ DIRECTORY_LABELS: dict[str, str] = {
     "templates": "project / case / survey にコピーされる静的テンプレート",
 }
 
-
 KEY_FILES: tuple[tuple[str, str], ...] = (
     ("src/simctl/cli/main.py", "最上位のコマンド登録。"),
-    (
-        "src/simctl/core/actions.py",
-        "CLI と agent が使う薄い action facade。",
-    ),
+    ("src/simctl/core/actions.py", "CLI と agent が使う薄い action facade。"),
     (
         "src/simctl/core/run_creation.py",
         "case -> adapter -> launcher -> site -> job.sh をつなぐ実行時の中心。",
@@ -101,42 +77,7 @@ KEY_FILES: tuple[tuple[str, str], ...] = (
 )
 
 
-def _escape_label(text: str) -> str:
-    """Escape a label for Mermaid."""
-    return text.replace('"', "&quot;")
-
-
-def _render_mermaid(diagram: Diagram) -> str:
-    """Render one Mermaid flowchart."""
-    lines: list[str] = [f"flowchart {diagram.direction}"]
-
-    for node in diagram.nodes:
-        lines.append(f'    {node.node_id}["{_escape_label(node.label)}"]')
-
-    lines.append("")
-
-    for edge in diagram.edges:
-        if edge.label:
-            lines.append(
-                f"    {edge.source} -->|{_escape_label(edge.label)}| {edge.target}"
-            )
-        else:
-            lines.append(f"    {edge.source} --> {edge.target}")
-
-    lines.append("")
-
-    used_classes = {node.style_class for node in diagram.nodes}
-    for class_name in sorted(used_classes):
-        lines.append(f"    classDef {class_name} {STYLE_DEFS[class_name]}")
-
-    for node in diagram.nodes:
-        lines.append(f"    class {node.node_id} {node.style_class}")
-
-    return "\n".join(lines)
-
-
 def _count_directory_entries(path: Path) -> str:
-    """Return a small human-readable summary for one top-level directory."""
     if path.name == "sites":
         toml_count = len(list(path.glob("*.toml")))
         md_count = len(list(path.glob("*.md")))
@@ -151,7 +92,6 @@ def _count_directory_entries(path: Path) -> str:
 
 
 def _build_directory_table() -> str:
-    """Generate a Markdown table of top-level src/simctl directories."""
     header = [
         "| Directory | 役割 | 現在の規模 |",
         "|---|---|---|",
@@ -174,248 +114,192 @@ def _build_directory_table() -> str:
     return "\n".join(header + rows)
 
 
-def _overview_diagram() -> Diagram:
-    return Diagram(
-        title="全体構造",
+def _build_overview(figure_dir: str) -> str:
+    base = prepare_figure_dir(figure_dir) / "overview"
+    with make_diagram(
+        name="src/simctl の全体構造",
+        filename=base,
         direction="LR",
-        nodes=(
-            Node("CLI", "cli/<br/>Typer command と command grouping", "entry"),
-            Node(
-                "CORE",
-                "core/<br/>Project、Case、Survey、Run、Actions、State、Knowledge",
-                "domain",
-            ),
-            Node(
-                "ADAPTERS",
-                "adapters/<br/>Simulator adapter と registry",
-                "plugin",
-            ),
-            Node(
-                "LAUNCHERS",
-                "launchers/<br/>srun / mpirun / mpiexec factory",
-                "plugin",
-            ),
-            Node(
-                "SITECORE",
-                "core/site.py<br/>runtime site abstraction",
-                "domain",
-            ),
-            Node(
-                "JOBGEN",
-                "jobgen/<br/>submit/job.sh 生成",
-                "domain",
-            ),
-            Node(
-                "SLURM",
-                "slurm/<br/>sbatch / squeue / sacct wrapper",
-                "domain",
-            ),
-            Node(
-                "TEMPLATES",
-                "templates/<br/>case、survey、scaffold、agent asset",
-                "config",
-            ),
-            Node(
-                "BUNDLEDSITES",
-                "sites/<br/>init 専用の bundled site preset",
-                "config",
-            ),
-            Node(
-                "PROJECTFILES",
-                "project files<br/>simproject.toml / simulators.toml / launchers.toml / site.toml / case.toml / survey.toml",
-                "artifact",
-            ),
-        ),
-        edges=(
-            Edge("CLI", "CORE", "多くの command はここへ委譲"),
-            Edge("CLI", "ADAPTERS", "config/new/update-refs は registry を使う"),
-            Edge("CLI", "BUNDLEDSITES", "init が preset TOML/MD を読む"),
-            Edge("CLI", "TEMPLATES", "init/new が scaffold をコピー"),
-            Edge("PROJECTFILES", "CORE", "Project/Case/Survey data に変換"),
-            Edge("CORE", "ADAPTERS", "run_creation / analysis が simulator 依存を解決"),
-            Edge("CORE", "LAUNCHERS", "run_creation が MPI 起動方式を解決"),
-            Edge("CORE", "SITECORE", "runtime site profile を解決"),
-            Edge("CORE", "JOBGEN", "job.sh を組み立てる"),
-            Edge("CORE", "SLURM", "submit と sync"),
-            Edge("ADAPTERS", "TEMPLATES", "adapter template と guide"),
-            Edge("SITECORE", "JOBGEN", "module/env/sbatch option"),
-            Edge("SLURM", "CORE", "Slurm state を RunState へ戻す"),
-        ),
-    )
+        graph_attr={"nodesep": "0.8", "ranksep": "1.0"},
+    ):
+        project_files = Storage(
+            "project files\nsimproject / simulators \n / launchers / site / \n case / survey",
+            **node_attrs("artifact"),
+        )
+
+        with Cluster("src/simctl"):
+            cli = User("cli/\nTyper command \nと command grouping", **node_attrs("human"))
+            core = Python(
+                "core/\nProject / Case / Survey / Run /\nActions / State / Knowledge",
+                **node_attrs("agent"),
+            )
+            adapters = Rack(
+                "adapters/\nSimulator adapter と registry",
+                **node_attrs("runtime"),
+            )
+            launchers = Rack(
+                "launchers/\nsrun / mpirun / mpiexec factory",
+                **node_attrs("runtime"),
+            )
+            site_core = Rack("core/site.py\nruntime site abstraction", **node_attrs("config"))
+            jobgen = Rack("jobgen/\nsubmit/job.sh 生成", **node_attrs("artifact"))
+            slurm = Rack("slurm/\nsbatch / squeue / sacct wrapper", **node_attrs("artifact"))
+            templates = Storage(
+                "templates/\ncase / survey / \n scaffold / agent asset",
+                **node_attrs("config"),
+            )
+            bundled_sites = Git(
+                "sites/\ninit 専用 bundled site preset",
+                **node_attrs("config"),
+            )
+
+        project_files >> Edge(label="Project/Case/Survey data に変換") >> core
+        cli >> Edge(label="多くの command はここへ委譲") >> core
+        cli >> Edge(label="config/new/update-refs は registry を使う") >> adapters
+        cli >> Edge(label="init/new が scaffold をコピー") >> templates
+        cli >> Edge(label="init が preset TOML/MD を読む") >> bundled_sites
+        core >> Edge(label="simulator 依存を解決") >> adapters
+        core >> Edge(label="MPI 起動方式を解決") >> launchers
+        core >> Edge(label="runtime site profile を解決") >> site_core
+        core >> Edge(label="job.sh を組み立てる") >> jobgen
+        core >> Edge(label="submit と sync") >> slurm
+        adapters >> Edge(label="template と guide") >> templates
+        site_core >> Edge(label="module/env/sbatch option") >> jobgen
+        slurm >> Edge(label="Slurm state を RunState へ戻す") >> core
+
+    return markdown_image(DOC_PATH, png_path(base), "src/simctl の全体構造")
 
 
-def _run_creation_diagram() -> Diagram:
-    return Diagram(
-        title="runs create / sweep の依存解決",
-        direction="TB",
-        nodes=(
-            Node(
-                "CREATECLI",
-                "simctl runs create / runs sweep<br/>src/simctl/cli/create.py",
-                "entry",
-            ),
-            Node(
-                "ACTIONS",
-                "core/actions.py<br/>execute_action('create_run' / 'create_survey')",
-                "domain",
-            ),
-            Node(
-                "PROJECT",
-                "load_project()<br/>simproject.toml + simulators.toml + launchers.toml",
-                "config",
-            ),
-            Node(
-                "CASE",
-                "load_case() / load_survey()<br/>case.toml と optional survey.toml",
-                "config",
-            ),
-            Node(
-                "ADREG",
-                "load_adapter_for_simulator()<br/>adapter 名 = sim_cfg['adapter'] or simulator 名",
-                "plugin",
-            ),
-            Node(
-                "ADIMPORT",
-                "AdapterRegistry.load_from_config()<br/>import simctl.adapters.contrib.<adapter><br/>or simctl.adapters.<adapter>",
-                "plugin",
-            ),
-            Node(
-                "ADAPTER",
-                "adapter instance<br/>render_inputs / resolve_runtime / build_program_command / collect_provenance",
-                "plugin",
-            ),
-            Node(
-                "LAUNCHER",
-                "load_launcher_for_name()<br/>load_launchers() -> Launcher.from_config(type)",
-                "plugin",
-            ),
-            Node(
-                "SITE",
-                "load_site_profile()<br/>site.toml -> legacy launchers.toml -> STANDARD_SITE",
-                "domain",
-            ),
-            Node(
-                "JOBGEN",
-                "generate_job_script()<br/>launcher exec line + site modules/env/directive",
-                "domain",
-            ),
-            Node(
-                "RUNARTIFACT",
-                "run directory<br/>input/ + submit/job.sh + manifest.toml",
-                "artifact",
-            ),
-        ),
-        edges=(
-            Edge("CREATECLI", "ACTIONS", "Typer command dispatch"),
-            Edge("ACTIONS", "PROJECT", "project config を読む"),
-            Edge("ACTIONS", "CASE", "case / survey を解決"),
-            Edge("PROJECT", "ADREG", "project.simulators"),
-            Edge("CASE", "ADREG", "case.simulator または survey override"),
-            Edge("ADREG", "ADIMPORT", "adapter module を import"),
-            Edge("ADIMPORT", "ADAPTER", "adapter class を instantiate"),
-            Edge("PROJECT", "LAUNCHER", "project.launchers"),
-            Edge("CASE", "LAUNCHER", "case.launcher または survey override"),
-            Edge("PROJECT", "SITE", "project root"),
-            Edge("ADAPTER", "JOBGEN", "build_program_command()"),
-            Edge("LAUNCHER", "JOBGEN", "build_exec_line()"),
-            Edge("SITE", "JOBGEN", "site module/env/sbatch"),
-            Edge("JOBGEN", "RUNARTIFACT", "submit/job.sh を書く"),
-            Edge("ADAPTER", "RUNARTIFACT", "input と provenance を書く"),
-            Edge("CASE", "RUNARTIFACT", "job params と display name"),
-        ),
-    )
+def _build_run_creation(figure_dir: str) -> str:
+    base = prepare_figure_dir(figure_dir) / "run-creation-resolution"
+    with make_diagram(
+        name="runs create / sweep の依存解決",
+        filename=base,
+        direction="LR",
+        graph_attr={"nodesep": "0.8", "ranksep": "1.0", "splines": "spline"},
+    ):
+        create_cli = User(
+            "runs create / sweep\ncli/create.py",
+            **node_attrs("human"),
+        )
+        actions = Python(
+            "actions.py\ncreate_run / create_survey",
+            **node_attrs("agent"),
+        )
+        with Cluster("入力"):
+            project = Storage(
+                "project config\nsimproject / simulators /\nlaunchers",
+                **node_attrs("config"),
+            )
+            case = Storage(
+                "case / survey\ncase.toml / survey.toml",
+                **node_attrs("config"),
+            )
+
+        with Cluster("解決"):
+            adapter_lookup = Rack(
+                "adapter 解決\nsimulator -> adapter 名",
+                **node_attrs("runtime"),
+            )
+            adapter_import = Rack(
+                "adapter registry\ncontrib.<name> / <name>",
+                **node_attrs("runtime"),
+            )
+            adapter = Rack(
+                "adapter instance\ninputs / command /\nprovenance",
+                **node_attrs("runtime"),
+            )
+            launcher = Rack(
+                "launcher 解決\nlaunchers.toml + type",
+                **node_attrs("runtime"),
+            )
+            site = Rack(
+                "site 解決\nsite.toml -> legacy ->\nSTANDARD_SITE",
+                **node_attrs("config"),
+            )
+
+        jobgen = Rack("jobgen\njob.sh 生成", **node_attrs("artifact"))
+        run_artifact = Rack(
+            "run dir\ninput/ submit/job.sh\nmanifest.toml",
+            **node_attrs("artifact"),
+        )
+
+        create_cli >> actions
+        actions >> project
+        actions >> case
+        project >> adapter_lookup
+        case >> adapter_lookup
+        adapter_lookup >> adapter_import >> adapter
+        project >> launcher
+        case >> launcher
+        project >> site
+        adapter >> jobgen
+        launcher >> jobgen
+        site >> jobgen
+        jobgen >> run_artifact
+        adapter >> run_artifact
+        case >> run_artifact
+
+    return markdown_image(DOC_PATH, png_path(base), "runs create と sweep の依存解決")
 
 
-def _site_diagram() -> Diagram:
-    return Diagram(
-        title="site の init 時 preset と runtime 解決",
-        direction="TB",
-        nodes=(
-            Node(
-                "BUNDLED",
-                "src/simctl/sites/*.toml + *.md<br/>例: camphor.toml / camphor.md",
-                "config",
-            ),
-            Node(
-                "INITCLI",
-                "simctl init<br/>src/simctl/cli/init.py",
-                "entry",
-            ),
-            Node(
-                "PROJSITE",
-                "project site.toml<br/>runtime site の source of truth",
-                "config",
-            ),
-            Node(
-                "PROJLAUNCHERS",
-                "project launchers.toml<br/>init 時に launcher default をコピー",
-                "config",
-            ),
-            Node(
-                "CASENEW",
-                "simctl case new<br/>resource_style を見て job field 形状を変える",
-                "entry",
-            ),
-            Node(
-                "RUNTIME",
-                "core/site.load_site_profile()",
-                "domain",
-            ),
-            Node(
-                "STANDARD",
-                "STANDARD_SITE<br/>site customisation なし",
-                "artifact",
-            ),
-            Node(
-                "JOBGEN",
-                "jobgen.generate_job_script()",
-                "domain",
-            ),
-            Node(
-                "JOBSH",
-                "submit/job.sh<br/>module load / export / #SBATCH / stdout-stderr format",
-                "artifact",
-            ),
-        ),
-        edges=(
-            Edge("BUNDLED", "INITCLI", "init 時に preset を選ぶ"),
-            Edge("INITCLI", "PROJSITE", "[site] section を書く"),
-            Edge("INITCLI", "PROJLAUNCHERS", "[launcher] default をコピー"),
-            Edge("PROJSITE", "RUNTIME", "第1優先"),
-            Edge("PROJLAUNCHERS", "RUNTIME", "legacy fallback"),
-            Edge("STANDARD", "RUNTIME", "最終 fallback"),
-            Edge("PROJSITE", "CASENEW", "resource_style が case template に効く"),
-            Edge("RUNTIME", "JOBGEN", "SiteProfile"),
-            Edge("JOBGEN", "JOBSH", "最終 script を生成"),
-        ),
-    )
+def _build_site_resolution(figure_dir: str) -> str:
+    base = prepare_figure_dir(figure_dir) / "site-resolution"
+    with make_diagram(
+        name="site の init 時 preset と runtime 解決",
+        filename=base,
+        direction="LR",
+        graph_attr={"nodesep": "0.85", "ranksep": "1.0", "splines": "spline"},
+    ):
+        bundled = Git(
+            "bundled preset\nsrc/simctl/sites/*.toml\n+ *.md",
+            **node_attrs("config"),
+        )
+        init_cli = User("simctl init\ncli/init.py", **node_attrs("human"))
+        project_site = Storage(
+            "project site.toml\nruntime source of truth",
+            **node_attrs("config"),
+        )
+        project_launchers = Storage(
+            "launchers.toml\nlegacy default",
+            **node_attrs("config"),
+        )
+        case_new = User(
+            "simctl case new\nresource_style を参照",
+            **node_attrs("human"),
+        )
+        runtime = Python("core/site.py\nload_site_profile()", **node_attrs("agent"))
+        standard = Rack("STANDARD_SITE", **node_attrs("artifact"))
+        jobgen = Rack("jobgen\ngenerate_job_script()", **node_attrs("artifact"))
+        job_sh = Rack(
+            "submit/job.sh\nmodule / env / #SBATCH",
+            **node_attrs("artifact"),
+        )
+
+        bundled >> init_cli
+        init_cli >> project_site
+        init_cli >> project_launchers
+        project_site >> runtime
+        project_launchers >> runtime
+        standard >> runtime
+        project_site >> case_new
+        runtime >> jobgen >> job_sh
+
+    return markdown_image(DOC_PATH, png_path(base), "site の init 時 preset と runtime 解決")
 
 
 def _build_document() -> str:
-    """Build the generated Markdown guide."""
-    diagrams = (
-        _overview_diagram(),
-        _run_creation_diagram(),
-        _site_diagram(),
-    )
-
-    mermaid_blocks = []
-    for diagram in diagrams:
-        mermaid_blocks.append(f"## {diagram.title}\n")
-        mermaid_blocks.append("```mermaid")
-        mermaid_blocks.append(_render_mermaid(diagram))
-        mermaid_blocks.append("```")
-        mermaid_blocks.append("")
-
-    key_files_lines = [
-        f"- `{path}`: {description}" for path, description in KEY_FILES
-    ]
+    figure_dir = "src-structure"
+    overview = _build_overview(figure_dir)
+    run_creation = _build_run_creation(figure_dir)
+    site_resolution = _build_site_resolution(figure_dir)
+    key_files_lines = [f"- `{path}`: {description}" for path, description in KEY_FILES]
 
     lines = [
         "# src/simctl 構成ガイド",
         "",
         "> このファイルは `python scripts/generate_architecture_diagrams.py` で生成しています。",
-        "> package 境界や依存解決を変えたら script を再実行してください。",
+        "> 標準の再生成手順は `python scripts/render_diagrams_in_docker.py` です。",
         "",
         "simctl の `src/` は、まず次の 3 つを分けて考えると読みやすくなります。",
         "",
@@ -434,7 +318,18 @@ def _build_document() -> str:
         "",
         _build_directory_table(),
         "",
-        *mermaid_blocks,
+        "## 全体構造",
+        "",
+        overview,
+        "",
+        "## runs create / sweep の依存解決",
+        "",
+        run_creation,
+        "",
+        "## site の init 時 preset と runtime 解決",
+        "",
+        site_resolution,
+        "",
         "## adapter / launcher 解決の要点",
         "",
         "たとえば `case.toml` に `simulator = \"emses\"`、`launcher = \"camphor\"` と書かれているとき、",
@@ -463,10 +358,9 @@ def _build_document() -> str:
 
 
 def main() -> None:
-    """Write the generated guide to docs/src-structure.md."""
+    require_graphviz()
     DOC_PATH.write_text(_build_document(), encoding="utf-8")
-    relative = DOC_PATH.relative_to(REPO_ROOT)
-    print(f"Wrote {relative}")
+    print(f"Wrote {DOC_PATH.relative_to(DOCS_ROOT.parent)}")
 
 
 if __name__ == "__main__":
