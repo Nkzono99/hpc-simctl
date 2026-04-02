@@ -198,7 +198,7 @@ class TestInit:
         assert "h5py" in content
 
     def test_init_claude_settings(self, tmp_path: Path) -> None:
-        """Team-shared .claude/settings.json is created with permissions."""
+        """Team-shared .claude/settings.json encodes the harness policy."""
         runner.invoke(app, ["init", "-y", "--path", str(tmp_path)])
         settings_path = tmp_path / ".claude" / "settings.json"
         assert settings_path.exists()
@@ -207,7 +207,39 @@ class TestInit:
         data = json.loads(settings_path.read_text(encoding="utf-8"))
         assert "permissions" in data
         assert "allow" in data["permissions"]
+        assert "ask" in data["permissions"]
+        assert "deny" in data["permissions"]
         assert any("simctl" in r for r in data["permissions"]["allow"])
+        assert "Edit(/campaign.toml)" in data["permissions"]["allow"]
+        assert "Write(/simproject.toml)" in data["permissions"]["ask"]
+        assert "Write(/SITE.md)" in data["permissions"]["deny"]
+        assert "Edit(/runs/**/manifest.toml)" in data["permissions"]["deny"]
+        assert "Read(/.env)" in data["permissions"]["deny"]
+        assert data["permissions"]["disableBypassPermissionsMode"] == "disable"
+        hooks = data["hooks"]["PreToolUse"]
+        commands = {
+            hook["hooks"][0]["command"]
+            for hook in hooks
+            if hook["hooks"] and "command" in hook["hooks"][0]
+        }
+        assert 'bash "$CLAUDE_PROJECT_DIR/.claude/hooks/protect-files.sh"' in commands
+        assert 'bash "$CLAUDE_PROJECT_DIR/.claude/hooks/guard-bash.sh"' in commands
+        assert 'bash "$CLAUDE_PROJECT_DIR/.claude/hooks/approve-run.sh"' in commands
+
+    def test_init_claude_hooks(self, tmp_path: Path) -> None:
+        """Claude hook scripts are scaffolded for approvals and path guards."""
+        runner.invoke(app, ["init", "-y", "--path", str(tmp_path)])
+        hooks_dir = tmp_path / ".claude" / "hooks"
+        approve = hooks_dir / "approve-run.sh"
+        protect = hooks_dir / "protect-files.sh"
+        guard = hooks_dir / "guard-bash.sh"
+
+        assert approve.exists()
+        assert protect.exists()
+        assert guard.exists()
+        assert "permissionDecision" in approve.read_text(encoding="utf-8")
+        assert "PROTECTED_PATTERNS" in protect.read_text(encoding="utf-8")
+        assert "ASK_PATTERNS" in guard.read_text(encoding="utf-8")
 
     def test_init_claude_rules(self, tmp_path: Path) -> None:
         """Project rules are created in .claude/rules/."""
@@ -217,19 +249,16 @@ class TestInit:
         assert (rules_dir / "plan-before-act.md").exists()
         workflow = (rules_dir / "simctl-workflow.md").read_text(encoding="utf-8")
         assert "manifest.toml" in workflow
+        assert "SITE.md" in workflow
 
     def test_init_subdirectory_claude_md(self, tmp_path: Path) -> None:
         """Context-specific CLAUDE.md files are created in cases/ and runs/."""
         runner.invoke(app, ["init", "-y", "--path", str(tmp_path)])
         assert (tmp_path / "cases" / "CLAUDE.md").exists()
         assert (tmp_path / "runs" / "CLAUDE.md").exists()
-        cases_content = (tmp_path / "cases" / "CLAUDE.md").read_text(
-            encoding="utf-8"
-        )
+        cases_content = (tmp_path / "cases" / "CLAUDE.md").read_text(encoding="utf-8")
         assert "case.toml" in cases_content
-        runs_content = (tmp_path / "runs" / "CLAUDE.md").read_text(
-            encoding="utf-8"
-        )
+        runs_content = (tmp_path / "runs" / "CLAUDE.md").read_text(encoding="utf-8")
         assert "manifest.toml" in runs_content
 
     def test_init_gitignore_personal_overrides(self, tmp_path: Path) -> None:
@@ -283,7 +312,43 @@ class TestInit:
         # docs/ directory should NOT be generated
         assert not (tmp_path / "docs").exists()
 
-    def test_init_renders_imports_after_bootstrap(self, tmp_path: Path, monkeypatch) -> None:
+    def test_init_creates_site_md_for_selected_site_profile(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Interactive init copies SITE.md when a bundled site profile is chosen."""
+        from simctl.cli.init import _BundledSiteProfile
+
+        repo_root = Path(__file__).resolve().parents[2]
+        site_dir = repo_root / "src" / "simctl" / "sites"
+        profile = _BundledSiteProfile(
+            name="camphor",
+            launcher={"type": "srun", "use_slurm_ntasks": True},
+            source_path=site_dir / "camphor.toml",
+            docs_path=site_dir / "camphor.md",
+        )
+
+        monkeypatch.setattr("simctl.cli.init._prompt_simulators", lambda: ([], {}))
+        monkeypatch.setattr(
+            "simctl.cli.init._prompt_launchers",
+            lambda: ({"srun": {"type": "srun", "use_slurm_ntasks": True}}, profile),
+        )
+        monkeypatch.setattr(
+            "simctl.cli.init._prompt_knowledge_sources",
+            lambda _project_dir: [],
+        )
+
+        result = runner.invoke(
+            app,
+            ["init", "--path", str(tmp_path), "--name", "site-project"],
+        )
+        assert result.exit_code == 0
+        site_md = tmp_path / "SITE.md"
+        assert site_md.exists()
+        assert "Camphor3" in site_md.read_text(encoding="utf-8")
+
+    def test_init_renders_imports_after_bootstrap(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
         """Init discovers tool docs only after bootstrap and wires imports.md."""
 
         def _fake_bootstrap(
