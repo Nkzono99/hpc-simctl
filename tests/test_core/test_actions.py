@@ -13,14 +13,16 @@ from simctl.core.actions import (
     ActionStatus,
     add_fact,
     collect_survey,
+    purge_work,
     retry_run,
+    save_insight,
     submit_run,
     summarize_run,
 )
 from simctl.core.actions import (
     create_run as create_run_action,
 )
-from simctl.core.knowledge import load_facts
+from simctl.core.knowledge import list_insights, load_facts
 
 
 def _write_manifest(run_dir: Path, data: dict[str, Any]) -> None:
@@ -251,6 +253,55 @@ def test_add_fact_supports_superseding_fact(tmp_path: Path) -> None:
     facts = load_facts(tmp_path)
     assert [fact.id for fact in facts] == ["f001", "f002"]
     assert facts[1].supersedes == "f001"
+
+
+def test_save_insight_writes_markdown_with_metadata(tmp_path: Path) -> None:
+    result = save_insight(
+        tmp_path,
+        name="emses_cfl",
+        content="dt must stay below the CFL limit",
+        insight_type="constraint",
+        simulator="emses",
+        tags=["stability", "cfl"],
+    )
+
+    assert result.status is ActionStatus.SUCCESS
+    saved_path = Path(result.data["path"])
+    assert saved_path.exists()
+    assert saved_path.name == "emses_cfl.md"
+
+    insights = list_insights(tmp_path, simulator="emses", insight_type="constraint")
+    assert len(insights) == 1
+    assert insights[0].name == "emses_cfl"
+    assert insights[0].tags == ["stability", "cfl"]
+    assert insights[0].content == "dt must stay below the CFL limit"
+
+
+def test_purge_work_removes_work_artifacts_and_updates_state(tmp_path: Path) -> None:
+    run_dir = tmp_path / "R20260330-0001"
+    _write_manifest(
+        run_dir,
+        {
+            "run": {
+                "id": "R20260330-0001",
+                "status": "archived",
+            }
+        },
+    )
+    for dirname in ("outputs", "restart", "tmp"):
+        target = run_dir / "work" / dirname
+        target.mkdir(parents=True, exist_ok=True)
+        (target / "data.bin").write_bytes(b"x" * 128)
+
+    result = purge_work(run_dir)
+
+    assert result.status is ActionStatus.SUCCESS
+    assert result.state_before == "archived"
+    assert result.state_after == "purged"
+    assert sorted(result.data["removed_dirs"]) == ["outputs", "restart", "tmp"]
+    assert result.data["bytes_removed"] == 384
+    assert not (run_dir / "work" / "outputs").exists()
+    assert (run_dir / "status" / "state.json").exists()
 
 
 def test_submit_run_updates_manifest_and_state_file(tmp_path: Path) -> None:

@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from unittest.mock import patch
 
 from typer.testing import CliRunner
 
 from simctl.cli.main import app
-from simctl.core.knowledge import load_facts, query_facts
+from simctl.core.knowledge import list_insights, load_facts, query_facts
 from simctl.core.knowledge_source import load_knowledge_config
 
 runner = CliRunner()
@@ -119,6 +120,92 @@ def test_add_fact_supports_structured_fields_and_supersedes(tmp_path: Path) -> N
 
     visible = query_facts(project_root)
     assert [fact.id for fact in visible] == ["f002"]
+
+
+def test_save_persists_insight_via_action_registry(tmp_path: Path) -> None:
+    project_root = _create_project(tmp_path)
+
+    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+        result = runner.invoke(
+            app,
+            [
+                "knowledge",
+                "save",
+                "mag_results",
+                "--type",
+                "result",
+                "--simulator",
+                "emses",
+                "--tags",
+                "survey,scan",
+                "--message",
+                "Stable trend across the scan.",
+            ],
+        )
+
+    assert result.exit_code == 0
+    assert "mag_results.md" in result.output
+
+    insights = list_insights(project_root, simulator="emses", insight_type="result")
+    assert len(insights) == 1
+    assert insights[0].name == "mag_results"
+    assert insights[0].tags == ["survey", "scan"]
+    assert insights[0].content == "Stable trend across the scan."
+
+
+def test_facts_supports_structured_filters_and_json_output(tmp_path: Path) -> None:
+    project_root = _create_project(tmp_path)
+
+    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+        runner.invoke(
+            app,
+            [
+                "knowledge",
+                "add-fact",
+                "dt must stay low",
+                "--type",
+                "constraint",
+                "--simulator",
+                "emses",
+                "--param-name",
+                "tmgrid.dt",
+                "--confidence",
+                "high",
+            ],
+        )
+        runner.invoke(
+            app,
+            [
+                "knowledge",
+                "add-fact",
+                "other simulator fact",
+                "--type",
+                "policy",
+                "--simulator",
+                "beach",
+            ],
+        )
+        result = runner.invoke(
+            app,
+            [
+                "knowledge",
+                "facts",
+                "--simulator",
+                "emses",
+                "--type",
+                "constraint",
+                "--param-name",
+                "tmgrid.dt",
+                "--json",
+            ],
+        )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert len(payload) == 1
+    assert payload[0]["simulator"] == "emses"
+    assert payload[0]["fact_type"] == "constraint"
+    assert payload[0]["param_name"] == "tmgrid.dt"
 
 
 def test_knowledge_help_shows_source_group() -> None:

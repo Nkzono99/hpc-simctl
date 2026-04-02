@@ -11,7 +11,7 @@ user-invocable: false
 ## 現在地を把握する
 
 ```bash
-simctl context        # project / campaign / runs / failures の概要
+simctl context --json      # project / campaign / runs / failures の概要
 simctl runs list           # run 一覧
 simctl runs jobs           # submitted/running のジョブ一覧
 simctl runs jobs --all     # 全 run のジョブ情報
@@ -44,8 +44,8 @@ simctl runs create my_case --dest runs/test/basic
 ```bash
 # survey.toml から全 run を生成
 simctl runs sweep runs/sheath/angle_scan
-# または cwd で
-cd runs/sheath/angle_scan && simctl runs create survey
+# cwd が survey ディレクトリなら引数省略可
+cd runs/sheath/angle_scan && simctl runs sweep
 ```
 
 ## Run を投入する
@@ -168,5 +168,4 @@ simctl doctor             # 環境検査
 simctl update-refs        # refs/ 更新 + cookbook/ナレッジ再生成
 simctl config show        # 設定表示
 ```
-
 

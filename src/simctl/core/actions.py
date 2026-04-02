@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
+import shutil
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
@@ -101,6 +102,20 @@ class ActionSpec:
     state_change: str = ""
     destructive: bool = False
 
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize metadata for machine-readable agent consumption."""
+        data: dict[str, Any] = {
+            "name": self.name,
+            "description": self.description,
+            "required_params": list(self.required_params),
+            "optional_params": list(self.optional_params),
+            "preconditions": list(self.preconditions),
+            "destructive": self.destructive,
+        }
+        if self.state_change:
+            data["state_change"] = self.state_change
+        return data
+
 
 # ---------------------------------------------------------------------------
 # Registry
@@ -164,6 +179,21 @@ ACTION_SPECS: dict[str, ActionSpec] = {
         preconditions=("run state == completed",),
         state_change="completed -> archived",
         destructive=True,
+    ),
+    "purge_work": ActionSpec(
+        name="purge_work",
+        description="Delete purgeable work/ artifacts from an archived run.",
+        required_params=("run_dir",),
+        preconditions=("run state == archived",),
+        state_change="archived -> purged",
+        destructive=True,
+    ),
+    "save_insight": ActionSpec(
+        name="save_insight",
+        description="Record a markdown knowledge insight.",
+        required_params=("project_root", "name", "content"),
+        optional_params=("insight_type", "simulator", "tags", "source_project"),
+        preconditions=("project loaded",),
     ),
     "add_fact": ActionSpec(
         name="add_fact",
@@ -238,6 +268,17 @@ def _error(action: str, message: str) -> ActionResult:
         status=ActionStatus.ERROR,
         message=message,
     )
+
+
+def _dir_size(dir_path: Path) -> int:
+    """Calculate total size of files under a directory tree."""
+    if not dir_path.is_dir():
+        return 0
+    total = 0
+    for f in dir_path.rglob("*"):
+        if f.is_file():
+            total += f.stat().st_size
+    return total
 
 
 # ---------------------------------------------------------------------------
@@ -654,6 +695,101 @@ def archive_run(run_dir: Path) -> ActionResult:
     )
 
 
+def purge_work(run_dir: Path) -> ActionResult:
+    """Delete purgeable work outputs from an archived run."""
+    from simctl.core.state import update_state
+
+    state_str, err = _require_state(run_dir, RunState.ARCHIVED)
+    if err:
+        return _precondition_fail("purge_work", err)
+
+    work_dir = run_dir / "work"
+    targets = ["outputs", "restart", "tmp"]
+    removed_dirs: list[str] = []
+    total_removed = 0
+
+    for dirname in targets:
+        target_dir = work_dir / dirname
+        if not target_dir.is_dir():
+            continue
+        try:
+            total_removed += _dir_size(target_dir)
+            shutil.rmtree(target_dir)
+        except OSError as e:
+            return _error("purge_work", f"Failed to remove {target_dir}: {e}")
+        removed_dirs.append(dirname)
+
+    try:
+        update_state(run_dir, RunState.PURGED)
+    except SimctlError as e:
+        return _error("purge_work", str(e))
+
+    return ActionResult(
+        action="purge_work",
+        status=ActionStatus.SUCCESS,
+        message="Purged work files",
+        data={
+            "removed_dirs": removed_dirs,
+            "bytes_removed": total_removed,
+        },
+        state_before=state_str,
+        state_after=RunState.PURGED.value,
+    )
+
+
+def save_insight(
+    project_root: Path,
+    *,
+    name: str,
+    content: str,
+    insight_type: str = "result",
+    simulator: str = "",
+    tags: list[str] | None = None,
+    source_project: str = "",
+) -> ActionResult:
+    """Record a markdown knowledge insight."""
+    from simctl.core.knowledge import (
+        INSIGHT_TYPES,
+        Insight,
+        get_insights_dir,
+        write_insight,
+    )
+
+    if insight_type not in INSIGHT_TYPES:
+        return _error(
+            "save_insight",
+            "Invalid insight type "
+            f"{insight_type!r}. Must be one of: {', '.join(sorted(INSIGHT_TYPES))}",
+        )
+
+    insight = Insight(
+        name=name,
+        type=insight_type,
+        simulator=simulator,
+        tags=tags or [],
+        source_project=source_project or project_root.name,
+        content=content.strip(),
+    )
+
+    try:
+        path = write_insight(get_insights_dir(project_root), insight)
+    except OSError as e:
+        return _error("save_insight", str(e))
+
+    return ActionResult(
+        action="save_insight",
+        status=ActionStatus.SUCCESS,
+        message=f"Saved insight {name}",
+        data={
+            "name": name,
+            "path": str(path),
+            "insight_type": insight_type,
+            "simulator": simulator,
+            "tags": list(tags or []),
+        },
+    )
+
+
 def add_fact(
     project_root: Path,
     *,
@@ -721,6 +857,8 @@ _DISPATCH: dict[str, Any] = {
     "collect_survey": collect_survey,
     "retry_run": retry_run,
     "archive_run": archive_run,
+    "purge_work": purge_work,
+    "save_insight": save_insight,
     "add_fact": add_fact,
 }
 

@@ -153,6 +153,21 @@ class TestCreate:
         assert result.exit_code == 1
         assert "Error" in result.output
 
+    def test_create_rejects_removed_survey_alias(self, tmp_path: Path) -> None:
+        """Legacy survey alias points users to the dedicated sweep command."""
+        project_dir = _make_project(tmp_path)
+        dest = project_dir / "runs" / "survey1"
+        _make_case(project_dir, "base_case")
+        _make_survey(dest, "base_case")
+
+        result = runner.invoke(
+            app,
+            ["runs", "create", "survey", "--dest", str(dest)],
+        )
+
+        assert result.exit_code == 1
+        assert "runs sweep" in result.output
+
     def test_create_run_id_format(self, tmp_path: Path) -> None:
         """Created run ID matches the RYYYYMMDD-NNNN format."""
         import re
@@ -250,7 +265,10 @@ class TestSweep:
 
     def test_sweep_manifest_has_survey_info(self, tmp_path: Path) -> None:
         """Sweep-generated manifests record the survey ID and variation keys."""
-        import tomli as tomllib
+        try:
+            import tomllib
+        except ModuleNotFoundError:  # pragma: no cover - Python < 3.11
+            import tomli as tomllib
 
         project_dir = _make_project(tmp_path)
         _make_case(project_dir, "base_case")

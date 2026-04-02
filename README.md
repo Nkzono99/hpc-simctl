@@ -75,20 +75,20 @@ my-simulation-project/
   AGENTS.md            # Codex / 汎用 Agent 向け AI エージェント指示
   cases/               # Case 定義の格納場所
   runs/                # run の格納場所
-  refs/                # シミュレータリファレンスリポジトリ
+  refs/                # シミュレータリファレンス / 外部知識ソース
+    MPIEMSES3D/        # Adapter が参照する simulator docs
+    beach/             # Adapter が参照する simulator docs
+    knowledge/         # 外部知識ソースのマウントポイント
+      shared-lab-kb/   # git/path で接続した共有知識リポジトリ
   tools/
     hpc-simctl/        # simctl 本体 (editable install, Git 管理外)
   .venv/               # Python 仮想環境 (Git 管理外)
-  refs/
-    knowledge/         # 外部知識ソースのマウントポイント
-      shared-lab-kb/   # git/path で接続した共有知識リポジトリ
   .simctl/             # 知識層 (ナレッジ・環境・知見)
     knowledge/         # 自動生成ナレッジ (gitignore 対象)
       enabled/         # 有効な profile の imports.md
     insights/          # 実験知見 (人間向け Markdown)
     facts.toml         # 構造化された知識 (AI 向け machine-readable claims)
     environment.toml   # 実行環境記述 (自動検出)
-    links.toml         # 他プロジェクトへの参照
 ```
 
 ### 2. 研究意図の定義 (campaign.toml)
@@ -134,7 +134,13 @@ use_slurm_ntasks = true
 
 ### 4. Case の定義
 
-`cases/my_case/case.toml` を作成:
+`simctl case new` で case を生成し、`cases/<simulator>/<case>/case.toml` を編集します:
+
+```bash
+simctl case new my_case -s my_solver
+```
+
+生成された `cases/my_solver/my_case/case.toml` の例:
 
 ```toml
 [case]
@@ -163,7 +169,7 @@ dt = 1.0e-8
 ### 5. 単一 run の作成
 
 ```bash
-simctl create my_case --dest runs/cavity/test
+simctl runs create my_case --dest runs/cavity/test
 ```
 
 ### 6. パラメータサーベイの実行
@@ -193,7 +199,7 @@ walltime = "12:00:00"
 ```
 
 ```bash
-simctl sweep runs/cavity/scan
+simctl runs sweep runs/cavity/scan
 ```
 
 ### 7. Job の投入
@@ -201,25 +207,25 @@ simctl sweep runs/cavity/scan
 ```bash
 # cwd の run を投入
 cd runs/cavity/test/R20260327-0001
-simctl run
+simctl runs submit
 
 # survey 内の全 run を一括投入
 cd runs/cavity/scan
-simctl run --all
+simctl runs submit --all
 ```
 
 ### 8. 状態の確認
 
 ```bash
 # 単一 run の状態確認
-simctl status R20260327-0001
+simctl runs status R20260327-0001
 
 # Slurm 状態を manifest に同期
-simctl sync R20260327-0001
+simctl runs sync R20260327-0001
 
 # run の一覧表示
-simctl list
-simctl list runs/cavity/scan
+simctl runs list
+simctl runs list runs/cavity/scan
 ```
 
 ## コマンドリファレンス
@@ -229,65 +235,67 @@ simctl list runs/cavity/scan
 | コマンド | 説明 |
 |---------|------|
 | `simctl init [SIMS...] [-y]` | プロジェクトの初期化 (対話型がデフォルト) |
+| `simctl setup [URL]` | 既存 simctl project のセットアップ |
 | `simctl doctor [PATH]` | 環境検査 (設定・sbatch・run_id 一意性・環境検出) |
+| `simctl context [DIR]` | Agent 向け project context の要約を表示 |
 | `simctl config show` | 設定表示 |
 | `simctl config add-simulator` | シミュレータ追加 (対話型) |
 | `simctl config add-launcher` | ランチャー追加 (対話型) |
+| `simctl update` | シミュレータパッケージのアップグレード |
+| `simctl update-refs [SIMS...]` | refs/ リポジトリ更新 + ナレッジインデックス再生成 |
 
 ### Run 作成・投入
 
 | コマンド | 説明 |
 |---------|------|
-| `simctl new CASE` | 新規ケースのスキャフォールド生成 |
-| `simctl create CASE` | cwd にケースから run 生成 |
-| `simctl sweep [DIR]` | survey.toml からパラメータ直積で全 run 一括生成 |
-| `simctl run [-qn QUEUE]` | cwd の run を sbatch で投入 |
-| `simctl run --all [-qn QUEUE]` | cwd 内の全 created run を一括投入 |
-| `simctl clone` | run 複製・派生 |
-| `simctl extend` | スナップショットから継続 run 生成 |
+| `simctl case new CASE` | 新規 case のスキャフォールド生成 |
+| `simctl runs create CASE` | case から単一 run を生成 |
+| `simctl runs sweep [DIR]` | survey.toml からパラメータ直積で全 run 一括生成 |
+| `simctl runs submit [RUN]` | run を sbatch で投入 |
+| `simctl runs submit --all [DIR]` | created な run を一括投入 |
+| `simctl runs clone` | run 複製・派生 |
+| `simctl runs extend` | スナップショットから継続 run 生成 |
 
 ### 状態管理・モニタリング
 
 | コマンド | 説明 |
 |---------|------|
-| `simctl status` | run の状態確認 |
-| `simctl sync` | Slurm 状態を manifest.toml に反映 |
-| `simctl log` | 最新 job の stdout 表示 + 進捗% |
-| `simctl jobs` | プロジェクト内の実行中ジョブ一覧 |
-| `simctl history` | 投入履歴表示 |
-| `simctl list [PATH]` | run の一覧表示 (状態・タグでフィルタ可能) |
+| `simctl runs status [RUN]` | run の状態確認 |
+| `simctl runs sync [RUN]` | Slurm 状態を manifest.toml に反映 |
+| `simctl runs log [RUN]` | 最新 job の stdout/stderr 表示 + 進捗% |
+| `simctl runs jobs [PATH]` | プロジェクト内の実行中ジョブ一覧 |
+| `simctl runs history [PATH]` | 投入履歴表示 |
+| `simctl runs list [PATH]` | run の一覧表示 (状態・タグでフィルタ可能) |
 
 ### 解析・整理
 
 | コマンド | 説明 |
 |---------|------|
-| `simctl summarize` | Adapter による run 解析 summary 生成 |
-| `simctl collect [DIR]` | survey 内の全 run から集計データ生成 |
-| `simctl archive` | run のアーカイブ |
-| `simctl purge-work` | work/ 内の不要ファイル削除 |
+| `simctl analyze summarize [RUN]` | Adapter による run 解析 summary 生成 |
+| `simctl analyze collect [DIR]` | survey 内の全 run から集計データ生成 |
+| `simctl analyze plot [DIR]` | survey 集計結果の可視化 |
+| `simctl runs archive [RUN]` | run のアーカイブ |
+| `simctl runs purge-work [RUN]` | work/ 内の不要ファイル削除 |
 
 ### 知識管理
 
 | コマンド | 説明 |
 |---------|------|
-| `simctl update` | シミュレータパッケージのアップグレード |
-| `simctl update-refs [SIMS...]` | refs/ リポジトリ更新 + ナレッジインデックス再生成 |
 | `simctl knowledge save NAME` | 知見を .simctl/insights/ に保存 |
 | `simctl knowledge list` | 知見一覧表示 |
-| `simctl knowledge list --sources` | 外部知識ソース一覧表示 |
 | `simctl knowledge show NAME` | 知見の詳細表示 |
-| `simctl knowledge attach TYPE NAME URL` | 外部知識ソースを接続 (git / path) |
-| `simctl knowledge detach NAME` | 外部知識ソースを切断 |
-| `simctl knowledge sync [NAME]` | 知識ソース同期 + リンク先から知見をインポート |
-| `simctl knowledge render` | 有効な profile から imports.md を生成 |
-| `simctl knowledge status` | 知識統合の状態表示 |
-| `simctl knowledge links` | プロジェクトリンク一覧 |
 | `simctl knowledge add-fact CLAIM` | 構造化された知識を facts.toml に追加 |
 | `simctl knowledge facts` | 構造化知識の一覧表示 |
+| `simctl knowledge source list` | 外部知識ソース一覧表示 |
+| `simctl knowledge source attach TYPE NAME URL` | 外部知識ソースを接続 (git / path) |
+| `simctl knowledge source detach NAME` | 外部知識ソースを切断 |
+| `simctl knowledge source sync [NAME]` | 知識ソース同期 + insight 取り込み |
+| `simctl knowledge source render` | 有効な profile から imports.md を生成 |
+| `simctl knowledge source status` | 知識統合の状態表示 |
 
 知識管理は三層構造:
 - **source knowledge** — 外部共有知識リポジトリ (`refs/knowledge/` にマウント)
-- **local knowledge** — プロジェクト固有の知見 (insights, facts, links)
+- **local knowledge** — プロジェクト固有の知見 (insights, facts)
 - **derived knowledge** — source と local から生成される派生物 (imports.md 等)
 
 全コマンドは引数省略時にカレントディレクトリをデフォルトとする。
@@ -304,22 +312,22 @@ hpc-simctl/
     simctl/
       cli/                 # CLI エントリポイント (typer)
         main.py            # コマンド登録
-        init.py            # init / doctor
-        new.py             # new (ケーススキャフォールド)
-        create.py          # create / sweep
-        submit.py          # run (sbatch 投入)
-        status.py          # status / sync
-        log.py             # log (stdout 表示)
-        jobs.py            # jobs (実行中ジョブ一覧)
-        history.py         # history (投入履歴)
-        list.py            # list
-        clone.py           # clone
-        extend.py          # extend (継続 run)
-        analyze.py         # summarize / collect
-        manage.py          # archive / purge-work
+        init.py            # init / setup / doctor
+        new.py             # case new
+        create.py          # runs create / runs sweep
+        submit.py          # runs submit
+        status.py          # runs status / runs sync
+        log.py             # runs log
+        jobs.py            # runs jobs
+        history.py         # runs history
+        list.py            # runs list
+        clone.py           # runs clone
+        extend.py          # runs extend
+        analyze.py         # analyze summarize / collect / plot
+        manage.py          # runs archive / purge-work
         update.py          # update (パッケージ更新)
         update_refs.py     # update-refs (refs/ 更新 + ナレッジ)
-        knowledge.py       # knowledge (知見管理)
+        knowledge.py       # knowledge / knowledge source
         config.py          # config (設定管理)
       core/                # ドメインロジック
         project.py         # Project 読込・検証
@@ -334,7 +342,7 @@ hpc-simctl/
         validation.py      # パラメータバリデーション
         campaign.py        # campaign.toml 読込
         environment.py     # 実行環境検出・記述
-        knowledge.py       # 知識層 (insights, facts, links)
+        knowledge.py       # 知識層 (insights, facts)
         knowledge_source.py  # 外部知識ソース管理
       adapters/            # Simulator Adapter
         base.py            # SimulatorAdapter 抽象基底クラス
@@ -370,7 +378,7 @@ created --> submitted --> running --> completed
 completed --> archived --> purged
 ```
 
-> **Note**: `simctl sync` は Slurm の観測結果を manifest に反映するため、
+> **Note**: `simctl runs sync` は Slurm の観測結果を manifest に反映するため、
 > ポーリング間隔によっては `submitted → completed` のように途中状態を飛び越す遷移が発生します。
 > 詳細は [SPEC.md](SPEC.md) を参照してください。
 

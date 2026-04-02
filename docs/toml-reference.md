@@ -23,7 +23,7 @@ version = "1.0"                 # Optional.
 
 ### `[knowledge]` section (optional)
 
-External shared knowledge source integration. If absent, only local knowledge (insights, facts, links) is used.
+External shared knowledge source integration. If absent, only local knowledge (insights and facts) is used.
 
 ```toml
 [knowledge]
@@ -209,17 +209,24 @@ modules = ["hdf5/1.12.2_intel-2023.2-impi", "fftw/3.3.10_intel-2022.3-impi"]
 
 ## case.toml
 
-Case template definition. Located in `cases/<case_name>/case.toml`.
+Case template definition. Recommended location: `cases/<simulator>/<case_name>/case.toml`.
+Legacy `cases/<case_name>/case.toml` is still readable for backward compatibility.
 
-シミュレータの入力ファイルは `cases/<case_name>/input/` に置く。`simctl runs create` / `simctl runs sweep` 実行時、`input/` 以下がディレクトリ構造ごと run の `input/` に自動コピーされる。その後 adapter がパラメータ適用済みファイルで上書きする。
+`simctl case new` は simulator ごとのベース入力テンプレート
+(`plasma.toml`, `beach.toml` など) を case ルートに生成する。
+追加の入力ファイルは `cases/<simulator>/<case_name>/input/` に置ける。
+`simctl runs create` / `simctl runs sweep` 実行時、`input/` 以下は
+ディレクトリ構造ごと run の `input/` に自動コピーされ、その後 adapter が
+ベーステンプレートに `[params]` を適用した入力で上書きする。
 
 ```
 cases/
-  flat_surface/
-    case.toml          # メタデータ・パラメータ定義
-    summarize.py       # run 後の解析・可視化フック
-    input/             # テンプレート入力ファイル
-      plasma.toml
+  emses/
+    flat_surface/
+      case.toml          # メタデータ・パラメータ定義
+      plasma.toml        # simulator 固有のベース入力テンプレート
+      summarize.py       # run 後の解析・可視化フック
+      input/             # 追加ファイル (optional)
 ```
 
 ```toml
@@ -554,14 +561,16 @@ R20260329-0001/
 
 `simctl analyze summarize` は Adapter の `summarize()` 実行後、以下の順でプロジェクトスクリプトを探索し、見つかれば実行する:
 
-1. `cases/<case>/summarize.py` — ケース固有の解析
-2. `cases/<simulator>/<case>/summarize.py` — multi-simulator layout のケース解析
+1. `cases/<case>/summarize.py` — legacy レイアウトのケース解析
+2. `cases/<simulator>/<case>/summarize.py` — 現行の multi-simulator layout のケース解析
 3. `scripts/summarize.py` — プロジェクト共通の解析
+
+新規 project では `cases/<simulator>/<case>/summarize.py` を推奨する。
 
 スクリプトは `summarize(run_dir, base_summary)` 関数を定義する:
 
 ```python
-# cases/flat_surface/summarize.py
+# cases/emses/flat_surface/summarize.py
 from pathlib import Path
 
 def summarize(run_dir: Path, base_summary: dict) -> dict:
@@ -795,4 +804,3 @@ type = "path"
 kind = "project"
 path = "../previous-campaign"
 ```
-

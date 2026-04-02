@@ -56,9 +56,7 @@ def build_project_context(project_root: Path) -> dict[str, Any]:
     # -- Available actions --
     from simctl.core.actions import list_actions
 
-    ctx["available_actions"] = [
-        {"name": a.name, "description": a.description} for a in list_actions()
-    ]
+    ctx["available_actions"] = [a.to_dict() for a in list_actions()]
 
     return ctx
 

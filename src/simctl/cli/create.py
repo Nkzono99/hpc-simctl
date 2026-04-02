@@ -27,10 +27,7 @@ def create(
     case_name: Annotated[
         str,
         typer.Argument(
-            help=(
-                "Case name to create a run from, or 'survey' to expand "
-                "survey.toml in the current directory."
-            ),
+            help="Case name to create a run from.",
         ),
     ],
     dest: Annotated[
@@ -38,18 +35,22 @@ def create(
         typer.Option("--dest", "-d", help="Destination directory (defaults to cwd)."),
     ] = None,
 ) -> None:
-    """Create run(s) in the current directory.
+    """Create a run in the current directory.
 
     Examples:
       cd runs/experiment && simctl runs create flat_surface
-      cd runs/mag_scan   && simctl runs create survey
     """
     target_dir = (dest or Path.cwd()).resolve()
 
-    if case_name == "survey":
-        _create_survey(target_dir)
-    else:
-        _create_single(case_name, target_dir)
+    if case_name == "survey" and (target_dir / "survey.toml").is_file():
+        typer.echo(
+            "Error: 'simctl runs create survey' has been removed. "
+            "Use 'simctl runs sweep [DIR]' instead.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    _create_single(case_name, target_dir)
 
 
 def _create_single(case_name: str, target_dir: Path) -> None:

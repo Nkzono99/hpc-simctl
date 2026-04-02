@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
 
 import typer
@@ -10,9 +9,10 @@ import typer
 from simctl.cli.run_lookup import resolve_run_or_cwd
 from simctl.core.actions import ActionStatus
 from simctl.core.actions import archive_run as archive_run_action
-from simctl.core.exceptions import InvalidStateTransitionError, SimctlError
+from simctl.core.actions import purge_work as purge_work_action
+from simctl.core.exceptions import SimctlError
 from simctl.core.manifest import read_manifest
-from simctl.core.state import RunState, update_state
+from simctl.core.state import RunState
 
 
 def _get_dir_size(dir_path: Path) -> int:
@@ -34,6 +34,7 @@ def _format_size(size_bytes: int) -> str:
             return f"{value:.1f} {unit}"
         value /= 1024
     return f"{value:.1f} PB"
+
 
 def archive(
     run: str = typer.Argument(None, help="Run directory or run_id (defaults to cwd)."),
@@ -114,16 +115,10 @@ def purge_work(
         typer.echo("Cancelled.")
         raise typer.Exit()
 
-    for dirname in targets:
-        target_dir = work_dir / dirname
-        if target_dir.is_dir():
-            shutil.rmtree(target_dir)
-
-    try:
-        update_state(run_dir, RunState.PURGED)
-    except InvalidStateTransitionError as e:
-        typer.echo(f"Error: {e}", err=True)
-        raise typer.Exit(code=1) from None
+    result = purge_work_action(run_dir)
+    if result.status is not ActionStatus.SUCCESS:
+        typer.echo(f"Error: {result.message}", err=True)
+        raise typer.Exit(code=1)
 
     typer.echo(f"Purged work files for run {run_id}.")
     typer.echo(f"  Freed: {_format_size(total_freed)}")

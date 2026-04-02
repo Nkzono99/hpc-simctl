@@ -117,3 +117,17 @@ def test_context_includes_knowledge_integration_details(tmp_path: Path) -> None:
         if source["name"] == "other-project"
     )
     assert other["kind"] == "project"
+
+    actions = {action["name"]: action for action in ctx["available_actions"]}
+    assert actions["submit_run"]["required_params"] == ["run_dir"]
+    assert actions["submit_run"]["preconditions"] == [
+        "run state == created",
+        "job.sh exists",
+    ]
+    assert actions["archive_run"]["destructive"] is True
+    assert actions["purge_work"]["state_change"] == "archived -> purged"
+    assert actions["save_insight"]["required_params"] == [
+        "project_root",
+        "name",
+        "content",
+    ]

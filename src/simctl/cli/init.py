@@ -447,22 +447,25 @@ def _search_knowledge_repos() -> list[tuple[str, str]]:
     Returns:
         List of (full_name, clone_url) tuples.
     """
-    result = subprocess.run(
-        [
-            "gh",
-            "repo",
-            "list",
-            "--limit",
-            "50",
-            "--json",
-            "nameWithOwner,sshUrl,description",
-        ],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        check=False,
-    )
+    try:
+        result = subprocess.run(
+            [
+                "gh",
+                "repo",
+                "list",
+                "--limit",
+                "50",
+                "--json",
+                "nameWithOwner,sshUrl,description",
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+    except FileNotFoundError:
+        return []
     if result.returncode != 0:
         return []
 
@@ -1217,7 +1220,7 @@ def init(
     else:
         skipped.append("runs/")
 
-    # .simctl/ skeleton (insights, facts, links)
+    # .simctl/ skeleton (insights, facts, generated knowledge)
     _create_simctl_skeleton(project_dir, created)
 
     # refs/ — clone simulator doc repos

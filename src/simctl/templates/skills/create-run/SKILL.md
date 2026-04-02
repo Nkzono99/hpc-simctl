@@ -43,7 +43,7 @@ simctl runs sweep runs/sheath/angle_scan
 
 # または cwd で
 cd runs/sheath/angle_scan
-simctl runs create survey
+simctl runs sweep
 ```
 
 ### survey.toml の準備
@@ -114,4 +114,3 @@ simctl runs submit --all -qn <partition>
 - input/ や submit/job.sh を直接作らない
 - survey の run 数が多い場合は投入前に plan を出して承認を取る
 - `simctl runs submit --all --dry-run` で投入前に確認できる
-

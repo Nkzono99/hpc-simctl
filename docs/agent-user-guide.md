@@ -15,7 +15,7 @@ simctl プロジェクトにおける Agent (Claude Code 等) の作業ガイド
 
 | 操作 | コマンド |
 |------|---------|
-| プロジェクト状況把握 | `simctl context` |
+| プロジェクト状況把握 | `simctl context --json` |
 | case テンプレート生成 | `simctl case new <name>` |
 | survey 付き case 生成 | `simctl case new <name> --survey` |
 | run 生成 | `simctl runs create <case>` |
@@ -54,5 +54,4 @@ completed → archived → purged
 各シミュレータは `refs/<repo>/docs/agent-*.md` に固有のガイドを置く。
 CLAUDE.md から `@import` で参照されるため、シミュレータ固有のパラメータ設定・
 トラブルシューティング・ベストプラクティスはそちらを参照すること。
-
 
