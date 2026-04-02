@@ -39,6 +39,9 @@ simctl doctor
 `simctl init` がディレクトリ構造と初期ファイルを作ります（詳細は [README.md](../README.md) を参照）。
 初期セットアップを細かく確認するより、すぐにエージェントへ研究内容を渡して構成を整えてもらう方が早いです。
 
+運用全体を俯瞰したい場合は [AI Agent 運用概念図](agent-project-flow.md) を先に見ると、
+`campaign.toml`・`case.toml`・`survey.toml`・`manifest.toml` がそれぞれ何の役割を持つか掴みやすくなります。
+
 ## 最初の依頼の出し方
 
 何を調べたいかと、ベース入力をどうしたいかをまとめて伝えるのが効果的です。
@@ -107,5 +110,6 @@ campaign 設計用の SKILL を使って campaign.toml を整理して。
 ## 次に読む
 
 - [README.md](../README.md) — 生成される構造と全体像
+- [agent-project-flow.md](agent-project-flow.md) — `simctl init` 後の project を Agent とどう運用するかの概念図
 - [agent-user-guide.md](agent-user-guide.md) — Agent が守る基本ルール
 - [toml-reference.md](toml-reference.md) — TOML フィールドを手で確認したいとき

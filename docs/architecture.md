@@ -65,7 +65,7 @@ launchers/
  +--> launchers/base  (抽象基底 + ファクトリ)
 ```
 
-重要なルール: `core/` は `adapters/` や `launchers/` に直接依存しません。CLI 層が Adapter と Launcher を取得し、core のロジックに注入します。
+重要なルール: `core/` の大半は simulator 非依存を保ちますが、現在の実装では `core/actions.py` と `core/run_creation.py` が orchestration 層として `adapters/`、`launchers/`、`core/site.py`、`jobgen/`、`slurm/` を接続しています。詳細な流れは [src 構成ガイド](src-structure.md) を参照してください。
 
 ---
 
@@ -650,5 +650,4 @@ insights のインポート       ← プロジェクト横断の知識共有
 - **ファイルシステム**: pytest の `tmp_path` fixture を使った一時ディレクトリでの統合テスト
 - **CLI**: typer の `CliRunner` による CLI テスト
 - **Adapter / Launcher**: 抽象基底クラスの contract test で実装の正しさを検証
-
 
