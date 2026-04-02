@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import importlib.resources
-import json
 import logging
 import shutil
 import subprocess
@@ -17,6 +16,7 @@ import typer
 from simctl.core.discovery import validate_uniqueness
 from simctl.core.exceptions import DuplicateRunIdError, ProjectConfigError
 from simctl.core.project import load_project
+from simctl.harness import CLAUDE_HOOK_TEMPLATES, build_claude_settings
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -44,108 +44,6 @@ _VSCODE_SETTINGS = "settings.json"
 
 _SCHEMA_BASE_URL = "https://raw.githubusercontent.com/Nkzono99/hpc-simctl/main/schemas"
 _DEFAULT_SIMCTL_REPO = "https://github.com/Nkzono99/hpc-simctl.git"
-
-_CLAUDE_ALLOW_BASH = (
-    "Bash(simctl context*)",
-    "Bash(simctl runs list*)",
-    "Bash(simctl runs status*)",
-    "Bash(simctl runs sync*)",
-    "Bash(simctl runs jobs*)",
-    "Bash(simctl runs history*)",
-    "Bash(simctl runs log*)",
-    "Bash(simctl doctor*)",
-    "Bash(simctl config show*)",
-    "Bash(simctl case new *)",
-    "Bash(simctl runs create *)",
-    "Bash(simctl runs sweep *)",
-    "Bash(simctl runs clone *)",
-    "Bash(simctl runs extend *)",
-    "Bash(simctl analyze summarize*)",
-    "Bash(simctl analyze collect*)",
-    "Bash(simctl knowledge list*)",
-    "Bash(simctl knowledge show*)",
-    "Bash(simctl knowledge facts*)",
-    "Bash(simctl knowledge save*)",
-    "Bash(simctl knowledge add-fact*)",
-    "Bash(simctl knowledge source list*)",
-    "Bash(simctl knowledge source status*)",
-    "Bash(uv run pytest*)",
-    "Bash(uv run ruff*)",
-    "Bash(uv run mypy*)",
-    "Bash(source .venv/bin/activate*)",
-    "Bash(cat runs/*/work/*.out*)",
-    "Bash(cat runs/*/work/*.err*)",
-    "Bash(git status*)",
-    "Bash(git log*)",
-    "Bash(git diff*)",
-)
-_CLAUDE_ASK_BASH = (
-    "Bash(simctl runs archive*)",
-    "Bash(simctl runs purge-work*)",
-    "Bash(simctl update-refs*)",
-    "Bash(simctl knowledge source attach*)",
-    "Bash(simctl knowledge source detach*)",
-    "Bash(simctl knowledge source sync*)",
-    "Bash(simctl knowledge source render*)",
-    "Bash(simctl config add-simulator*)",
-    "Bash(simctl config add-launcher*)",
-    "Bash(git commit*)",
-)
-_CLAUDE_DENY_BASH = (
-    "Bash(rm -rf *)",
-    "Bash(git push --force*)",
-    "Bash(git reset --hard*)",
-)
-_CLAUDE_ALLOW_EDIT_PATHS = (
-    "/campaign.toml",
-    "/cases/**",
-    "/surveys/**",
-    "/runs/**/survey.toml",
-    "/docs/**",
-    "/README.md",
-)
-_CLAUDE_ASK_EDIT_PATHS = (
-    "/simproject.toml",
-    "/simulators.toml",
-    "/launchers.toml",
-    "/CLAUDE.md",
-    "/AGENTS.md",
-    "/**/CLAUDE.md",
-    "/.claude/**",
-    "/.vscode/**",
-    "/.idea/**",
-    "/tools/hpc-simctl/**",
-)
-_CLAUDE_DENY_EDIT_PATHS = (
-    "/SITE.md",
-    "/runs/**/manifest.toml",
-    "/runs/**/input/**",
-    "/runs/**/submit/**",
-    "/runs/**/work/**",
-    "/runs/**/status/**",
-    "/runs/**/analysis/**",
-    "/.simctl/environment.toml",
-    "/.simctl/knowledge/**",
-    "/.simctl/insights/**",
-    "/.simctl/facts.toml",
-    "/refs/**",
-    "/.venv/**",
-    "/.git/**",
-)
-_CLAUDE_DENY_READ_PATHS = (
-    "/.env",
-    "/.env.*",
-    "/secrets/**",
-    "~/.ssh/**",
-    "~/.aws/credentials",
-    "~/.config/gcloud/**",
-    "~/.kube/config",
-)
-_CLAUDE_PROTECT_FILES_COMMAND = (
-    'bash "$CLAUDE_PROJECT_DIR/.claude/hooks/protect-files.sh"'
-)
-_CLAUDE_GUARD_BASH_COMMAND = 'bash "$CLAUDE_PROJECT_DIR/.claude/hooks/guard-bash.sh"'
-_CLAUDE_APPROVE_RUN_COMMAND = 'bash "$CLAUDE_PROJECT_DIR/.claude/hooks/approve-run.sh"'
 
 
 def _safe_echo(message: str, *, err: bool = False) -> None:
@@ -540,76 +438,6 @@ def _build_skills(project_name: str, simulator_names: list[str]) -> dict[str, st
         rel = f"{skill_path.name}/SKILL.md"
         results[rel] = content
     return results
-
-
-def _build_permission_rules(
-    tools: tuple[str, ...],
-    patterns: tuple[str, ...],
-) -> list[str]:
-    """Expand tool/path combinations into Claude permission rule strings."""
-    rules: list[str] = []
-    for tool in tools:
-        rules.extend(f"{tool}({pattern})" for pattern in patterns)
-    return rules
-
-
-def _build_claude_settings() -> str:
-    """Build team-shared Claude Code settings for simctl projects."""
-    allow_rules = list(_CLAUDE_ALLOW_BASH)
-    allow_rules.extend(
-        _build_permission_rules(("Edit", "Write"), _CLAUDE_ALLOW_EDIT_PATHS)
-    )
-
-    ask_rules = list(_CLAUDE_ASK_BASH)
-    ask_rules.extend(_build_permission_rules(("Edit", "Write"), _CLAUDE_ASK_EDIT_PATHS))
-
-    deny_rules = list(_CLAUDE_DENY_BASH)
-    deny_rules.extend(
-        _build_permission_rules(("Edit", "Write"), _CLAUDE_DENY_EDIT_PATHS)
-    )
-    deny_rules.extend(_build_permission_rules(("Read",), _CLAUDE_DENY_READ_PATHS))
-
-    settings = {
-        "permissions": {
-            "allow": allow_rules,
-            "ask": ask_rules,
-            "deny": deny_rules,
-            "disableBypassPermissionsMode": "disable",
-        },
-        "hooks": {
-            "PreToolUse": [
-                {
-                    "matcher": "Edit|Write",
-                    "hooks": [
-                        {
-                            "type": "command",
-                            "command": _CLAUDE_PROTECT_FILES_COMMAND,
-                        }
-                    ],
-                },
-                {
-                    "matcher": "Bash",
-                    "hooks": [
-                        {
-                            "type": "command",
-                            "command": _CLAUDE_GUARD_BASH_COMMAND,
-                        }
-                    ],
-                },
-                {
-                    "matcher": "Bash",
-                    "if": "Bash(simctl runs submit*)",
-                    "hooks": [
-                        {
-                            "type": "command",
-                            "command": _CLAUDE_APPROVE_RUN_COMMAND,
-                        }
-                    ],
-                },
-            ]
-        },
-    }
-    return json.dumps(settings, ensure_ascii=False, indent=2) + "\n"
 
 
 def _get_data_path() -> Path:
@@ -1519,7 +1347,7 @@ def init(
     # .claude/settings.json (team-shared permissions)
     claude_settings_path = project_dir / _CLAUDE_SETTINGS
     claude_settings_path.parent.mkdir(parents=True, exist_ok=True)
-    if _write_if_missing(claude_settings_path, _build_claude_settings()):
+    if _write_if_missing(claude_settings_path, build_claude_settings()):
         created.append(_CLAUDE_SETTINGS)
     else:
         skipped.append(_CLAUDE_SETTINGS)
@@ -1527,12 +1355,7 @@ def init(
     # .claude/hooks/ (approval + guard hooks)
     hooks_base = project_dir / ".claude/hooks"
     hooks_base.mkdir(parents=True, exist_ok=True)
-    hook_templates = (
-        ("approve-run.sh", "scaffold/hooks/approve-run.sh"),
-        ("protect-files.sh", "scaffold/hooks/protect-files.sh"),
-        ("guard-bash.sh", "scaffold/hooks/guard-bash.sh"),
-    )
-    for hook_name, template_name in hook_templates:
+    for hook_name, template_name in CLAUDE_HOOK_TEMPLATES:
         hook_path = hooks_base / hook_name
         hook_display = f".claude/hooks/{hook_name}"
         if _write_if_missing(hook_path, load_static(template_name)):
