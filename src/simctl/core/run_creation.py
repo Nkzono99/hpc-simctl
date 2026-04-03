@@ -318,6 +318,11 @@ def create_prepared_run(
     resolver_mode = sim_config.get("resolver_mode", "package")
     runtime_info = adapter.resolve_runtime(sim_config, resolver_mode)
     program_cmd = adapter.build_program_command(runtime_info, run_info.run_dir)
+    version_commands = adapter.build_version_capture_commands(
+        runtime_info,
+        program_cmd,
+        run_info.run_dir,
+    )
 
     ntasks = case_data.job.processes if case_data.job.rsc else case_data.job.ntasks
     exec_line = launcher.build_exec_line(program_cmd, ntasks)
@@ -337,6 +342,7 @@ def create_prepared_run(
         site=effective_site,
         simulator_name=case_data.simulator,
         extra_setup_commands=extra_setup,
+        version_commands=version_commands,
     )
 
     manifest = _build_manifest(

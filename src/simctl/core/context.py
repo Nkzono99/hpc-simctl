@@ -301,7 +301,7 @@ def _collect_facts_summary(
     try:
         from simctl.core.knowledge import query_facts
 
-        facts = query_facts(root)
+        facts = query_facts(root, include_candidates=True)
         return [
             {
                 "id": f.id,
@@ -311,6 +311,8 @@ def _collect_facts_summary(
                 "simulator": getattr(f, "simulator", ""),
                 "source_run": getattr(f, "source_run", ""),
                 "evidence_ref": getattr(f, "evidence_ref", ""),
+                "storage": getattr(f, "storage", "local"),
+                "transport_source": getattr(f, "transport_source", ""),
             }
             for f in facts[:limit]
         ]
@@ -367,6 +369,11 @@ def _collect_knowledge_paths(
     facts_file = root / ".simctl" / "facts.toml"
     if facts_file.is_file():
         result["facts_file"] = str(facts_file)
+
+    candidate_facts_dir = knowledge_dir / "candidates" / "facts"
+    if candidate_facts_dir.is_dir():
+        result["candidate_facts_dir"] = str(candidate_facts_dir)
+        result["candidate_fact_sources"] = len(list(candidate_facts_dir.glob("*.toml")))
 
     try:
         from simctl.core.knowledge_source import (

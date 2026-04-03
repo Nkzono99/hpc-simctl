@@ -39,6 +39,7 @@ class TestInit:
         assert (tmp_path / ".git").is_dir()
         assert (tmp_path / "CLAUDE.md").exists()
         assert (tmp_path / "AGENTS.md").exists()
+        assert (tmp_path / ".simctl" / "knowledge" / "candidates" / "facts").is_dir()
         assert (tmp_path / ".claude" / "skills").is_dir()
         assert (tmp_path / ".vscode" / "settings.json").exists()
 
@@ -92,6 +93,7 @@ class TestInit:
         assert "runs/**/work/outputs/" in content
         assert "runs/**/work/restart/" in content
         assert "runs/**/work/tmp/" in content
+        assert "runs/**/analysis/scratch/" in content
 
     def test_init_skips_existing_files(self, tmp_path: Path) -> None:
         """Init does not overwrite existing files."""
@@ -182,11 +184,17 @@ class TestInit:
         assert (skills_dir / "setup-env" / "SKILL.md").exists()
         assert (skills_dir / "survey-design" / "SKILL.md").exists()
         assert (skills_dir / "check-status" / "SKILL.md").exists()
+        assert (skills_dir / "analyze" / "SKILL.md").exists()
         assert (skills_dir / "simctl-reference" / "SKILL.md").exists()
         setup_content = (skills_dir / "setup-env" / "SKILL.md").read_text(
             encoding="utf-8"
         )
         assert "uv venv" in setup_content
+        analyze_content = (skills_dir / "analyze" / "SKILL.md").read_text(
+            encoding="utf-8"
+        )
+        assert "--list-recipes" in analyze_content
+        assert "analysis/scratch/" in analyze_content
 
     def test_init_skills_with_packages(self, tmp_path: Path) -> None:
         """Setup-env skill includes pip packages when simulators specified."""
@@ -250,6 +258,8 @@ class TestInit:
         workflow = (rules_dir / "simctl-workflow.md").read_text(encoding="utf-8")
         assert "manifest.toml" in workflow
         assert "SITE.md" in workflow
+        assert "analysis/scratch/" in workflow
+        assert "promote-fact" in workflow
 
     def test_init_subdirectory_claude_md(self, tmp_path: Path) -> None:
         """Context-specific CLAUDE.md files are created in cases/ and runs/."""
@@ -260,6 +270,7 @@ class TestInit:
         assert "case.toml" in cases_content
         runs_content = (tmp_path / "runs" / "CLAUDE.md").read_text(encoding="utf-8")
         assert "manifest.toml" in runs_content
+        assert "analysis/scratch/" in runs_content
 
     def test_init_gitignore_personal_overrides(self, tmp_path: Path) -> None:
         """.gitignore excludes personal agent override files."""
@@ -358,6 +369,11 @@ class TestInit:
             created: list[str],
             _skipped: list[str],
         ) -> None:
+            (project_dir / "tools" / "hpc-simctl").mkdir(parents=True, exist_ok=True)
+            (project_dir / "tools" / "hpc-simctl" / "entrypoints.toml").write_text(
+                'imports = ["docs/agent-user-guide.md"]\n',
+                encoding="utf-8",
+            )
             docs_dir = project_dir / "tools" / "hpc-simctl" / "docs"
             docs_dir.mkdir(parents=True, exist_ok=True)
             (docs_dir / "agent-user-guide.md").write_text("# Agent guide\n")

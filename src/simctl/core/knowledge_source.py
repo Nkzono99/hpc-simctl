@@ -7,10 +7,12 @@ knowledge sources defined in simproject.toml's ``[knowledge]`` section.
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 import subprocess
 import sys
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -24,11 +26,14 @@ try:
 except ImportError:
     tomli_w = None  # type: ignore[assignment]
 
+from tomlkit import aot, array, nl, parse, table
+
 from simctl.core.exceptions import KnowledgeSourceError
 
 logger = logging.getLogger(__name__)
 
 _PROJECT_FILE = "simproject.toml"
+_ENTRYPOINTS_FILE = "entrypoints.toml"
 _DEFAULT_MOUNT_DIR = "refs/knowledge"
 _DEFAULT_DERIVED_DIR = ".simctl/knowledge"
 _SOURCE_TYPES = frozenset({"git", "path"})
@@ -113,6 +118,14 @@ class ExternalKnowledgeMount:
     profiles_available: list[str] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class KnowledgeEntrypoints:
+    """Entrypoints declared by a knowledge source or repo root."""
+
+    imports: tuple[str, ...] = ()
+    profile_imports: dict[str, tuple[str, ...]] = field(default_factory=dict)
+
+
 def _normalize_source_type(value: Any) -> str:
     source_type = str(value or "git")
     if source_type not in _SOURCE_TYPES:
@@ -171,6 +184,25 @@ def _insight_source_dir(project_root: Path, source: KnowledgeSource) -> Path | N
     return None
 
 
+def _fact_source_file(project_root: Path, source: KnowledgeSource) -> Path | None:
+    root = _source_root(project_root, source)
+    candidates: list[Path] = []
+    if source.kind == "project":
+        candidates.append(root / ".simctl" / "facts.toml")
+    elif source.kind == "insights":
+        candidates.extend(
+            [
+                root / "facts.toml",
+                root / ".simctl" / "facts.toml",
+            ]
+        )
+
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return None
+
+
 def _repo_name_from_url(url: str) -> str:
     """Extract repository name from a git URL."""
     stem = url.rsplit("/", 1)[-1].rsplit(":", 1)[-1]
@@ -195,6 +227,152 @@ def _namespaced_insight_filename(source: KnowledgeSource, insight_name: str) -> 
     """Build the destination filename for an imported insight."""
     namespace = _safe_namespace(source.name)
     return f"{namespace}__{insight_name}.md"
+
+
+def _dedupe_strings(values: list[str]) -> list[str]:
+    unique: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        normalized = value.strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        unique.append(normalized)
+    return unique
+
+
+def _normalize_import_list(value: Any, *, label: str) -> list[str]:
+    if value in ("", None):
+        return []
+    if isinstance(value, str):
+        stripped = value.strip()
+        return [stripped] if stripped else []
+    if not isinstance(value, list):
+        msg = f"{label} must be a string or list of strings"
+        raise KnowledgeSourceError(msg)
+
+    imports: list[str] = []
+    for index, item in enumerate(value, start=1):
+        if not isinstance(item, str):
+            msg = f"{label}[{index}] must be a string"
+            raise KnowledgeSourceError(msg)
+        stripped = item.strip()
+        if stripped:
+            imports.append(stripped)
+    return imports
+
+
+def load_entrypoints(
+    source_path: Path,
+    *,
+    manifest_name: str = _ENTRYPOINTS_FILE,
+) -> KnowledgeEntrypoints | None:
+    """Load optional entrypoints metadata from a source root."""
+    manifest_path = source_path / manifest_name
+    if not manifest_path.is_file():
+        return None
+
+    try:
+        with open(manifest_path, "rb") as f:
+            raw = tomllib.load(f)
+    except tomllib.TOMLDecodeError as exc:
+        msg = f"Invalid {manifest_name} in {source_path}: {exc}"
+        raise KnowledgeSourceError(msg) from exc
+
+    imports = _normalize_import_list(
+        raw.get("entrypoint", ""),
+        label=f"{manifest_name}: entrypoint",
+    )
+    imports.extend(
+        _normalize_import_list(
+            raw.get("imports", []),
+            label=f"{manifest_name}: imports",
+        )
+    )
+
+    profile_imports: dict[str, tuple[str, ...]] = {}
+    profiles_raw = raw.get("profiles", {})
+    if profiles_raw not in ({}, None):
+        if not isinstance(profiles_raw, dict):
+            msg = f"{manifest_name}: [profiles] must be a table"
+            raise KnowledgeSourceError(msg)
+        for profile_name, profile_entry in profiles_raw.items():
+            if not isinstance(profile_entry, dict):
+                msg = (
+                    f"{manifest_name}: [profiles.{profile_name}] must be a table"
+                )
+                raise KnowledgeSourceError(msg)
+            entry_imports = _normalize_import_list(
+                profile_entry.get("entrypoint", ""),
+                label=f"{manifest_name}: profiles.{profile_name}.entrypoint",
+            )
+            entry_imports.extend(
+                _normalize_import_list(
+                    profile_entry.get("imports", []),
+                    label=f"{manifest_name}: profiles.{profile_name}.imports",
+                )
+            )
+            profile_imports[str(profile_name)] = tuple(_dedupe_strings(entry_imports))
+
+    return KnowledgeEntrypoints(
+        imports=tuple(_dedupe_strings(imports)),
+        profile_imports=profile_imports,
+    )
+
+
+def discover_repo_imports(repo_root: Path) -> list[str]:
+    """Return repo-root imports declared via entrypoints.toml, if present."""
+    manifest = load_entrypoints(repo_root)
+    if manifest is None:
+        return []
+    return list(manifest.imports)
+
+
+def _resolve_import_target(base_dir: Path, rel_path: str) -> Path:
+    if os.path.isabs(rel_path):
+        msg = f"Import path must be relative: {rel_path}"
+        raise KnowledgeSourceError(msg)
+
+    resolved = (base_dir / rel_path).resolve()
+    try:
+        resolved.relative_to(base_dir.resolve())
+    except ValueError as exc:
+        msg = f"Import path escapes source root: {rel_path}"
+        raise KnowledgeSourceError(msg) from exc
+    return resolved
+
+
+def _parse_import_directives(markdown_text: str) -> list[str]:
+    imports: list[str] = []
+    for line in markdown_text.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("@") or stripped.startswith("@@"):
+            continue
+        imports.append(stripped[1:].strip())
+    return _dedupe_strings(imports)
+
+
+def _profile_markdown_path(source_path: Path, profile_name: str) -> Path:
+    return source_path / "profiles" / f"{profile_name}.md"
+
+
+def _resolve_profile_imports(
+    source_path: Path,
+    source: KnowledgeSource,
+) -> list[str]:
+    manifest = load_entrypoints(source_path)
+    imports = list(manifest.imports) if manifest is not None else []
+
+    if source.profiles:
+        for profile_name in source.profiles:
+            if manifest is not None and profile_name in manifest.profile_imports:
+                imports.extend(manifest.profile_imports[profile_name])
+            else:
+                imports.append(f"profiles/{profile_name}.md")
+    elif not imports and (source_path / "CLAUDE.md").is_file():
+        imports.append("CLAUDE.md")
+
+    return _dedupe_strings(imports)
 
 
 # ---------- Config I/O ----------
@@ -266,14 +444,91 @@ def _read_project_toml(project_root: Path) -> dict[str, Any]:
         return tomllib.load(f)
 
 
-def _write_project_toml(project_root: Path, data: dict[str, Any]) -> None:
-    """Write simproject.toml from dict."""
-    if tomli_w is None:
-        msg = "tomli_w is required to write simproject.toml"
-        raise KnowledgeSourceError(msg)
+def _load_project_toml_document(project_root: Path) -> Any:
+    """Read simproject.toml as a mutable TOML document."""
     project_file = project_root / _PROJECT_FILE
-    with open(project_file, "wb") as f:
-        tomli_w.dump(data, f)
+    try:
+        content = project_file.read_text(encoding="utf-8")
+    except OSError as exc:
+        msg = f"Failed to read {project_file}: {exc}"
+        raise KnowledgeSourceError(msg) from exc
+    return parse(content)
+
+
+def _write_project_toml(project_root: Path, document_obj: Any) -> None:
+    """Write simproject.toml while preserving comments and layout."""
+    project_file = project_root / _PROJECT_FILE
+    try:
+        project_file.write_text(document_obj.as_string(), encoding="utf-8")
+    except OSError as exc:
+        msg = f"Failed to write {project_file}: {exc}"
+        raise KnowledgeSourceError(msg) from exc
+
+
+def _ensure_knowledge_table(document_obj: Any) -> Any:
+    knowledge = document_obj.get("knowledge")
+    if knowledge is None:
+        if document_obj:
+            document_obj.add(nl())
+        knowledge = table()
+        document_obj["knowledge"] = knowledge
+
+    knowledge.setdefault("enabled", True)
+    knowledge.setdefault("mount_dir", _DEFAULT_MOUNT_DIR)
+    knowledge.setdefault("derived_dir", _DEFAULT_DERIVED_DIR)
+    knowledge.setdefault("auto_sync_on_setup", True)
+    knowledge.setdefault("generate_claude_imports", True)
+
+    sources = knowledge.get("sources")
+    if sources is None:
+        knowledge["sources"] = aot()
+    return knowledge
+
+
+def _ensure_sources_list(knowledge: Any) -> Any:
+    sources = knowledge.get("sources")
+    if sources is None:
+        sources = aot()
+        knowledge["sources"] = sources
+    return sources
+
+
+def _find_source_entry(sources: Any, name: str) -> Any | None:
+    for entry in sources:
+        if str(entry.get("name", "")) == name:
+            return entry
+    return None
+
+
+def _sync_source_entry(entry: Any, source: KnowledgeSource) -> None:
+    entry["name"] = source.name
+    entry["type"] = source.source_type
+    entry["kind"] = source.kind
+
+    if source.source_type == "git":
+        entry["url"] = source.url
+        if source.ref and source.ref != "main":
+            entry["ref"] = source.ref
+        elif "ref" in entry:
+            del entry["ref"]
+        if "path" in entry:
+            del entry["path"]
+    else:
+        entry["path"] = source.url
+        if "url" in entry:
+            del entry["url"]
+        if "ref" in entry:
+            del entry["ref"]
+
+    if source.mount:
+        entry["mount"] = source.mount
+    elif "mount" in entry:
+        del entry["mount"]
+
+    if source.kind == "profiles" and source.profiles:
+        entry["profiles"] = array(source.profiles)
+    elif "profiles" in entry:
+        del entry["profiles"]
 
 
 def save_knowledge_source(project_root: Path, source: KnowledgeSource) -> None:
@@ -282,45 +537,15 @@ def save_knowledge_source(project_root: Path, source: KnowledgeSource) -> None:
     Creates the ``[knowledge]`` section if it does not exist.
     If a source with the same name exists, it is replaced.
     """
-    raw = _read_project_toml(project_root)
-
-    knowledge = raw.setdefault("knowledge", {})
-    knowledge.setdefault("enabled", True)
-    knowledge.setdefault("mount_dir", _DEFAULT_MOUNT_DIR)
-    knowledge.setdefault("derived_dir", _DEFAULT_DERIVED_DIR)
-    knowledge.setdefault("auto_sync_on_setup", True)
-    knowledge.setdefault("generate_claude_imports", True)
-
-    sources_list: list[dict[str, Any]] = list(knowledge.get("sources", []))
-
-    entry: dict[str, Any] = {
-        "name": source.name,
-        "type": source.source_type,
-        "kind": source.kind,
-    }
-    if source.source_type == "git":
-        entry["url"] = source.url
-        if source.ref and source.ref != "main":
-            entry["ref"] = source.ref
-    else:
-        entry["path"] = source.url
-    if source.mount:
-        entry["mount"] = source.mount
-    if source.profiles and source.kind == "profiles":
-        entry["profiles"] = source.profiles
-
-    # Replace existing source with same name, or append
-    replaced = False
-    for i, existing in enumerate(sources_list):
-        if existing.get("name") == source.name:
-            sources_list[i] = entry
-            replaced = True
-            break
-    if not replaced:
-        sources_list.append(entry)
-
-    knowledge["sources"] = sources_list
-    _write_project_toml(project_root, raw)
+    document_obj = _load_project_toml_document(project_root)
+    knowledge = _ensure_knowledge_table(document_obj)
+    sources = _ensure_sources_list(knowledge)
+    entry = _find_source_entry(sources, source.name)
+    if entry is None:
+        entry = table()
+        sources.append(entry)
+    _sync_source_entry(entry, source)
+    _write_project_toml(project_root, document_obj)
 
 
 def remove_knowledge_source(project_root: Path, name: str) -> bool:
@@ -329,21 +554,75 @@ def remove_knowledge_source(project_root: Path, name: str) -> bool:
     Returns:
         True if the source was found and removed.
     """
-    raw = _read_project_toml(project_root)
-    knowledge = raw.get("knowledge")
-    if not isinstance(knowledge, dict):
+    document_obj = _load_project_toml_document(project_root)
+    knowledge = document_obj.get("knowledge")
+    if knowledge is None:
         return False
 
-    sources_list: list[dict[str, Any]] = list(knowledge.get("sources", []))
-    original_len = len(sources_list)
-    sources_list = [s for s in sources_list if s.get("name") != name]
-
-    if len(sources_list) == original_len:
+    sources = knowledge.get("sources")
+    if sources is None:
         return False
 
-    knowledge["sources"] = sources_list
-    _write_project_toml(project_root, raw)
+    new_sources = aot()
+    removed = False
+    for entry in sources:
+        if str(entry.get("name", "")) == name:
+            removed = True
+            continue
+        new_sources.append(entry)
+
+    if not removed:
+        return False
+
+    knowledge["sources"] = new_sources
+    _write_project_toml(project_root, document_obj)
     return True
+
+
+def set_knowledge_source_profiles(
+    project_root: Path,
+    name: str,
+    *,
+    enable: list[str] | None = None,
+    disable: list[str] | None = None,
+) -> KnowledgeSource:
+    """Enable or disable profiles for a configured profiles source."""
+    config = load_knowledge_config(project_root)
+    if config is None:
+        msg = "No [knowledge] section in simproject.toml."
+        raise KnowledgeSourceError(msg)
+
+    source = next((src for src in config.sources if src.name == name), None)
+    if source is None:
+        msg = f"Knowledge source not found: {name}"
+        raise KnowledgeSourceError(msg)
+    if source.kind != "profiles":
+        msg = f"Knowledge source '{name}' does not support profiles"
+        raise KnowledgeSourceError(msg)
+
+    enabled_profiles = list(source.profiles)
+    for profile_name in enable or []:
+        if profile_name not in enabled_profiles:
+            enabled_profiles.append(profile_name)
+    if disable:
+        disabled = set(disable)
+        enabled_profiles = [
+            profile_name
+            for profile_name in enabled_profiles
+            if profile_name not in disabled
+        ]
+
+    updated = KnowledgeSource(
+        name=source.name,
+        source_type=source.source_type,
+        kind=source.kind,
+        url=source.url,
+        ref=source.ref,
+        mount=source.mount,
+        profiles=enabled_profiles,
+    )
+    save_knowledge_source(project_root, updated)
+    return updated
 
 
 def collect_external_knowledge(project_root: Path) -> list[ExternalKnowledgeMount]:
@@ -384,6 +663,51 @@ def collect_external_knowledge(project_root: Path) -> list[ExternalKnowledgeMoun
 # ---------- Source sync ----------
 
 
+def _remove_path(path: Path) -> None:
+    if path.is_dir() and not path.is_symlink():
+        shutil.rmtree(path)
+    else:
+        path.unlink()
+
+
+def _mirror_directory(source_dir: Path, target_dir: Path) -> None:
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    source_names = {entry.name for entry in source_dir.iterdir()}
+    for existing in list(target_dir.iterdir()):
+        if existing.name not in source_names:
+            _remove_path(existing)
+
+    for source_entry in source_dir.iterdir():
+        target_entry = target_dir / source_entry.name
+
+        if source_entry.is_symlink():
+            resolved_entry = source_entry.resolve()
+            if resolved_entry.is_dir():
+                if target_entry.exists() and (
+                    not target_entry.is_dir() or target_entry.is_symlink()
+                ):
+                    _remove_path(target_entry)
+                _mirror_directory(resolved_entry, target_entry)
+            else:
+                if target_entry.exists():
+                    _remove_path(target_entry)
+                shutil.copy2(resolved_entry, target_entry)
+            continue
+
+        if source_entry.is_dir():
+            if target_entry.exists() and (
+                not target_entry.is_dir() or target_entry.is_symlink()
+            ):
+                _remove_path(target_entry)
+            _mirror_directory(source_entry, target_entry)
+            continue
+
+        if target_entry.exists():
+            _remove_path(target_entry)
+        shutil.copy2(source_entry, target_entry)
+
+
 def sync_source(project_root: Path, source: KnowledgeSource) -> str:
     """Synchronize a single knowledge source.
 
@@ -416,7 +740,7 @@ def sync_source(project_root: Path, source: KnowledgeSource) -> str:
             if mount_path.is_symlink():
                 return "exists"
             if mount_path.is_dir():
-                shutil.copytree(resolved, mount_path, dirs_exist_ok=True)
+                _mirror_directory(resolved, mount_path)
                 return "updated-copy"
             return "exists"
 
@@ -430,7 +754,7 @@ def sync_source(project_root: Path, source: KnowledgeSource) -> str:
                 source.name,
                 e,
             )
-            shutil.copytree(resolved, mount_path, dirs_exist_ok=True)
+            _mirror_directory(resolved, mount_path)
             return "copied"
 
     # git source
@@ -534,15 +858,157 @@ def import_external_insights(
     return imported, skipped
 
 
+def import_external_facts(
+    project_root: Path,
+    sources: list[KnowledgeSource],
+    *,
+    simulator: str = "",
+) -> tuple[int, int]:
+    """Sync structured facts from external sources into candidate transport."""
+    from simctl.core.knowledge import get_candidate_facts_dir
+
+    if tomli_w is None:
+        msg = "tomli_w is required to write candidate fact transport"
+        raise RuntimeError(msg)
+
+    candidate_dir = get_candidate_facts_dir(project_root)
+    synced_sources = 0
+    total_facts = 0
+
+    for source in sources:
+        facts_file = _fact_source_file(project_root, source)
+        dest = candidate_dir / f"{_safe_namespace(source.name)}.toml"
+        if facts_file is None:
+            if dest.exists():
+                dest.unlink()
+            continue
+
+        with open(facts_file, "rb") as f:
+            raw = tomllib.load(f)
+
+        selected: list[dict[str, Any]] = []
+        for item in raw.get("facts", []):
+            if not isinstance(item, dict):
+                continue
+            item_simulator = str(item.get("simulator", "")).strip()
+            if simulator and item_simulator not in {"", simulator}:
+                continue
+            selected.append(dict(item))
+
+        if not selected:
+            if dest.exists():
+                dest.unlink()
+            synced_sources += 1
+            continue
+
+        payload = {
+            "transport": {
+                "source": source.name,
+                "kind": source.kind,
+                "source_path": str(_source_root(project_root, source)),
+                "imported_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            },
+            "facts": selected,
+        }
+        with open(dest, "wb") as f:
+            tomli_w.dump(payload, f)
+
+        synced_sources += 1
+        total_facts += len(selected)
+
+    return synced_sources, total_facts
+
+
 # ---------- Validation ----------
+
+
+def _validate_import_paths(
+    source_path: Path,
+    import_paths: list[str],
+    *,
+    context: str,
+) -> list[str]:
+    issues: list[str] = []
+    for rel_path in import_paths:
+        try:
+            target = _resolve_import_target(source_path, rel_path)
+        except KnowledgeSourceError as exc:
+            issues.append(f"{context}: {exc}")
+            continue
+        if not target.exists():
+            issues.append(f"{context}: missing import target: {rel_path}")
+        elif not target.is_file():
+            issues.append(f"{context}: import target is not a file: {rel_path}")
+    return issues
+
+
+def _validate_analysis_file(
+    path: Path,
+    *,
+    source_path: Path,
+    kind: str,
+) -> list[str]:
+    issues: list[str] = []
+    try:
+        with open(path, "rb") as f:
+            raw = tomllib.load(f)
+    except tomllib.TOMLDecodeError as exc:
+        issues.append(
+            f"{kind} schema parse failed: "
+            f"{path.relative_to(source_path).as_posix()} ({exc})"
+        )
+        return issues
+    except OSError as exc:
+        issues.append(
+            f"{kind} schema not readable: "
+            f"{path.relative_to(source_path).as_posix()} ({exc})"
+        )
+        return issues
+
+    rel = path.relative_to(source_path).as_posix()
+    if kind == "observables":
+        observable = raw.get("observable")
+        observables = raw.get("observables")
+        if isinstance(observable, dict):
+            if not any(key in observable for key in ("source", "path", "metric")):
+                issues.append(
+                    f"observables schema missing source/path/metric in {rel}"
+                )
+            return issues
+        if isinstance(observables, dict) and observables:
+            for name, entry in observables.items():
+                if not isinstance(entry, dict):
+                    issues.append(f"observables.{name} must be a table in {rel}")
+                    continue
+                if not any(key in entry for key in ("source", "path", "metric")):
+                    issues.append(
+                        f"observables.{name} missing source/path/metric in {rel}"
+                    )
+            return issues
+        issues.append(f"observables schema must define [observable] or [observables] in {rel}")
+        return issues
+
+    recipe = raw.get("recipe")
+    recipes = raw.get("recipes")
+    required_recipe_keys = ("plot", "steps", "imports", "kind", "x", "y")
+    if isinstance(recipe, dict):
+        if not any(key in recipe for key in required_recipe_keys):
+            issues.append(f"recipe schema missing recipe definition keys in {rel}")
+        return issues
+    if isinstance(recipes, dict) and recipes:
+        for name, entry in recipes.items():
+            if not isinstance(entry, dict):
+                issues.append(f"recipes.{name} must be a table in {rel}")
+                continue
+            if not any(key in entry for key in required_recipe_keys):
+                issues.append(f"recipes.{name} missing recipe definition keys in {rel}")
+        return issues
+    issues.append(f"recipe schema must define [recipe] or [recipes] in {rel}")
+    return issues
 
 
 def validate_source_structure(source_path: Path) -> list[str]:
     """Validate that a knowledge source has the expected structure.
-
-    Checks for required files/directories:
-    - ``profiles/`` directory
-    - ``README.md``
 
     Returns:
         List of issue descriptions (empty = valid).
@@ -558,6 +1024,83 @@ def validate_source_structure(source_path: Path) -> list[str]:
 
     if not (source_path / "README.md").is_file():
         issues.append("Missing required file: README.md")
+
+    profile_paths = sorted((source_path / "profiles").glob("*.md"))
+    if (source_path / "profiles").is_dir() and not profile_paths:
+        issues.append("Missing required profile markdown files under profiles/*.md")
+
+    for profile_path in profile_paths:
+        try:
+            content = profile_path.read_text(encoding="utf-8")
+        except OSError as exc:
+            issues.append(f"Profile not readable: {profile_path} ({exc})")
+            continue
+        if not content.strip():
+            issues.append(
+                "Profile is empty: "
+                f"{profile_path.relative_to(source_path).as_posix()}"
+            )
+            continue
+        issues.extend(
+            _validate_import_paths(
+                source_path,
+                _parse_import_directives(content),
+                context=profile_path.relative_to(source_path).as_posix(),
+            )
+        )
+
+    try:
+        manifest = load_entrypoints(source_path)
+    except KnowledgeSourceError as exc:
+        issues.append(str(exc))
+    else:
+        if manifest is not None:
+            issues.extend(
+                _validate_import_paths(
+                    source_path,
+                    list(manifest.imports),
+                    context=_ENTRYPOINTS_FILE,
+                )
+            )
+            for profile_name, imports in manifest.profile_imports.items():
+                if not _profile_markdown_path(source_path, profile_name).is_file():
+                    issues.append(
+                        f"{_ENTRYPOINTS_FILE}: profile '{profile_name}' has no "
+                        "matching profiles/<name>.md"
+                    )
+                issues.extend(
+                    _validate_import_paths(
+                        source_path,
+                        list(imports),
+                        context=f"{_ENTRYPOINTS_FILE}: profiles.{profile_name}",
+                    )
+                )
+
+    for agent_doc in sorted(source_path.rglob("agent-*.md")):
+        try:
+            content = agent_doc.read_text(encoding="utf-8")
+        except OSError as exc:
+            issues.append(f"Agent doc not readable: {agent_doc} ({exc})")
+            continue
+        if not content.strip():
+            issues.append(
+                "Agent doc is empty: "
+                f"{agent_doc.relative_to(source_path).as_posix()}"
+            )
+
+    analysis_dir = source_path / "analysis"
+    for kind in ("observables", "recipes"):
+        kind_dir = analysis_dir / kind
+        if not kind_dir.is_dir():
+            continue
+        for file_path in sorted(kind_dir.rglob("*.toml")):
+            issues.extend(
+                _validate_analysis_file(
+                    file_path,
+                    source_path=source_path,
+                    kind=kind,
+                )
+            )
 
     return issues
 
@@ -606,6 +1149,7 @@ def render_imports(
         "",
     ]
 
+    rendered_paths: set[str] = set()
     for source in config.sources:
         if source.kind != "profiles":
             continue
@@ -618,27 +1162,49 @@ def render_imports(
             lines.append(f"<!-- source {source.name}: not mounted -->")
             continue
 
-        if not source.profiles:
-            # No profiles enabled — import source CLAUDE.md if it exists
-            claude_md = mount_path / "CLAUDE.md"
-            if claude_md.is_file():
-                lines.append(f"@{source.mount}/CLAUDE.md")
+        try:
+            source_imports = _resolve_profile_imports(mount_path, source)
+        except KnowledgeSourceError as exc:
+            lines.append(f"<!-- source {source.name}: invalid entrypoints ({exc}) -->")
             continue
 
-        for profile_name in source.profiles:
-            profile_path = mount_path / "profiles" / f"{profile_name}.md"
-            if profile_path.is_file():
-                lines.append(f"@{source.mount}/profiles/{profile_name}.md")
-            else:
-                lines.append(
-                    f"<!-- profile {profile_name} not found "
-                    f"in {source.name} -->"
+        if not source_imports:
+            lines.append(f"<!-- source {source.name}: no entrypoints enabled -->")
+            continue
+
+        for rel_path in source_imports:
+            try:
+                resolved = _resolve_import_target(mount_path, rel_path)
+            except KnowledgeSourceError as exc:
+                lines.append(f"<!-- source {source.name}: {exc} -->")
+                continue
+            if not resolved.is_file():
+                profile_match = rel_path.startswith("profiles/") and rel_path.endswith(
+                    ".md"
                 )
+                if profile_match:
+                    profile_name = Path(rel_path).stem
+                    lines.append(
+                        f"<!-- profile {profile_name} not found in {source.name} -->"
+                    )
+                else:
+                    lines.append(
+                        f"<!-- source {source.name}: missing import target {rel_path} -->"
+                    )
+                continue
+            rendered = f"{source.mount}/{rel_path}".replace("\\", "/")
+            if rendered not in rendered_paths:
+                rendered_paths.add(rendered)
+                lines.append(f"@{rendered}")
 
     if extra_imports:
         lines.append("")
         for path in extra_imports:
-            lines.append(f"@{path}")
+            normalized = path.replace("\\", "/")
+            if normalized in rendered_paths:
+                continue
+            rendered_paths.add(normalized)
+            lines.append(f"@{normalized}")
 
     lines.append("")  # trailing newline
     imports_path.write_text("\n".join(lines), encoding="utf-8")

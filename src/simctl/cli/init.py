@@ -112,6 +112,10 @@ def _create_simctl_skeleton(project_dir: Path, created: list[str]) -> None:
         created.append(".simctl/knowledge/")
     if _mkdir_if_missing(simctl_dir / "knowledge" / "enabled"):
         created.append(".simctl/knowledge/enabled/")
+    if _mkdir_if_missing(simctl_dir / "knowledge" / "candidates"):
+        created.append(".simctl/knowledge/candidates/")
+    if _mkdir_if_missing(simctl_dir / "knowledge" / "candidates" / "facts"):
+        created.append(".simctl/knowledge/candidates/facts/")
 
 
 def _build_simulators_toml(simulator_names: list[str]) -> str:
@@ -271,26 +275,26 @@ def _build_cookbook_rule() -> str:
 def _discover_agent_docs(
     project_dir: Path, doc_repos: list[tuple[str, str]]
 ) -> list[str]:
-    """Discover docs/agent-*.md files in cloned refs.
+    """Discover manifest-declared agent doc imports from cloned repos.
 
     Returns:
-        List of relative paths like ``refs/MPIEMSES3D/docs/agent-user-guide.md``.
+        List of relative import paths rooted at the project directory.
     """
+    from simctl.core.knowledge_source import discover_repo_imports
+
     refs_dir = project_dir / "refs"
     paths: list[str] = []
     for _url, dest in doc_repos:
-        docs_dir = refs_dir / dest / "docs"
-        if not docs_dir.is_dir():
+        repo_root = refs_dir / dest
+        if not repo_root.is_dir():
             continue
-        for md in sorted(docs_dir.glob("agent-*.md")):
-            if md.is_file():
-                paths.append(f"refs/{dest}/docs/{md.name}")
-    # Also check simctl's own agent docs in tools/hpc-simctl/docs/
-    simctl_docs = project_dir / "tools" / "hpc-simctl" / "docs"
-    if simctl_docs.is_dir():
-        for md in sorted(simctl_docs.glob("agent-*.md")):
-            if md.is_file():
-                paths.append(f"tools/hpc-simctl/docs/{md.name}")
+        for rel_path in discover_repo_imports(repo_root):
+            paths.append(f"refs/{dest}/{rel_path}".replace("\\", "/"))
+
+    simctl_root = project_dir / "tools" / "hpc-simctl"
+    if simctl_root.is_dir():
+        for rel_path in discover_repo_imports(simctl_root):
+            paths.append(f"tools/hpc-simctl/{rel_path}".replace("\\", "/"))
     return paths
 
 

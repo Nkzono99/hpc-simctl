@@ -92,6 +92,7 @@ my-simulation-project/
   .simctl/             # 知識層 (ナレッジ・環境・知見)
     knowledge/         # 自動生成ナレッジ (gitignore 対象)
       enabled/         # 有効な profile の imports.md
+      candidates/      # 外部 source 由来の candidate fact transport
     insights/          # 実験知見 (人間向け Markdown)
     facts.toml         # 構造化された知識 (AI 向け machine-readable claims)
     environment.toml   # 実行環境記述 (自動検出)
@@ -289,7 +290,7 @@ simctl runs list runs/cavity/scan
 |---------|------|
 | `simctl analyze summarize [RUN]` | Adapter による run 解析 summary 生成 |
 | `simctl analyze collect [DIR]` | survey 内の全 run から集計データ生成 |
-| `simctl analyze plot [DIR]` | survey 集計結果の可視化 |
+| `simctl analyze plot [DIR]` | survey 集計結果の可視化 (`--recipe` / `--list-recipes` 対応) |
 | `simctl runs archive [RUN]` | run のアーカイブ |
 | `simctl runs purge-work [RUN]` | work/ 内の不要ファイル削除 |
 
@@ -301,18 +302,23 @@ simctl runs list runs/cavity/scan
 | `simctl knowledge list` | 知見一覧表示 |
 | `simctl knowledge show NAME` | 知見の詳細表示 |
 | `simctl knowledge add-fact CLAIM` | 構造化された知識を facts.toml に追加 |
-| `simctl knowledge facts` | 構造化知識の一覧表示 |
+| `simctl knowledge facts` | local facts と imported candidate facts の一覧表示 |
+| `simctl knowledge promote-fact FACT_ID` | candidate fact を local facts.toml に昇格 |
 | `simctl knowledge source list` | 外部知識ソース一覧表示 |
 | `simctl knowledge source attach TYPE NAME URL` | 外部知識ソースを接続 (git / path) |
 | `simctl knowledge source detach NAME` | 外部知識ソースを切断 |
-| `simctl knowledge source sync [NAME]` | 知識ソース同期 + insight 取り込み |
+| `simctl knowledge source sync [NAME]` | 知識ソース同期 + insight / fact transport |
 | `simctl knowledge source render` | 有効な profile から imports.md を生成 |
 | `simctl knowledge source status` | 知識統合の状態表示 |
+| `simctl knowledge profile enable SOURCE PROFILE...` | source の profile を有効化して imports.md を更新 |
+| `simctl knowledge profile disable SOURCE PROFILE...` | source の profile を無効化して imports.md を更新 |
 
 知識管理は三層構造:
 - **source knowledge** — 外部共有知識リポジトリ (`refs/knowledge/` にマウント)
 - **local knowledge** — プロジェクト固有の知見 (insights, facts)
-- **derived knowledge** — source と local から生成される派生物 (imports.md 等)
+- **derived knowledge** — source と local から生成される派生物 (imports.md, candidate fact transport 等)
+
+profile source は repo ルートの `entrypoints.toml` で import 対象を明示できる。`imports.md` はこの manifest を優先し、未指定 profile は `profiles/<name>.md` にフォールバックする。
 
 全コマンドは引数省略時にカレントディレクトリをデフォルトとする。
 

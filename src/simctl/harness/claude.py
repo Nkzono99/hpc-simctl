@@ -22,6 +22,7 @@ _ALLOW_BASH: Final[tuple[str, ...]] = (
     "Bash(simctl runs extend *)",
     "Bash(simctl analyze summarize*)",
     "Bash(simctl analyze collect*)",
+    "Bash(simctl analyze plot*)",
     "Bash(simctl knowledge list*)",
     "Bash(simctl knowledge show*)",
     "Bash(simctl knowledge facts*)",

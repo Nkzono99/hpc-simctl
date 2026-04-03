@@ -144,8 +144,7 @@ class TestGenerateJobScript:
     def test_executable_bit(self, run_dir: Path, job_config: dict[str, object]) -> None:
         path = generate_job_script(run_dir, job_config, "srun ./solver")
         if os.name == "nt":
-            assert path.exists()
-            return
+            pytest.skip("Windows does not expose POSIX execute bits reliably")
         assert path.stat().st_mode & 0o100  # owner execute bit
 
     def test_missing_walltime_raises(self, run_dir: Path) -> None:
@@ -190,6 +189,23 @@ class TestGenerateJobScript:
         setup_idx = content.index("cp input/*")
         exec_idx = content.index("srun ./solver")
         assert setup_idx < exec_idx
+
+    def test_version_commands(self, run_dir: Path, job_config: dict[str, object]) -> None:
+        """Version capture commands appear before the exec line."""
+        path = generate_job_script(
+            run_dir,
+            job_config,
+            "srun ./solver",
+            version_commands=[
+                "( solver --version ) > SIMULATOR_VERSION.txt 2>&1 || true",
+            ],
+        )
+        content = path.read_text()
+        assert "# Runtime metadata" in content
+        assert "SIMULATOR_VERSION.txt" in content
+        version_idx = content.index("SIMULATOR_VERSION.txt")
+        exec_idx = content.index("srun ./solver")
+        assert version_idx < exec_idx
 
     def test_post_commands(self, run_dir: Path, job_config: dict[str, object]) -> None:
         """Post commands appear after the main command, without exec prefix."""

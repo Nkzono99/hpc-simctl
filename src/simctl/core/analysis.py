@@ -104,6 +104,30 @@ class SurveyPlotResult:
     generated_summaries: int
 
 
+@dataclass(frozen=True)
+class SurveyPlotRecipe:
+    """Adapter-aware survey plot recipe definition."""
+
+    name: str
+    adapter: str
+    description: str
+    x_candidates: tuple[str, ...]
+    y_candidates: tuple[str, ...]
+    kind: str = "auto"
+    group_by_candidates: tuple[str, ...] = ()
+    title: str = ""
+
+
+@dataclass(frozen=True)
+class ResolvedSurveyPlotRecipe:
+    """Concrete plot settings after resolving recipe column fallbacks."""
+
+    recipe: SurveyPlotRecipe
+    x: str
+    y: str
+    group_by: str
+
+
 def _resolve_adapter_name(manifest: ManifestData) -> str:
     adapter_name = manifest.simulator.get("adapter", "")
     if not adapter_name:
@@ -111,6 +135,177 @@ def _resolve_adapter_name(manifest: ManifestData) -> str:
     if not adapter_name:
         raise SimctlError("no simulator/adapter specified in manifest")
     return str(adapter_name)
+
+
+def _normalize_recipe_columns(
+    value: Any,
+    *,
+    recipe_name: str,
+    field_name: str,
+    required: bool = True,
+) -> tuple[str, ...]:
+    columns: list[str] = []
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped:
+            columns.append(stripped)
+    elif isinstance(value, list):
+        for item in value:
+            if not isinstance(item, str) or not item.strip():
+                raise SimctlError(
+                    f"Plot recipe '{recipe_name}' has invalid {field_name} entry: {item!r}"
+                )
+            columns.append(item.strip())
+    elif value not in ("", None):
+        raise SimctlError(
+            f"Plot recipe '{recipe_name}' field {field_name!r} must be a string "
+            "or list of strings"
+        )
+
+    if required and not columns:
+        raise SimctlError(
+            f"Plot recipe '{recipe_name}' must define at least one {field_name} column"
+        )
+    return tuple(columns)
+
+
+def _coerce_plot_recipe(
+    adapter_name: str,
+    recipe_name: str,
+    raw_recipe: dict[str, Any],
+) -> SurveyPlotRecipe:
+    kind = str(raw_recipe.get("kind", "auto")).strip().lower() or "auto"
+    if kind not in _PLOT_KINDS:
+        raise SimctlError(
+            f"Plot recipe '{recipe_name}' has unknown kind {kind!r}. "
+            f"Use one of: {', '.join(sorted(_PLOT_KINDS))}"
+        )
+
+    return SurveyPlotRecipe(
+        name=recipe_name,
+        adapter=adapter_name,
+        description=str(raw_recipe.get("description", "")).strip(),
+        x_candidates=_normalize_recipe_columns(
+            raw_recipe.get("x"),
+            recipe_name=recipe_name,
+            field_name="x",
+        ),
+        y_candidates=_normalize_recipe_columns(
+            raw_recipe.get("y"),
+            recipe_name=recipe_name,
+            field_name="y",
+        ),
+        kind=kind,
+        group_by_candidates=_normalize_recipe_columns(
+            raw_recipe.get("group_by"),
+            recipe_name=recipe_name,
+            field_name="group_by",
+            required=False,
+        ),
+        title=str(raw_recipe.get("title", "")).strip(),
+    )
+
+
+def _survey_adapter_names(survey_dir: Path) -> tuple[str, ...]:
+    run_dirs = discover_runs(survey_dir)
+    if not run_dirs:
+        raise SimctlError("No runs found in survey directory.")
+
+    adapter_names: set[str] = set()
+    for run_dir in run_dirs:
+        try:
+            manifest = read_manifest(run_dir)
+            adapter_names.add(_resolve_adapter_name(manifest))
+        except SimctlError:
+            continue
+
+    if not adapter_names:
+        raise SimctlError("No adapter metadata found in survey manifests.")
+    return tuple(sorted(adapter_names))
+
+
+def list_survey_plot_recipes(survey_dir: Path) -> tuple[SurveyPlotRecipe, ...]:
+    """Return adapter-provided plot recipes for a survey."""
+    adapter_names = _survey_adapter_names(survey_dir)
+    if len(adapter_names) > 1:
+        raise SimctlError(
+            "Multiple adapters found in survey. Plot recipes require a single adapter."
+        )
+
+    adapter_name = adapter_names[0]
+    import simctl.adapters  # noqa: F401
+
+    adapter_cls = get_adapter(adapter_name)
+    raw_recipes = adapter_cls.default_plot_recipes()
+    recipes: list[SurveyPlotRecipe] = []
+    for recipe_name, raw_recipe in sorted(raw_recipes.items()):
+        if not isinstance(raw_recipe, dict):
+            raise SimctlError(
+                f"Plot recipe '{recipe_name}' for adapter {adapter_name!r} "
+                "must be a table/dict"
+            )
+        recipes.append(_coerce_plot_recipe(adapter_name, recipe_name, raw_recipe))
+    return tuple(recipes)
+
+
+def _resolve_recipe_column(
+    recipe_name: str,
+    field_name: str,
+    candidates: tuple[str, ...],
+    available_columns: tuple[str, ...],
+    *,
+    required: bool = True,
+) -> str:
+    available = set(available_columns)
+    for candidate in candidates:
+        if candidate in available:
+            return candidate
+
+    if not required:
+        return ""
+
+    raise SimctlError(
+        f"Plot recipe '{recipe_name}' could not resolve {field_name}. "
+        f"Tried: {', '.join(candidates)}"
+    )
+
+
+def resolve_survey_plot_recipe(
+    survey_dir: Path,
+    recipe_name: str,
+) -> ResolvedSurveyPlotRecipe:
+    """Resolve an adapter recipe against the available survey columns."""
+    recipes = list_survey_plot_recipes(survey_dir)
+    recipe = next((item for item in recipes if item.name == recipe_name), None)
+    if recipe is None:
+        names = ", ".join(item.name for item in recipes) or "(none)"
+        raise SimctlError(
+            f"Unknown plot recipe: {recipe_name!r}. Available recipes: {names}"
+        )
+
+    table = load_survey_plot_table(survey_dir)
+    return ResolvedSurveyPlotRecipe(
+        recipe=recipe,
+        x=_resolve_recipe_column(
+            recipe.name,
+            "x",
+            recipe.x_candidates,
+            table.columns,
+        ),
+        y=_resolve_recipe_column(
+            recipe.name,
+            "y",
+            recipe.y_candidates,
+            table.columns,
+        ),
+        group_by=_resolve_recipe_column(
+            recipe.name,
+            "group_by",
+            recipe.group_by_candidates,
+            table.columns,
+            required=False,
+        ),
+    )
 
 
 def _iter_case_script_candidates(

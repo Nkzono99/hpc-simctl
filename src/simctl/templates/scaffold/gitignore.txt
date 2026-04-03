@@ -23,6 +23,7 @@ runs/**/work/*.log
 
 # analysis cache
 runs/**/analysis/cache/
+runs/**/analysis/scratch/
 runs/**/analysis/.ipynb_checkpoints/
 
 # Personal agent overrides (not shared)

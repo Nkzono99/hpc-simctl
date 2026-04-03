@@ -7,16 +7,20 @@ from unittest.mock import patch
 
 import pytest
 
+from simctl.core.knowledge import load_candidate_facts
 from simctl.core.knowledge_source import (
     KnowledgeConfig,
     KnowledgeSource,
     collect_external_knowledge,
     discover_profiles,
+    discover_repo_imports,
+    import_external_facts,
     import_external_insights,
     load_knowledge_config,
     remove_knowledge_source,
     render_imports,
     save_knowledge_source,
+    set_knowledge_source_profiles,
     sync_source,
     validate_source_structure,
 )
@@ -165,6 +169,40 @@ def test_save_knowledge_source_path_type(tmp_path: Path) -> None:
     assert config.sources[0].url == "../my-kb"
 
 
+def test_save_knowledge_source_preserves_schema_comment(tmp_path: Path) -> None:
+    project_root = _create_project(
+        tmp_path,
+        '\n# human note\n[knowledge]\nenabled = true\n',
+    )
+    project_file = project_root / "simproject.toml"
+    project_file.write_text(
+        '#:schema https://example.test/simproject.json\n'
+        '[project]\n'
+        'name = "test-project"\n'
+        '# human note\n'
+        '[knowledge]\n'
+        'enabled = true\n',
+        encoding="utf-8",
+    )
+
+    save_knowledge_source(
+        project_root,
+        KnowledgeSource(
+            name="kb",
+            source_type="path",
+            url="../shared-kb",
+            kind="profiles",
+            mount="refs/knowledge/kb",
+            profiles=["common"],
+        ),
+    )
+
+    content = project_file.read_text(encoding="utf-8")
+    assert "#:schema https://example.test/simproject.json" in content
+    assert "# human note" in content
+    assert 'name = "kb"' in content
+
+
 # ---------- remove_knowledge_source ----------
 
 
@@ -188,6 +226,36 @@ def test_remove_knowledge_source_not_found(tmp_path: Path) -> None:
     assert remove_knowledge_source(tmp_path, "nonexistent") is False
 
 
+def test_set_knowledge_source_profiles_updates_enabled_list(tmp_path: Path) -> None:
+    project_root = _create_project(
+        tmp_path,
+        """
+[knowledge]
+enabled = true
+
+[[knowledge.sources]]
+name = "kb"
+type = "path"
+kind = "profiles"
+path = "../shared-kb"
+mount = "refs/knowledge/kb"
+profiles = ["common"]
+""",
+    )
+
+    updated = set_knowledge_source_profiles(
+        project_root,
+        "kb",
+        enable=["emses"],
+        disable=["common"],
+    )
+
+    assert updated.profiles == ["emses"]
+    config = load_knowledge_config(project_root)
+    assert config is not None
+    assert config.sources[0].profiles == ["emses"]
+
+
 # ---------- sync_source ----------
 
 
@@ -203,6 +271,30 @@ def test_sync_source_path_exists(tmp_path: Path) -> None:
     )
     status = sync_source(project, source)
     assert status in ("linked", "copied", "exists", "updated-copy")
+
+
+def test_sync_source_path_copy_removes_deleted_files(tmp_path: Path) -> None:
+    kb_dir = _create_knowledge_source(tmp_path)
+    project = tmp_path / "project"
+    project.mkdir()
+    mount = project / "refs" / "knowledge" / "test-kb"
+    mount.mkdir(parents=True)
+    stale_file = mount / "stale.md"
+    stale_file.write_text("old", encoding="utf-8")
+
+    source = KnowledgeSource(
+        name="test-kb",
+        source_type="path",
+        url=str(kb_dir),
+        kind="profiles",
+        mount="refs/knowledge/test-kb",
+    )
+
+    status = sync_source(project, source)
+
+    assert status == "updated-copy"
+    assert not stale_file.exists()
+    assert (mount / "README.md").is_file()
 
 
 def test_sync_source_path_not_found(tmp_path: Path) -> None:
@@ -290,6 +382,50 @@ def test_validate_source_structure_missing_readme(tmp_path: Path) -> None:
 
     issues = validate_source_structure(kb_dir)
     assert any("README.md" in i for i in issues)
+
+
+def test_validate_source_structure_checks_profile_imports(tmp_path: Path) -> None:
+    kb_dir = _create_knowledge_source(tmp_path)
+    (kb_dir / "profiles" / "common.md").write_text(
+        "# Common\n@docs/missing.md\n",
+        encoding="utf-8",
+    )
+
+    issues = validate_source_structure(kb_dir)
+    assert any("missing import target" in issue for issue in issues)
+
+
+def test_validate_source_structure_checks_entrypoints_manifest(tmp_path: Path) -> None:
+    kb_dir = _create_knowledge_source(tmp_path)
+    (kb_dir / "entrypoints.toml").write_text(
+        'imports = ["docs/agent-guide.md"]\n'
+        '[profiles.common]\n'
+        'imports = ["analysis/recipes/common.toml"]\n',
+        encoding="utf-8",
+    )
+
+    issues = validate_source_structure(kb_dir)
+    assert any("missing import target" in issue for issue in issues)
+
+
+def test_validate_source_structure_checks_analysis_schema_files(tmp_path: Path) -> None:
+    kb_dir = _create_knowledge_source(tmp_path)
+    observables_dir = kb_dir / "analysis" / "observables"
+    recipes_dir = kb_dir / "analysis" / "recipes"
+    observables_dir.mkdir(parents=True)
+    recipes_dir.mkdir(parents=True)
+    (observables_dir / "density.toml").write_text(
+        "[observable]\nname = \"density\"\n",
+        encoding="utf-8",
+    )
+    (recipes_dir / "summary.toml").write_text(
+        "[recipe]\nname = \"summary\"\n",
+        encoding="utf-8",
+    )
+
+    issues = validate_source_structure(kb_dir)
+    assert any("observables schema" in issue for issue in issues)
+    assert any("recipe schema" in issue for issue in issues)
 
 
 def test_validate_source_structure_not_found(tmp_path: Path) -> None:
@@ -401,6 +537,41 @@ def test_render_imports_with_profiles(tmp_path: Path) -> None:
     content = imports_path.read_text()
     assert "@refs/knowledge/kb/profiles/common.md" in content
     assert "advanced" not in content
+
+
+def test_render_imports_uses_entrypoints_manifest(tmp_path: Path) -> None:
+    kb_dir = _create_knowledge_source(tmp_path, "kb")
+    (kb_dir / "docs").mkdir()
+    (kb_dir / "docs" / "agent-guide.md").write_text("# Agent\n", encoding="utf-8")
+    (kb_dir / "entrypoints.toml").write_text(
+        '[profiles.common]\nimports = ["profiles/common.md", "docs/agent-guide.md"]\n',
+        encoding="utf-8",
+    )
+
+    project = tmp_path / "project"
+    project.mkdir()
+    mount_dir = project / "refs" / "knowledge" / "kb"
+    mount_dir.parent.mkdir(parents=True)
+    import shutil
+
+    shutil.copytree(kb_dir, mount_dir)
+
+    config = KnowledgeConfig(
+        sources=[
+            KnowledgeSource(
+                name="kb",
+                source_type="path",
+                url=str(kb_dir),
+                mount="refs/knowledge/kb",
+                profiles=["common"],
+            ),
+        ],
+    )
+
+    imports_path = render_imports(project, config)
+    content = imports_path.read_text(encoding="utf-8")
+    assert "@refs/knowledge/kb/profiles/common.md" in content
+    assert "@refs/knowledge/kb/docs/agent-guide.md" in content
 
 
 def test_render_imports_no_profiles_uses_claude_md(tmp_path: Path) -> None:
@@ -517,3 +688,53 @@ def test_import_external_insights_skips_existing_namespaced_file(tmp_path: Path)
 
     assert first == (1, 0)
     assert second == (0, 1)
+
+
+def test_import_external_facts_syncs_candidates_by_source(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    _create_project(project)
+    source_root = tmp_path / "alpha-project"
+    facts_dir = source_root / ".simctl"
+    facts_dir.mkdir(parents=True, exist_ok=True)
+    (facts_dir / "facts.toml").write_text(
+        "[[facts]]\n"
+        'id = "f001"\n'
+        'claim = "dt must stay below 1.0"\n'
+        'fact_type = "constraint"\n'
+        'simulator = "emses"\n'
+        'confidence = "high"\n',
+        encoding="utf-8",
+    )
+
+    synced_sources, total_facts = import_external_facts(
+        project,
+        [
+            KnowledgeSource(
+                name="alpha",
+                source_type="path",
+                kind="project",
+                url=str(source_root),
+            ),
+        ],
+    )
+
+    assert synced_sources == 1
+    assert total_facts == 1
+    facts = load_candidate_facts(project)
+    assert len(facts) == 1
+    assert facts[0].id == "alpha:f001"
+    assert facts[0].storage == "candidate"
+    assert facts[0].transport_source == "alpha"
+    assert facts[0].upstream_id == "f001"
+
+
+def test_discover_repo_imports_reads_entrypoints_manifest(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    (repo_root / "entrypoints.toml").write_text(
+        'imports = ["docs/agent-user-guide.md"]\n',
+        encoding="utf-8",
+    )
+
+    assert discover_repo_imports(repo_root) == ["docs/agent-user-guide.md"]

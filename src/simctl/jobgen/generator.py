@@ -37,6 +37,7 @@ def generate_job_script(
     extra_env: dict[str, str] | None = None,
     modules: list[str] | None = None,
     setup_commands: list[str] | None = None,
+    version_commands: list[str] | None = None,
     post_commands: list[str] | None = None,
     resource_style: str = "standard",
     stdout_format: str | None = None,
@@ -67,6 +68,8 @@ def generate_job_script(
         extra_env: (Legacy) Extra environment variables.
         modules: (Legacy) Module names to load.
         setup_commands: (Legacy) Shell commands before execution.
+        version_commands: Shell commands that capture simulator/runtime
+            version information before execution.
         post_commands: Shell commands after execution.
         resource_style: (Legacy) ``"standard"`` or ``"rsc"``.
         stdout_format: (Legacy) Custom stdout format.
@@ -125,6 +128,7 @@ def generate_job_script(
         extra_env=effective_env,
         modules=effective_modules,
         setup_commands=effective_setup,
+        version_commands=list(version_commands or []),
         post_commands=all_post,
         resource_style=effective_resource_style,
         stdout_format=effective_stdout,
@@ -184,6 +188,7 @@ def _render_script(
     extra_env: dict[str, str],
     modules: list[str],
     setup_commands: list[str],
+    version_commands: list[str],
     post_commands: list[str],
     resource_style: str = "standard",
     stdout_format: str | None = None,
@@ -264,6 +269,12 @@ def _render_script(
     # --- Setup commands (before main execution) ---
     if setup_commands:
         for cmd in setup_commands:
+            lines.append(cmd)
+        lines.append("")
+
+    if version_commands:
+        lines.append("# Runtime metadata")
+        for cmd in version_commands:
             lines.append(cmd)
         lines.append("")
 

@@ -14,6 +14,7 @@ from simctl.core.actions import (
     add_fact,
     collect_survey,
     create_survey,
+    promote_fact,
     purge_work,
     retry_run,
     save_insight,
@@ -283,6 +284,30 @@ def test_add_fact_supports_superseding_fact(tmp_path: Path) -> None:
     facts = load_facts(tmp_path)
     assert [fact.id for fact in facts] == ["f001", "f002"]
     assert facts[1].supersedes == "f001"
+
+
+def test_promote_fact_promotes_candidate_fact(tmp_path: Path) -> None:
+    candidate_dir = tmp_path / ".simctl" / "knowledge" / "candidates" / "facts"
+    candidate_dir.mkdir(parents=True, exist_ok=True)
+    (candidate_dir / "shared.toml").write_text(
+        "[transport]\n"
+        'source = "shared"\n'
+        'kind = "project"\n'
+        '\n'
+        "[[facts]]\n"
+        'id = "f004"\n'
+        'claim = "keep dt below 1.0"\n'
+        'fact_type = "constraint"\n'
+        'confidence = "high"\n',
+        encoding="utf-8",
+    )
+
+    result = promote_fact(tmp_path, "shared:f004")
+
+    assert result.status is ActionStatus.SUCCESS
+    facts = load_facts(tmp_path)
+    assert [fact.id for fact in facts] == ["f001"]
+    assert facts[0].evidence_ref == "fact:shared:f004"
 
 
 def test_save_insight_writes_markdown_with_metadata(tmp_path: Path) -> None:

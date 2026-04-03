@@ -191,6 +191,7 @@ hpc-simctl/
 
 - run の大容量出力 (work/outputs/, work/restart/, work/tmp/) は .gitignore で除外
 - テスト fixtures の TOML ファイルは Git 管理対象
+- `gh release create` などで release を切るときは、先に `pyproject.toml` の `[project].version` を更新し、Git tag / release 名と同じバージョンに揃えること
 
 ## ビルド・実行
 

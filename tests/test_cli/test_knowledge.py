@@ -9,7 +9,12 @@ from unittest.mock import patch
 from typer.testing import CliRunner
 
 from simctl.cli.main import app
-from simctl.core.knowledge import list_insights, load_facts, query_facts
+from simctl.core.knowledge import (
+    list_insights,
+    load_candidate_facts,
+    load_facts,
+    query_facts,
+)
 from simctl.core.knowledge_source import load_knowledge_config
 
 runner = CliRunner()
@@ -208,16 +213,105 @@ def test_facts_supports_structured_filters_and_json_output(tmp_path: Path) -> No
     assert payload[0]["param_name"] == "tmgrid.dt"
 
 
+def test_source_sync_imports_candidate_facts(tmp_path: Path) -> None:
+    project_root = _create_project(
+        tmp_path,
+        """
+[knowledge]
+enabled = true
+
+[[knowledge.sources]]
+name = "shared"
+type = "path"
+kind = "project"
+path = "../shared-project"
+""",
+    )
+    source_root = tmp_path.parent / "shared-project"
+    facts_dir = source_root / ".simctl"
+    facts_dir.mkdir(parents=True, exist_ok=True)
+    (facts_dir / "facts.toml").write_text(
+        "[[facts]]\n"
+        'id = "f004"\n'
+        'claim = "keep dt below 1.0"\n'
+        'fact_type = "constraint"\n'
+        'simulator = "emses"\n'
+        'confidence = "high"\n',
+        encoding="utf-8",
+    )
+
+    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+        result = runner.invoke(app, ["knowledge", "source", "sync"])
+
+    assert result.exit_code == 0
+    assert "Candidate facts synced: 1 across 1 source(s)" in result.output
+    candidate_facts = load_candidate_facts(project_root)
+    assert [fact.id for fact in candidate_facts] == ["shared:f004"]
+
+
+def test_promote_fact_copies_candidate_to_local_facts(tmp_path: Path) -> None:
+    project_root = _create_project(
+        tmp_path,
+        """
+[knowledge]
+enabled = true
+
+[[knowledge.sources]]
+name = "shared"
+type = "path"
+kind = "project"
+path = "../shared-project"
+""",
+    )
+    source_root = tmp_path.parent / "shared-project"
+    facts_dir = source_root / ".simctl"
+    facts_dir.mkdir(parents=True, exist_ok=True)
+    (facts_dir / "facts.toml").write_text(
+        "[[facts]]\n"
+        'id = "f004"\n'
+        'claim = "keep dt below 1.0"\n'
+        'fact_type = "constraint"\n'
+        'simulator = "emses"\n'
+        'confidence = "high"\n',
+        encoding="utf-8",
+    )
+
+    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+        sync_result = runner.invoke(app, ["knowledge", "source", "sync"])
+        promote_result = runner.invoke(
+            app,
+            ["knowledge", "promote-fact", "shared:f004"],
+        )
+
+    assert sync_result.exit_code == 0
+    assert promote_result.exit_code == 0
+    assert "Promoted shared:f004 -> f001" in promote_result.output
+
+    local_facts = load_facts(project_root)
+    assert len(local_facts) == 1
+    assert local_facts[0].id == "f001"
+    assert local_facts[0].fact_type == "constraint"
+    assert local_facts[0].evidence_ref == "fact:shared:f004"
+
+
 def test_knowledge_help_shows_source_group() -> None:
     result = runner.invoke(app, ["knowledge", "--help"])
     assert result.exit_code == 0
     assert "source" in result.output
+    assert "profile" in result.output
 
 
 def test_knowledge_source_help_shows_grouped_commands() -> None:
     result = runner.invoke(app, ["knowledge", "source", "--help"])
     assert result.exit_code == 0
     for cmd in ["list", "attach", "detach", "sync", "render", "status"]:
+        assert cmd in result.output
+
+
+def test_knowledge_profile_help_shows_grouped_commands() -> None:
+    result = runner.invoke(app, ["knowledge", "profile", "--help"])
+    assert result.exit_code == 0
+    for cmd in ["enable", "disable"]:
         assert cmd in result.output
 
 
@@ -419,6 +513,41 @@ profiles = ["common"]
     assert "@refs/knowledge/kb/profiles/common.md" in imports.read_text()
 
 
+def test_render_uses_entrypoints_manifest(tmp_path: Path) -> None:
+    toml = """
+[knowledge]
+enabled = true
+
+[[knowledge.sources]]
+name = "kb"
+type = "path"
+kind = "profiles"
+path = "."
+mount = "refs/knowledge/kb"
+profiles = ["common"]
+"""
+    project_root = _create_project(tmp_path, toml)
+
+    mount = project_root / "refs" / "knowledge" / "kb"
+    (mount / "profiles").mkdir(parents=True)
+    (mount / "profiles" / "common.md").write_text("# Common\n", encoding="utf-8")
+    (mount / "docs").mkdir()
+    (mount / "docs" / "agent-guide.md").write_text("# Agent\n", encoding="utf-8")
+    (mount / "entrypoints.toml").write_text(
+        '[profiles.common]\nimports = ["profiles/common.md", "docs/agent-guide.md"]\n',
+        encoding="utf-8",
+    )
+
+    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+        result = runner.invoke(app, ["knowledge", "source", "render"])
+
+    assert result.exit_code == 0
+    imports = project_root / ".simctl" / "knowledge" / "enabled" / "imports.md"
+    content = imports.read_text(encoding="utf-8")
+    assert "@refs/knowledge/kb/profiles/common.md" in content
+    assert "@refs/knowledge/kb/docs/agent-guide.md" in content
+
+
 def test_render_no_knowledge_section(tmp_path: Path) -> None:
     project_root = _create_project(tmp_path)
 
@@ -590,7 +719,7 @@ path = "../linked-b"
         result = runner.invoke(app, ["knowledge", "source", "sync", "alpha"])
 
     assert result.exit_code == 0
-    assert "Importing insights from external sources" in result.output
+    assert "Importing transported knowledge from external sources" in result.output
     assert "alpha" in result.output
     assert "beta" not in result.output
     assert (
@@ -599,6 +728,50 @@ path = "../linked-b"
     assert not (
         project_root / ".simctl" / "insights" / "beta__beta-note.md"
     ).exists()
+
+
+def test_profile_enable_and_disable_updates_rendered_imports(tmp_path: Path) -> None:
+    project_root = _create_project(
+        tmp_path,
+        """
+[knowledge]
+enabled = true
+
+[[knowledge.sources]]
+name = "kb"
+type = "path"
+kind = "profiles"
+path = "."
+mount = "refs/knowledge/kb"
+profiles = ["common"]
+""",
+    )
+    mount = project_root / "refs" / "knowledge" / "kb" / "profiles"
+    mount.mkdir(parents=True)
+    (mount / "common.md").write_text("# Common\n", encoding="utf-8")
+    (mount / "emses.md").write_text("# EMSES\n", encoding="utf-8")
+
+    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+        enable = runner.invoke(
+            app,
+            ["knowledge", "profile", "enable", "kb", "emses"],
+        )
+        disable = runner.invoke(
+            app,
+            ["knowledge", "profile", "disable", "kb", "common"],
+        )
+
+    assert enable.exit_code == 0
+    assert disable.exit_code == 0
+
+    config = load_knowledge_config(project_root)
+    assert config is not None
+    assert config.sources[0].profiles == ["emses"]
+    imports = (
+        project_root / ".simctl" / "knowledge" / "enabled" / "imports.md"
+    ).read_text(encoding="utf-8")
+    assert "@refs/knowledge/kb/profiles/emses.md" in imports
+    assert "@refs/knowledge/kb/profiles/common.md" not in imports
 
 
 def test_removed_flat_source_commands_are_unavailable() -> None:

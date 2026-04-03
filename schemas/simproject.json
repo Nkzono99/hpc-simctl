@@ -64,6 +64,11 @@
                 "enum": ["git", "path"],
                 "description": "Source type"
               },
+              "kind": {
+                "type": "string",
+                "enum": ["profiles", "project", "insights"],
+                "description": "Source content kind"
+              },
               "url": {
                 "type": "string",
                 "description": "Git URL for git-type sources"

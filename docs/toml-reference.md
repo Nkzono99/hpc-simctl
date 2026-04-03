@@ -63,6 +63,22 @@ mount = "refs/knowledge/personal-knowledge"
 | `knowledge.sources[].mount` | string | No | `"<mount_dir>/<name>"` | Relative mount path |
 | `knowledge.sources[].profiles` | string[] | No | `[]` | Enabled profile names |
 
+Profiles can be toggled later with:
+
+```bash
+simctl knowledge profile enable shared-lab-knowledge common-analysis
+simctl knowledge profile disable shared-lab-knowledge emses-basic
+```
+
+For `kind = "profiles"` repositories, an optional repo-root `entrypoints.toml` can declare the exact files imported into `.simctl/knowledge/enabled/imports.md`:
+
+```toml
+imports = ["docs/agent-user-guide.md"]
+
+[profiles.common-analysis]
+imports = ["profiles/common-analysis.md", "analysis/recipes/common.toml"]
+```
+
 ---
 
 ## simulators.toml
@@ -600,6 +616,7 @@ def summarize(run_dir: Path, base_summary: dict) -> dict:
 
 `simctl analyze collect <survey_dir>` は survey 配下の run を走査し、`<survey_dir>/summary/` に集計成果物を生成する。
 `simctl analyze plot <survey_dir> --x <column> --y <column>` はこの集計結果を使って図を生成する。
+adapter が `default_plot_recipes()` を持つ場合は `--recipe <name>` でも既定の診断図を呼び出せる。
 
 ### 生成されるファイル
 
@@ -657,6 +674,8 @@ def summarize(run_dir: Path, base_summary: dict) -> dict:
 
 ```bash
 simctl analyze plot runs/sheath/angle_scan --list-columns
+simctl analyze plot runs/sheath/angle_scan --list-recipes
+simctl analyze plot runs/sheath/angle_scan --recipe completion-vs-dt
 simctl analyze plot runs/sheath/angle_scan --x param.tmgrid_dt --y floating_potential_final
 simctl analyze plot runs/sheath/angle_scan --x origin.case --y energy_total_ratio --kind bar
 simctl analyze plot runs/sheath/angle_scan --x param.angle --y ion_flux --group param.seed
@@ -664,12 +683,14 @@ simctl analyze plot runs/sheath/angle_scan --x param.angle --y ion_flux --group 
 
 | Option | Description |
 |--------|-------------|
+| `--recipe` | adapter-aware plot recipe 名。`--x` / `--y` の既定値を recipe から解決 |
 | `--x` | x 軸列名 |
 | `--y` | y 軸列名 (数値列) |
 | `--kind` | `auto`, `line`, `scatter`, `bar` |
 | `--group` | シリーズ分割に使う列名 |
 | `--output` | 保存先パス |
 | `--list-columns` | 利用可能な列を表示して終了 |
+| `--list-recipes` | 利用可能な adapter recipe を表示して終了 |
 
 `--kind auto` では、x 列が数値なら line、非数値なら bar を選ぶ。
 

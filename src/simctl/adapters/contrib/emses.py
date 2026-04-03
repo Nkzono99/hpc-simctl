@@ -303,6 +303,42 @@ class EmseAdapter(SimulatorAdapter):
             },
         }
 
+    @classmethod
+    def default_plot_recipes(cls) -> dict[str, dict[str, Any]]:
+        """Return default survey plot recipes for EMSES studies."""
+        return {
+            "completion-vs-dt": {
+                "description": (
+                    "Check how far each run advanced as the EMSES timestep changes."
+                ),
+                "x": ["param.tmgrid.dt", "dt"],
+                "y": ["last_step"],
+                "kind": "line",
+                "group_by": ["origin.case"],
+                "title": "EMSES completion vs dt",
+            },
+            "progress-vs-target": {
+                "description": (
+                    "Compare achieved steps against requested nstep across runs."
+                ),
+                "x": ["nstep"],
+                "y": ["last_step"],
+                "kind": "scatter",
+                "group_by": ["origin.case"],
+                "title": "EMSES progress vs target steps",
+            },
+            "field-output-vs-nx": {
+                "description": (
+                    "Track how many HDF5 field outputs were produced at each x-grid size."
+                ),
+                "x": ["param.tmgrid.nx", "nx"],
+                "y": ["output_counts.hdf5_fields"],
+                "kind": "line",
+                "group_by": ["origin.case"],
+                "title": "EMSES field outputs vs nx",
+            },
+        }
+
     def validate_params(
         self,
         case_data: dict[str, Any],

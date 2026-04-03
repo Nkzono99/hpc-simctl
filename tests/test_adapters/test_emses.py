@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import importlib.util
+import sys
+import types
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -96,7 +99,64 @@ class TestCaseTemplate:
         assert "potential_density_profile.png" in summarize_script
         assert "unit.phi.reverse" in summarize_script
         assert "inp.npc" in summarize_script
+        assert 'input_path=str(input_path)' in summarize_script
+        assert 'output_directory=str(output_dir)' in summarize_script
         assert "energy_total.png" not in summarize_script
+
+    def test_summarize_scaffold_uses_input_and_latest_output_dirs(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        templates = EmseAdapter.case_template()
+        script_path = tmp_path / "summarize.py"
+        script_path.write_text(templates["summarize.py"], encoding="utf-8")
+
+        run_dir = tmp_path / "R20260403-0001"
+        (run_dir / "input").mkdir(parents=True)
+        (run_dir / "work" / "latest").mkdir(parents=True)
+        (run_dir / "analysis").mkdir()
+        (run_dir / "input" / "plasma.toml").write_text(
+            "[jobcon]\nnstep = 10\n",
+            encoding="utf-8",
+        )
+
+        calls: list[dict[str, str]] = []
+
+        class FakeEmout:
+            def __init__(self, *args: Any, **kwargs: Any) -> None:
+                calls.append(
+                    {
+                        "input_path": str(kwargs.get("input_path", "")),
+                        "output_directory": str(kwargs.get("output_directory", "")),
+                    }
+                )
+
+        fake_module = types.ModuleType("emout")
+        fake_module.Emout = FakeEmout  # type: ignore[attr-defined]
+
+        spec = importlib.util.spec_from_file_location(
+            "_emses_summarize_test",
+            script_path,
+        )
+        assert spec is not None
+        assert spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+
+        original = sys.modules.get("emout")
+        sys.modules["emout"] = fake_module
+        try:
+            spec.loader.exec_module(module)
+            result = module.summarize(run_dir, {})  # type: ignore[attr-defined]
+        finally:
+            if original is None:
+                sys.modules.pop("emout", None)
+            else:
+                sys.modules["emout"] = original
+
+        assert result == {}
+        assert len(calls) == 1
+        assert calls[0]["input_path"] == str(run_dir / "input" / "plasma.toml")
+        assert calls[0]["output_directory"] == str(run_dir / "work" / "latest")
 
 
 # ===================================================================

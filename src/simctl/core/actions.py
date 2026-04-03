@@ -280,6 +280,14 @@ ACTION_SPECS: dict[str, ActionSpec] = {
             "recommended before recording a new high-confidence fact from fresh survey results",
         ),
     ),
+    "promote_fact": ActionSpec(
+        name="promote_fact",
+        description="Promote an imported candidate fact into local curated facts.",
+        required_params=("project_root", "fact_id"),
+        preconditions=("candidate fact exists",),
+        risk_level="low",
+        cost_class="low",
+    ),
 }
 
 
@@ -966,6 +974,30 @@ def add_fact(
     )
 
 
+def promote_fact(project_root: Path, fact_id: str) -> ActionResult:
+    """Promote an imported candidate fact into local curated facts."""
+    from simctl.core.knowledge import promote_candidate_fact
+
+    try:
+        promoted = promote_candidate_fact(project_root, fact_id)
+    except LookupError as exc:
+        return _precondition_fail("promote_fact", str(exc))
+    except RuntimeError as exc:
+        return _error("promote_fact", str(exc))
+
+    return ActionResult(
+        action="promote_fact",
+        status=ActionStatus.SUCCESS,
+        message=f"Promoted fact {fact_id} -> {promoted.id}",
+        data={
+            "fact_id": promoted.id,
+            "source_fact_id": fact_id,
+            "confidence": promoted.confidence,
+            "fact_type": promoted.fact_type,
+        },
+    )
+
+
 # ---------------------------------------------------------------------------
 # Dispatch
 # ---------------------------------------------------------------------------
@@ -984,6 +1016,7 @@ _DISPATCH: dict[str, Any] = {
     "purge_work": purge_work,
     "save_insight": save_insight,
     "add_fact": add_fact,
+    "promote_fact": promote_fact,
 }
 
 

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hpc-simctl"
-version = "0.1.7"
+version = "0.1.8"
 description = "HPC simulation run management CLI tool for Slurm-based environments"
 readme = "README.md"
 license = "Apache-2.0"
@@ -13,6 +13,7 @@ dependencies = [
     "typer>=0.9",
     "tomli>=2.0; python_version < '3.11'",
     "tomli-w>=1.0",
+    "tomlkit>=0.13",
     "rich>=13.0",
     "jinja2>=3.1",
 ]

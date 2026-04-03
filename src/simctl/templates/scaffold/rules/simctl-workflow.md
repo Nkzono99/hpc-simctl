@@ -29,5 +29,10 @@
 ## 知見の記録
 - 実験の知見・結果は Agent の memory ではなく `/learn` で保存する
 - 保存先: `.simctl/insights/`, `.simctl/facts.toml`
+- 外部 source から来た候補 fact は `.simctl/knowledge/candidates/facts/` に入る
+- 候補 fact を採用するときは `simctl knowledge promote-fact <source>:<fact_id>` を使う
 - `high` confidence は複数 run の再現か deterministic 確認がある場合だけ使う
 
+## 解析 scratch
+- 試行中の図・ノート・一時集計は `runs/**/analysis/scratch/` に置く
+- `analysis/summary.json` や curated figure を scratch 出力で上書きしない

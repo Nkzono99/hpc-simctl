@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 _SIMCTL_DIR = ".simctl"
 _INSIGHTS_DIR = "insights"
 _KNOWLEDGE_DIR = "knowledge"
+_CANDIDATE_FACTS_DIR = "candidates/facts"
 
 # Valid insight types
 INSIGHT_TYPES = frozenset(
@@ -89,6 +90,13 @@ def get_knowledge_dir(project_root: Path) -> Path:
     """Return the .simctl/knowledge directory, creating if needed."""
     d = get_simctl_dir(project_root) / _KNOWLEDGE_DIR
     d.mkdir(exist_ok=True)
+    return d
+
+
+def get_candidate_facts_dir(project_root: Path) -> Path:
+    """Return the candidate fact transport directory, creating if needed."""
+    d = get_knowledge_dir(project_root) / _CANDIDATE_FACTS_DIR
+    d.mkdir(parents=True, exist_ok=True)
     return d
 
 
@@ -239,6 +247,11 @@ class Fact:
         created_at: ISO-format timestamp.
         tags: Searchable tags.
         supersedes: ID of the fact this one replaces (if any).
+        storage: ``"local"`` or ``"candidate"``.
+        transport_source: Candidate source identifier for imported facts.
+        transport_kind: Candidate source kind (``project`` / ``insights``).
+        transport_path: Source path used during transport.
+        upstream_id: Original fact ID before local namespacing.
     """
 
     id: str
@@ -256,6 +269,11 @@ class Fact:
     created_at: str = ""
     tags: list[str] = field(default_factory=list)
     supersedes: str = ""
+    storage: str = "local"
+    transport_source: str = ""
+    transport_kind: str = ""
+    transport_path: str = ""
+    upstream_id: str = ""
 
     # Kept for backward compatibility with old facts.toml files
     # that use "scope" and "evidence" as flat strings.
@@ -282,60 +300,127 @@ class Fact:
         return ": ".join(parts) if parts else ""
 
 
-def load_facts(project_root: Path) -> list[Fact]:
-    """Load structured facts from .simctl/facts.toml.
+def _load_facts_document(path: Path) -> dict[str, Any]:
+    with open(path, "rb") as f:
+        raw = tomllib.load(f)
+    if not isinstance(raw, dict):
+        msg = f"Invalid facts document: {path}"
+        raise RuntimeError(msg)
+    return raw
+
+
+def _coerce_fact_entry(
+    d: dict[str, Any],
+    *,
+    storage: str,
+    transport_source: str,
+    transport_kind: str,
+    transport_path: str,
+) -> Fact:
+    raw_id = str(d.get("id", "")).strip()
+    fact_id = raw_id
+    upstream_id = ""
+    if storage != "local" and transport_source:
+        fact_id = f"{transport_source}:{raw_id}" if raw_id else transport_source
+        upstream_id = raw_id
+
+    # Migrate legacy "scope" string -> scope_text
+    scope_case = d.get("scope_case", "")
+    scope_text = d.get("scope_text", "")
+    if not scope_case and not scope_text:
+        legacy_scope = d.get("scope", "")
+        if legacy_scope:
+            scope_text = legacy_scope
+
+    # Migrate legacy "evidence" string -> evidence_kind
+    evidence_kind = d.get("evidence_kind", "")
+    evidence_ref = d.get("evidence_ref", "")
+    if not evidence_kind and not evidence_ref:
+        legacy_evidence = d.get("evidence", "")
+        if legacy_evidence:
+            evidence_kind = legacy_evidence
+
+    supersedes = str(d.get("supersedes", "")).strip()
+    if supersedes and storage != "local" and transport_source:
+        supersedes = f"{transport_source}:{supersedes}"
+
+    return Fact(
+        id=fact_id,
+        claim=d.get("claim", ""),
+        fact_type=d.get("fact_type", "observation"),
+        simulator=d.get("simulator", ""),
+        scope_case=scope_case,
+        scope_text=scope_text,
+        param_name=d.get("param_name", ""),
+        confidence=d.get("confidence", "medium"),
+        source_run=d.get("source_run", ""),
+        source_project=d.get("source_project", ""),
+        evidence_kind=evidence_kind,
+        evidence_ref=evidence_ref,
+        created_at=d.get("created_at", ""),
+        tags=list(d.get("tags", [])),
+        supersedes=supersedes,
+        storage=storage,
+        transport_source=transport_source,
+        transport_kind=transport_kind,
+        transport_path=transport_path,
+        upstream_id=upstream_id,
+    )
+
+
+def load_facts_file(
+    path: Path,
+    *,
+    storage: str = "local",
+    transport_source: str = "",
+    transport_kind: str = "",
+    transport_path: str = "",
+) -> list[Fact]:
+    """Load facts from an arbitrary facts TOML document.
 
     Handles both the new structured schema (with ``fact_type``,
     ``simulator``, ``scope_case``, etc.) and the legacy flat schema
     (with ``scope`` and ``evidence`` as plain strings).
     """
-    facts_file = project_root / _SIMCTL_DIR / _FACTS_FILE
-    if not facts_file.is_file():
-        return []
-
-    with open(facts_file, "rb") as f:
-        raw = tomllib.load(f)
+    raw = _load_facts_document(path)
+    transport = raw.get("transport", {})
+    resolved_source = transport_source or str(transport.get("source", "")).strip()
+    resolved_kind = transport_kind or str(transport.get("kind", "")).strip()
+    resolved_path = transport_path or str(transport.get("source_path", "")).strip()
 
     facts: list[Fact] = []
     for d in raw.get("facts", []):
         if not isinstance(d, dict):
             continue
-
-        # Migrate legacy "scope" string -> scope_text
-        scope_case = d.get("scope_case", "")
-        scope_text = d.get("scope_text", "")
-        if not scope_case and not scope_text:
-            legacy_scope = d.get("scope", "")
-            if legacy_scope:
-                scope_text = legacy_scope
-
-        # Migrate legacy "evidence" string -> evidence_kind
-        evidence_kind = d.get("evidence_kind", "")
-        evidence_ref = d.get("evidence_ref", "")
-        if not evidence_kind and not evidence_ref:
-            legacy_evidence = d.get("evidence", "")
-            if legacy_evidence:
-                evidence_kind = legacy_evidence
-
         facts.append(
-            Fact(
-                id=d.get("id", ""),
-                claim=d.get("claim", ""),
-                fact_type=d.get("fact_type", "observation"),
-                simulator=d.get("simulator", ""),
-                scope_case=scope_case,
-                scope_text=scope_text,
-                param_name=d.get("param_name", ""),
-                confidence=d.get("confidence", "medium"),
-                source_run=d.get("source_run", ""),
-                source_project=d.get("source_project", ""),
-                evidence_kind=evidence_kind,
-                evidence_ref=evidence_ref,
-                created_at=d.get("created_at", ""),
-                tags=list(d.get("tags", [])),
-                supersedes=d.get("supersedes", ""),
+            _coerce_fact_entry(
+                d,
+                storage=storage,
+                transport_source=resolved_source,
+                transport_kind=resolved_kind,
+                transport_path=resolved_path,
             )
         )
+    return facts
+
+
+def load_facts(project_root: Path) -> list[Fact]:
+    """Load structured facts from .simctl/facts.toml."""
+    facts_file = project_root / _SIMCTL_DIR / _FACTS_FILE
+    if not facts_file.is_file():
+        return []
+    return load_facts_file(facts_file)
+
+
+def load_candidate_facts(project_root: Path) -> list[Fact]:
+    """Load imported candidate facts from .simctl/knowledge/candidates/facts/."""
+    facts_dir = project_root / _SIMCTL_DIR / _KNOWLEDGE_DIR / _CANDIDATE_FACTS_DIR
+    if not facts_dir.is_dir():
+        return []
+
+    facts: list[Fact] = []
+    for facts_file in sorted(facts_dir.glob("*.toml")):
+        facts.extend(load_facts_file(facts_file, storage="candidate"))
     return facts
 
 
@@ -413,6 +498,42 @@ def next_fact_id(project_root: Path) -> str:
     return f"f{max_num + 1:03d}"
 
 
+def promote_candidate_fact(project_root: Path, fact_id: str) -> Fact:
+    """Copy one imported candidate fact into the local curated facts store."""
+    source_fact = next(
+        (fact for fact in load_candidate_facts(project_root) if fact.id == fact_id),
+        None,
+    )
+    if source_fact is None:
+        msg = f"Candidate fact not found: {fact_id}"
+        raise LookupError(msg)
+
+    promoted = Fact(
+        id=next_fact_id(project_root),
+        claim=source_fact.claim,
+        fact_type=source_fact.fact_type,
+        simulator=source_fact.simulator,
+        scope_case=source_fact.scope_case,
+        scope_text=source_fact.scope_text,
+        param_name=source_fact.param_name,
+        confidence=source_fact.confidence,
+        source_run=source_fact.source_run,
+        source_project=source_fact.source_project or source_fact.transport_source,
+        evidence_kind=source_fact.evidence_kind
+        or ("shared_fact" if source_fact.transport_source else ""),
+        evidence_ref=source_fact.evidence_ref
+        or (
+            f"fact:{source_fact.transport_source}:{source_fact.upstream_id}"
+            if source_fact.transport_source and source_fact.upstream_id
+            else ""
+        ),
+        created_at=source_fact.created_at,
+        tags=list(source_fact.tags),
+    )
+    save_fact(project_root, promoted)
+    return promoted
+
+
 def query_facts(
     project_root: Path,
     *,
@@ -423,6 +544,7 @@ def query_facts(
     fact_type: str = "",
     param_name: str = "",
     exclude_superseded: bool = True,
+    include_candidates: bool = False,
 ) -> list[Fact]:
     """Query facts with optional filters.
 
@@ -436,11 +558,15 @@ def query_facts(
         param_name: Must match param_name field exactly.
         exclude_superseded: If True, exclude facts that have been
             superseded by newer facts.
+        include_candidates: If True, include imported candidate facts
+            from external knowledge transport in addition to local facts.
     """
     confidence_order = {"high": 3, "medium": 2, "low": 1}
     min_level = confidence_order.get(min_confidence, 0)
 
-    facts = load_facts(project_root)
+    facts = list(load_facts(project_root))
+    if include_candidates:
+        facts.extend(load_candidate_facts(project_root))
 
     # Build set of superseded IDs
     superseded_ids: set[str] = set()

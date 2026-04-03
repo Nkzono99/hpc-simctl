@@ -22,6 +22,8 @@ simctl analyze collect $ARGUMENTS
 
 ```bash
 simctl analyze plot $ARGUMENTS --list-columns
+simctl analyze plot $ARGUMENTS --list-recipes
+simctl analyze plot $ARGUMENTS --recipe completion-vs-dt
 simctl analyze plot $ARGUMENTS --x param.some_axis --y some_metric
 ```
 
@@ -30,8 +32,9 @@ simctl analyze plot $ARGUMENTS --x param.some_axis --y some_metric
 1. `simctl analyze summarize` で各 run の要約を生成する
 2. survey の場合は `simctl analyze collect <dir>` を実行する
 3. `collect` が生成した `summary/survey_summary.csv`, `summary/survey_summary.json`, `summary/figures_index.json`, `summary/survey_summary.md` を確認する
-4. 必要なら `simctl analyze plot <dir> --list-columns` で列を確認し、`--x/--y` を指定して図を生成する
-5. completed run に `analysis/summary.json` が無い場合、`collect` が自動 summarize することを前提に進めてよい
-6. 結果の概要と注目すべき傾向を報告する
-7. 知見があれば `/learn` で保存する
-
+4. まず `simctl analyze plot <dir> --list-recipes` を試し、使える recipe があれば `--recipe` を優先する
+5. recipe が無い場合は `simctl analyze plot <dir> --list-columns` で列を確認し、`--x/--y` を指定して図を生成する
+6. 試行中の図やメモは `runs/**/analysis/scratch/` に置き、curated な出力だけを `analysis/` に残す
+7. completed run に `analysis/summary.json` が無い場合、`collect` が自動 summarize することを前提に進めてよい
+8. 結果の概要と注目すべき傾向を報告する
+9. 知見があれば `/learn` で保存する

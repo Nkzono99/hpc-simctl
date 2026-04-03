@@ -11,7 +11,9 @@ from simctl.cli.run_lookup import resolve_run_or_cwd
 from simctl.core.actions import ActionStatus, execute_action
 from simctl.core.analysis import (
     load_survey_plot_table,
+    list_survey_plot_recipes,
     render_survey_plot,
+    resolve_survey_plot_recipe,
 )
 from simctl.core.exceptions import SimctlError
 
@@ -87,6 +89,11 @@ def plot(
     survey_dir: Path = typer.Argument(None, help="Survey directory (defaults to cwd)."),
     x: str | None = typer.Option(None, "--x", help="Column for the x-axis."),
     y: str | None = typer.Option(None, "--y", help="Column for the y-axis."),
+    recipe: str = typer.Option(
+        "",
+        "--recipe",
+        help="Adapter-aware plot recipe name.",
+    ),
     kind: str = typer.Option(
         "auto",
         "--kind",
@@ -109,8 +116,13 @@ def plot(
         "--list-columns",
         help="Print available plot columns and exit.",
     ),
+    list_recipes: bool = typer.Option(
+        False,
+        "--list-recipes",
+        help="Print available adapter plot recipes and exit.",
+    ),
 ) -> None:
-    """Render a simple survey plot from collected summary data."""
+    """Render a survey plot from explicit columns or an adapter recipe."""
     if survey_dir is None:
         survey_dir = Path.cwd()
     if not survey_dir.is_dir():
@@ -129,9 +141,58 @@ def plot(
             typer.echo(f"  {column}")
         return
 
+    if list_recipes:
+        try:
+            recipes = list_survey_plot_recipes(survey_dir)
+        except (OSError, TypeError, json.JSONDecodeError, SimctlError) as e:
+            typer.echo(f"Error loading plot recipes: {e}", err=True)
+            raise typer.Exit(code=1) from None
+
+        if not recipes:
+            typer.echo("No adapter plot recipes available for this survey.")
+            return
+
+        typer.echo("Available plot recipes:")
+        for item in recipes:
+            x_candidates = ", ".join(item.x_candidates)
+            y_candidates = ", ".join(item.y_candidates)
+            group_candidates = (
+                ", ".join(item.group_by_candidates)
+                if item.group_by_candidates
+                else "(none)"
+            )
+            typer.echo(f"  {item.name} [{item.adapter}]")
+            if item.description:
+                typer.echo(f"    {item.description}")
+            typer.echo(f"    x: {x_candidates}")
+            typer.echo(f"    y: {y_candidates}")
+            typer.echo(f"    kind: {item.kind}")
+            typer.echo(f"    group_by: {group_candidates}")
+        return
+
+    resolved_recipe = None
+    if recipe:
+        try:
+            resolved_recipe = resolve_survey_plot_recipe(survey_dir, recipe)
+        except (OSError, TypeError, json.JSONDecodeError, SimctlError) as e:
+            typer.echo(f"Error resolving plot recipe: {e}", err=True)
+            raise typer.Exit(code=1) from None
+
+    if not x and resolved_recipe is not None:
+        x = resolved_recipe.x
+    if not y and resolved_recipe is not None:
+        y = resolved_recipe.y
+    if not group_by and resolved_recipe is not None:
+        group_by = resolved_recipe.group_by
+    if kind == "auto" and resolved_recipe is not None:
+        kind = resolved_recipe.recipe.kind
+    if not title and resolved_recipe is not None:
+        title = resolved_recipe.recipe.title
+
     if not x or not y:
         typer.echo(
-            "Error: --x and --y are required unless --list-columns is used.",
+            "Error: --x and --y are required unless --recipe, --list-columns, "
+            "or --list-recipes is used.",
             err=True,
         )
         raise typer.Exit(code=1)
@@ -151,6 +212,8 @@ def plot(
         raise typer.Exit(code=1) from None
 
     typer.echo(f"Plot written: {result.output_path}")
+    if resolved_recipe is not None:
+        typer.echo(f"  Recipe: {resolved_recipe.recipe.name}")
     typer.echo(f"  Kind: {result.kind}")
     typer.echo(f"  Points: {result.points_plotted}")
     if result.generated_summaries > 0:

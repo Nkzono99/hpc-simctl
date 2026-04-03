@@ -7,6 +7,7 @@ provenance collection.
 
 from __future__ import annotations
 
+import shlex
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
@@ -160,6 +161,16 @@ class SimulatorAdapter(ABC):
         """
         return {}
 
+    @classmethod
+    def default_plot_recipes(cls) -> dict[str, dict[str, Any]]:
+        """Return adapter-aware survey plot recipes.
+
+        Each recipe may define ``description``, ``x``, ``y``, ``kind``,
+        ``group_by``, and ``title``. ``x`` / ``y`` / ``group_by`` may be
+        either a string or a list of fallback column names.
+        """
+        return {}
+
     def validate_params(
         self,
         case_data: dict[str, Any],
@@ -241,6 +252,39 @@ class SimulatorAdapter(ABC):
             Command as a list of strings.
         """
         ...
+
+    def build_version_capture_commands(
+        self,
+        runtime_info: dict[str, Any],
+        program_cmd: list[str],
+        run_dir: Path,
+    ) -> list[str]:
+        """Return shell commands that record simulator version metadata.
+
+        The default implementation probes ``--version`` and ``-V`` on the
+        resolved executable and writes the output to ``SIMULATOR_VERSION.txt``
+        in the run's ``work/`` directory. Failures are swallowed so the main
+        simulation is not blocked by missing version flags.
+        """
+        executable = str(runtime_info.get("executable", "")).strip()
+        if not executable and program_cmd:
+            executable = str(program_cmd[0]).strip()
+        if not executable:
+            return []
+
+        quoted = shlex.quote(executable)
+        output_path = shlex.quote(str(run_dir / "work" / "SIMULATOR_VERSION.txt"))
+        display = shlex.quote(f"executable: {executable}")
+        return [
+            (
+                "( "
+                f"printf '%s\\n' {display}; "
+                "date -Iseconds; "
+                f"{quoted} --version || {quoted} -V || "
+                "printf '%s\\n' 'version probe unsupported'"
+                f" ) > {output_path} 2>&1 || true"
+            )
+        ]
 
     @abstractmethod
     def detect_outputs(self, run_dir: Path) -> dict[str, Any]:

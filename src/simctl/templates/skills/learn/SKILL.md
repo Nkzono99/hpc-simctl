@@ -40,4 +40,5 @@ simctl knowledge add-fact "<claim>" \
 
 - `high` confidence は複数 run の再現か deterministic 確認がある場合だけ使う
 - 既存 fact を修正するときは `--supersedes fNNN` を使う
-
+- 外部 source から同期された candidate fact は `simctl knowledge facts` で確認できる
+- 採用する candidate fact は `simctl knowledge promote-fact <source>:<fact_id>` で local fact に昇格する

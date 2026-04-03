@@ -20,4 +20,5 @@ runs/<path>/Rxxxx/
 - `input/*`, `submit/job.sh` を直接作らない
 - 状態確認は `simctl runs status`、同期は `simctl runs sync`
 - 解析は `simctl analyze summarize` / `simctl analyze collect`
-
+- 試行中の図・メモ・一時解析物は `analysis/scratch/` に置く
+- 共有したい図や summary は `analysis/` の curated 出力に昇格する

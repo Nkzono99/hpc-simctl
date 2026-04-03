@@ -245,6 +245,32 @@ class BeachAdapter(SimulatorAdapter):
             },
         }
 
+    @classmethod
+    def default_plot_recipes(cls) -> dict[str, dict[str, Any]]:
+        """Return default survey plot recipes for BEACH studies."""
+        return {
+            "charge-history-vs-dt": {
+                "description": (
+                    "Check charge-history coverage as the BEACH timestep changes."
+                ),
+                "x": ["param.sim.dt", "sim_dt"],
+                "y": ["output_counts.charge_history"],
+                "kind": "line",
+                "group_by": ["param.sim.field_solver", "sim_field_solver"],
+                "title": "BEACH charge-history coverage vs dt",
+            },
+            "potential-history-vs-steps": {
+                "description": (
+                    "Compare potential-history output availability against max_step."
+                ),
+                "x": ["param.sim.max_step", "sim_max_step"],
+                "y": ["output_counts.potential_history"],
+                "kind": "line",
+                "group_by": ["param.sim.field_solver", "sim_field_solver"],
+                "title": "BEACH potential-history coverage vs max_step",
+            },
+        }
+
     def validate_params(
         self,
         case_data: dict[str, Any],

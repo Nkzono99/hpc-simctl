@@ -98,6 +98,8 @@ simctl runs extend --run         # 生成して即投入
 simctl analyze summarize                          # run の要約
 simctl analyze collect runs/sheath/angle_scan     # survey 集計 artifacts (CSV/JSON/report)
 simctl analyze plot runs/sheath/angle_scan --list-columns
+simctl analyze plot runs/sheath/angle_scan --list-recipes
+simctl analyze plot runs/sheath/angle_scan --recipe completion-vs-dt
 simctl analyze plot runs/sheath/angle_scan --x param.angle --y ion_flux
 ```
 
@@ -116,7 +118,9 @@ simctl knowledge add-fact "claim" -t constraint -s emses \
   --evidence-kind run_observation --evidence-ref run:R20260330-0001 \
   -c high --tags "stability,cfl"
 simctl knowledge facts
+simctl knowledge facts --local-only
 simctl knowledge facts --scope emses --tag stability -c medium
+simctl knowledge promote-fact shared:f004
 
 # 外部 knowledge source
 simctl knowledge source attach path other-project ../other-project --kind project
@@ -168,4 +172,3 @@ simctl doctor             # 環境検査
 simctl update-refs        # refs/ 更新 + cookbook/ナレッジ再生成
 simctl config show        # 設定表示
 ```
-

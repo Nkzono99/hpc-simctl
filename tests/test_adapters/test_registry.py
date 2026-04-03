@@ -110,6 +110,23 @@ def test_list_adapters_empty(registry: AdapterRegistry) -> None:
     assert registry.list_adapters() == []
 
 
+def test_default_version_capture_commands_quote_paths(tmp_path: Path) -> None:
+    """Default version capture writes to work/ and quotes spaced executables."""
+    adapter = _StubAdapter()
+    commands = adapter.build_version_capture_commands(
+        {"executable": "/opt/my solver/bin/solver"},
+        [],
+        tmp_path,
+    )
+
+    assert len(commands) == 1
+    command = commands[0]
+    assert "SIMULATOR_VERSION.txt" in command
+    assert str(tmp_path / "work" / "SIMULATOR_VERSION.txt") in command
+    assert "'/opt/my solver/bin/solver' --version" in command
+    assert "printf '%s\\n'" in command
+
+
 def test_load_from_config_unknown_module(registry: AdapterRegistry) -> None:
     """load_from_config logs a warning for missing adapter modules."""
     config = {

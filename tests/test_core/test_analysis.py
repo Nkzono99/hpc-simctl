@@ -5,11 +5,16 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any
+from unittest.mock import MagicMock, patch
 
 import pytest
 import tomli_w
 
-from simctl.core.analysis import prepare_survey_plot_data
+from simctl.core.analysis import (
+    list_survey_plot_recipes,
+    prepare_survey_plot_data,
+    resolve_survey_plot_recipe,
+)
 from simctl.core.exceptions import SimctlError
 
 
@@ -102,3 +107,77 @@ def test_prepare_survey_plot_data_rejects_unknown_columns(tmp_path: Path) -> Non
 
     with pytest.raises(SimctlError, match="Unknown x column"):
         prepare_survey_plot_data(tmp_path, x="param.u", y="energy")
+
+
+def test_list_survey_plot_recipes_reads_adapter_recipes(tmp_path: Path) -> None:
+    _create_run(
+        tmp_path,
+        "R20260401-0001",
+        manifest={
+            "run": {
+                "id": "R20260401-0001",
+                "display_name": "baseline",
+                "status": "completed",
+            },
+            "simulator": {"name": "test_sim", "adapter": "test_adapter"},
+            "params_snapshot": {"u": 400000.0},
+        },
+        summary={"energy": 10.0},
+    )
+
+    mock_adapter_cls = MagicMock()
+    mock_adapter_cls.default_plot_recipes.return_value = {
+        "energy-vs-u": {
+            "description": "Check energy against velocity.",
+            "x": ["param.u"],
+            "y": ["energy"],
+            "kind": "line",
+            "group_by": ["origin.case"],
+            "title": "Energy vs u",
+        }
+    }
+
+    with patch("simctl.core.analysis.get_adapter", return_value=mock_adapter_cls):
+        recipes = list_survey_plot_recipes(tmp_path)
+
+    assert len(recipes) == 1
+    assert recipes[0].name == "energy-vs-u"
+    assert recipes[0].kind == "line"
+    assert recipes[0].x_candidates == ("param.u",)
+
+
+def test_resolve_survey_plot_recipe_uses_first_available_candidates(
+    tmp_path: Path,
+) -> None:
+    _create_run(
+        tmp_path,
+        "R20260401-0001",
+        manifest={
+            "run": {
+                "id": "R20260401-0001",
+                "display_name": "baseline",
+                "status": "completed",
+            },
+            "origin": {"case": "flat_surface"},
+            "simulator": {"name": "test_sim", "adapter": "test_adapter"},
+            "params_snapshot": {"u": 400000.0},
+        },
+        summary={"energy": 10.0},
+    )
+
+    mock_adapter_cls = MagicMock()
+    mock_adapter_cls.default_plot_recipes.return_value = {
+        "energy-vs-u": {
+            "x": ["param.missing", "param.u"],
+            "y": ["missing.energy", "energy"],
+            "group_by": ["origin.case"],
+            "kind": "line",
+        }
+    }
+
+    with patch("simctl.core.analysis.get_adapter", return_value=mock_adapter_cls):
+        resolved = resolve_survey_plot_recipe(tmp_path, "energy-vs-u")
+
+    assert resolved.x == "param.u"
+    assert resolved.y == "energy"
+    assert resolved.group_by == "origin.case"

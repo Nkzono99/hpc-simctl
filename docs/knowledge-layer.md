@@ -41,6 +41,8 @@ project/
       beach.md
       enabled/                   # 有効 profile の展開結果
         imports.md               # CLAUDE.md から @import される
+      candidates/                # 外部 source 由来の候補 knowledge
+        facts/                   # candidate fact transport
     insights/                    # 実験から得た知見
       emses_cfl_limit.md         # 安定性の知見
       mag_scan_results.md        # 実験結果サマリー
@@ -273,6 +275,10 @@ simctl knowledge source render
 simctl knowledge source status
 simctl knowledge source list
 
+# profile の切替
+simctl knowledge profile enable shared-kb common-analysis
+simctl knowledge profile disable shared-kb emses-basic
+
 # 切断
 simctl knowledge source detach shared-kb
 ```
@@ -285,6 +291,7 @@ simctl knowledge source detach shared-kb
 repo/
   README.md              # 必須
   CLAUDE.md              # 推奨 (Agent 向け概要)
+  entrypoints.toml       # 推奨 (imports の明示的 manifest)
   profiles/              # 必須
     common-analysis.md   # profile ファイル (Markdown)
     emses-basic.md
@@ -292,6 +299,8 @@ repo/
   analysis/              # 解析手法・recipe
   commands/              # Agent 用コマンドテンプレート
 ```
+
+`entrypoints.toml` がある場合、`render_imports()` はそこに列挙された `imports` / `profiles.<name>.imports` だけを `imports.md` に載せる。manifest に無い profile は `profiles/<name>.md` へフォールバックする。`validate_source_structure()` は `entrypoints.toml` の parse、参照先ファイル、profile 内 `@...` import、`analysis/observables/*.toml` と `analysis/recipes/*.toml` も検査する。
 
 ### CLAUDE.md 連携
 
@@ -363,6 +372,10 @@ simctl knowledge list
 simctl knowledge list -s emses -t constraint
 simctl knowledge facts
 simctl knowledge facts --scope emses -c high
+simctl knowledge facts --local-only
+
+# shared fact の昇格
+simctl knowledge promote-fact shared:f004
 
 # 表示
 simctl knowledge show emses_cfl_limit
@@ -385,8 +398,8 @@ AI エージェントは `/learn` スキルを使って知見を保存する。
 | `kind` | 用途 | 同期時の扱い |
 |--------|------|-------------|
 | `profiles` | 共有 knowledge repo を mount して `profiles/` を読む | `refs/knowledge/<name>/` に同期し、`imports.md` を再生成 |
-| `project` | 別の simctl project の `.simctl/insights/` を参照 | insights を自プロジェクトへコピー |
-| `insights` | `insights/` ディレクトリを持つ共有 knowledge store を参照 | insights を自プロジェクトへコピー |
+| `project` | 別の simctl project の `.simctl/insights/` / `.simctl/facts.toml` を参照 | insights をコピーし、facts は candidate transport に同期 |
+| `insights` | `insights/` ディレクトリや `facts.toml` を持つ共有 knowledge store を参照 | insights をコピーし、facts は candidate transport に同期 |
 
 ```toml
 [[knowledge.sources]]
@@ -410,12 +423,19 @@ simctl knowledge source sync
   → 各 knowledge source を同期 (git clone/pull or path validate)
   → kind=profiles の source から imports.md を再生成
   → kind=project / kind=insights の source から insight を取り込む
+  → kind=project / kind=insights の source から facts を
+    .simctl/knowledge/candidates/facts/*.toml に同期する
   → 結果を報告
 ```
 
 取り込まれた insight は source 名で namespace されたファイル名
 (`alpha__stability.md` など) で保存される。同じ namespace 内で
 同名の insight が既に存在する場合はスキップされる。
+
+shared facts は candidate として source ごとの TOML に保持され、`knowledge facts`
+では local fact と一緒に参照できる。採用する fact は
+`simctl knowledge promote-fact <source>:<fact_id>` で local `.simctl/facts.toml`
+へ昇格する。
 
 ## AI エージェントの推奨ワークフロー
 
@@ -441,4 +461,3 @@ simctl knowledge source sync
 7. ITERATE: 知見に基づいてパラメータを改善
    → 次の実験サイクルへ
 ```
-

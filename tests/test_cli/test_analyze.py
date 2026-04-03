@@ -12,6 +12,7 @@ import tomli_w
 from typer.testing import CliRunner
 
 from simctl.cli.main import app
+from simctl.core.analysis import ResolvedSurveyPlotRecipe, SurveyPlotRecipe
 
 runner = CliRunner()
 
@@ -552,3 +553,73 @@ class TestPlot:
         assert "Plot written" in result.output
         assert "Kind: line" in result.output
 
+    def test_plot_lists_recipes(self, tmp_path: Path) -> None:
+        recipe = SurveyPlotRecipe(
+            name="energy-vs-u",
+            adapter="test_adapter",
+            description="Check energy against u.",
+            x_candidates=("param.u",),
+            y_candidates=("energy",),
+            kind="line",
+            group_by_candidates=("origin.case",),
+            title="Energy vs u",
+        )
+
+        with patch(
+            "simctl.cli.analyze.list_survey_plot_recipes",
+            return_value=(recipe,),
+        ):
+            result = runner.invoke(
+                app,
+                ["analyze", "plot", str(tmp_path), "--list-recipes"],
+            )
+
+        assert result.exit_code == 0
+        assert "Available plot recipes" in result.output
+        assert "energy-vs-u" in result.output
+        assert "param.u" in result.output
+
+    def test_plot_recipe_resolves_columns_before_render(self, tmp_path: Path) -> None:
+        output_path = tmp_path / "summary" / "plots" / "energy_vs_param_u.png"
+        resolved_recipe = ResolvedSurveyPlotRecipe(
+            recipe=SurveyPlotRecipe(
+                name="energy-vs-u",
+                adapter="test_adapter",
+                description="Check energy against u.",
+                x_candidates=("param.u",),
+                y_candidates=("energy",),
+                kind="line",
+                group_by_candidates=("origin.case",),
+                title="Energy vs u",
+            ),
+            x="param.u",
+            y="energy",
+            group_by="origin.case",
+        )
+        mock_result = MagicMock()
+        mock_result.output_path = output_path
+        mock_result.kind = "line"
+        mock_result.points_plotted = 2
+        mock_result.generated_summaries = 0
+
+        with patch(
+            "simctl.cli.analyze.resolve_survey_plot_recipe",
+            return_value=resolved_recipe,
+        ):
+            with patch(
+                "simctl.cli.analyze.render_survey_plot",
+                return_value=mock_result,
+            ) as render_mock:
+                result = runner.invoke(
+                    app,
+                    ["analyze", "plot", str(tmp_path), "--recipe", "energy-vs-u"],
+                )
+
+        assert result.exit_code == 0
+        assert "Recipe: energy-vs-u" in result.output
+        render_mock.assert_called_once()
+        _, kwargs = render_mock.call_args
+        assert kwargs["x"] == "param.u"
+        assert kwargs["y"] == "energy"
+        assert kwargs["group_by"] == "origin.case"
+        assert kwargs["kind"] == "line"

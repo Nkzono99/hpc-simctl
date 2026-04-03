@@ -370,9 +370,24 @@ def _try_make_emout_plots(
     except Exception:
         return
 
+    input_path = run_dir / "input" / "plasma.toml"
+    if not input_path.is_file():
+        fallback_input = run_dir / "work" / "plasma.toml"
+        if fallback_input.is_file():
+            input_path = fallback_input
+        else:
+            return
+
     work_dir = run_dir / "work"
+    output_dir = work_dir / "latest"
+    if not output_dir.is_dir():
+        output_dir = work_dir
+
     try:
-        data = emout.Emout(work_dir)
+        data = emout.Emout(
+            input_path=str(input_path),
+            output_directory=str(output_dir),
+        )
     except Exception:
         return
 

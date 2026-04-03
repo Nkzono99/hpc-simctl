@@ -16,17 +16,20 @@ from simctl.core.knowledge import (
     FACT_TYPES,
     INSIGHT_TYPES,
     list_insights,
+    promote_candidate_fact,
     query_facts,
 )
 from simctl.core.knowledge_source import (
     ExternalKnowledgeMount,
     KnowledgeSource,
     collect_external_knowledge,
+    import_external_facts,
     import_external_insights,
     load_knowledge_config,
     remove_knowledge_source,
     render_imports,
     save_knowledge_source,
+    set_knowledge_source_profiles,
     sync_all_sources,
     sync_source,
     validate_source_structure,
@@ -42,6 +45,12 @@ knowledge_app = typer.Typer(
 source_app = typer.Typer(
     name="source",
     help="Manage configured external knowledge sources.",
+    no_args_is_help=True,
+)
+
+profile_app = typer.Typer(
+    name="profile",
+    help="Enable or disable profiles on configured knowledge sources.",
     no_args_is_help=True,
 )
 
@@ -314,6 +323,17 @@ def sync(
             typer.echo(f"  {name}: {status}")
 
     if any(source.kind == "profiles" for source in config.sources):
+        for source in selected_sources:
+            if source.kind != "profiles" or not source.mount:
+                continue
+            source_dir = root / source.mount
+            if not source_dir.is_dir():
+                continue
+            issues = validate_source_structure(source_dir)
+            if issues:
+                typer.echo(f"Validation warnings for {source.name}:")
+                for issue in issues:
+                    typer.echo(f"  - {issue}")
         try:
             render_imports(root, config)
             typer.echo("Rendered imports.md")
@@ -324,7 +344,7 @@ def sync(
         source for source in selected_sources if source.kind in {"project", "insights"}
     ]
     if importable_sources:
-        typer.echo("Importing insights from external sources...")
+        typer.echo("Importing transported knowledge from external sources...")
         for source in importable_sources:
             typer.echo(f"  [{source.kind}/{source.source_type}] {source.name}")
         imported, skipped = import_external_insights(
@@ -332,7 +352,16 @@ def sync(
             importable_sources,
             simulator=simulator or "",
         )
-        typer.echo(f"Imported: {imported}, Skipped (exists): {skipped}")
+        synced_sources, imported_facts = import_external_facts(
+            root,
+            importable_sources,
+            simulator=simulator or "",
+        )
+        typer.echo(f"  Insights imported: {imported}, skipped: {skipped}")
+        typer.echo(
+            f"  Candidate facts synced: {imported_facts} "
+            f"across {synced_sources} source(s)"
+        )
 
 
 @knowledge_app.command("add-fact")
@@ -509,12 +538,19 @@ def facts_cmd(
             help="Include facts superseded by newer facts.",
         ),
     ] = False,
+    local_only: Annotated[
+        bool,
+        typer.Option(
+            "--local-only",
+            help="Show only local curated facts and hide imported candidates.",
+        ),
+    ] = False,
     output_json: Annotated[
         bool,
         typer.Option("--json", help="Emit JSON for machine consumption."),
     ] = False,
 ) -> None:
-    """List structured facts from .simctl/facts.toml.
+    """List structured facts from local and transported knowledge stores.
 
     Examples:
       simctl knowledge facts
@@ -537,6 +573,7 @@ def facts_cmd(
         fact_type=fact_type or "",
         param_name=param_name or "",
         exclude_superseded=not include_superseded,
+        include_candidates=not local_only,
     )
 
     if output_json:
@@ -561,6 +598,11 @@ def facts_cmd(
                         "evidence_ref": f.evidence_ref,
                         "tags": list(f.tags),
                         "supersedes": f.supersedes,
+                        "storage": f.storage,
+                        "transport_source": f.transport_source,
+                        "transport_kind": f.transport_kind,
+                        "transport_path": f.transport_path,
+                        "upstream_id": f.upstream_id,
                     }
                     for f in facts
                 ],
@@ -575,6 +617,7 @@ def facts_cmd(
         return
 
     for f in facts:
+        location = f"[{f.storage}]"
         conf_badge = f"[{f.confidence}]"
         extras: list[str] = []
         if f.fact_type:
@@ -586,7 +629,40 @@ def facts_cmd(
         label = ", ".join(part for part in extras if part)
         label_str = f" [{label}]" if label else ""
         scope_str = f" ({f.scope})" if f.scope else ""
-        typer.echo(f"  {f.id} {conf_badge}{label_str}{scope_str}: {f.claim}")
+        transport = (
+            f" from {f.transport_source}"
+            if f.transport_source and f.storage != "local"
+            else ""
+        )
+        typer.echo(
+            f"  {f.id} {location}{conf_badge}{label_str}{scope_str}{transport}: "
+            f"{f.claim}"
+        )
+
+
+@knowledge_app.command("promote-fact")
+def promote_fact(
+    fact_id: Annotated[
+        str,
+        typer.Argument(help="Candidate fact ID to promote, e.g. shared:f004."),
+    ],
+) -> None:
+    """Promote an imported candidate fact into local curated facts.toml."""
+    root = _find_root()
+
+    try:
+        promoted = promote_candidate_fact(root, fact_id)
+    except LookupError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1) from None
+    except RuntimeError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1) from None
+
+    typer.echo(
+        f"Promoted {fact_id} -> {promoted.id}"
+        f" ({promoted.fact_type}, {promoted.confidence})"
+    )
 
 
 # ---------- Knowledge source commands ----------
@@ -828,6 +904,106 @@ def status_cmd() -> None:
         )
 
 
+def _validate_requested_profiles(
+    root: Path,
+    source_name: str,
+    requested_profiles: list[str],
+) -> None:
+    config = load_knowledge_config(root)
+    if config is None:
+        return
+
+    source = next((src for src in config.sources if src.name == source_name), None)
+    if source is None or source.kind != "profiles":
+        return
+
+    mount_path = root / source.mount if source.mount else None
+    if mount_path is None or not mount_path.is_dir():
+        return
+
+    available: set[str] = set()
+    for entry in collect_external_knowledge(root):
+        if entry.name == source_name:
+            available = set(entry.profiles_available)
+            break
+
+    missing = [profile for profile in requested_profiles if profile not in available]
+    if missing:
+        typer.echo(
+            "Error: unknown profiles for "
+            f"{source_name}: {', '.join(missing)}",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+
+@profile_app.command("enable")
+def profile_enable(
+    source_name: Annotated[
+        str,
+        typer.Argument(help="Knowledge source name."),
+    ],
+    profile_names: Annotated[
+        list[str],
+        typer.Argument(help="One or more profile names to enable."),
+    ],
+) -> None:
+    """Enable one or more profiles for a configured source."""
+    root = _find_root()
+    _validate_requested_profiles(root, source_name, profile_names)
+
+    try:
+        updated = set_knowledge_source_profiles(root, source_name, enable=profile_names)
+    except KnowledgeSourceError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1) from None
+
+    typer.echo(
+        f"Enabled profiles for {source_name}: "
+        f"{', '.join(updated.profiles) if updated.profiles else '(none)'}"
+    )
+
+    config = load_knowledge_config(root)
+    if config is not None:
+        imports_path = render_imports(root, config)
+        typer.echo(f"Rendered: {imports_path.relative_to(root)}")
+
+
+@profile_app.command("disable")
+def profile_disable(
+    source_name: Annotated[
+        str,
+        typer.Argument(help="Knowledge source name."),
+    ],
+    profile_names: Annotated[
+        list[str],
+        typer.Argument(help="One or more profile names to disable."),
+    ],
+) -> None:
+    """Disable one or more profiles for a configured source."""
+    root = _find_root()
+
+    try:
+        updated = set_knowledge_source_profiles(
+            root,
+            source_name,
+            disable=profile_names,
+        )
+    except KnowledgeSourceError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1) from None
+
+    typer.echo(
+        f"Enabled profiles for {source_name}: "
+        f"{', '.join(updated.profiles) if updated.profiles else '(none)'}"
+    )
+
+    config = load_knowledge_config(root)
+    if config is not None:
+        imports_path = render_imports(root, config)
+        typer.echo(f"Rendered: {imports_path.relative_to(root)}")
+
+
 @source_app.command("list")
 def source_list_cmd() -> None:
     """Show configured external knowledge sources."""
@@ -842,3 +1018,4 @@ source_app.command("render")(render)
 source_app.command("status")(status_cmd)
 
 knowledge_app.add_typer(source_app, name="source")
+knowledge_app.add_typer(profile_app, name="profile")

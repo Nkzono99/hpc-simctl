@@ -15,6 +15,7 @@ def test_build_claude_settings_exposes_expected_policy() -> None:
     assert "allow" in data["permissions"]
     assert "ask" in data["permissions"]
     assert "deny" in data["permissions"]
+    assert "Bash(simctl analyze plot*)" in data["permissions"]["allow"]
     assert "Edit(/campaign.toml)" in data["permissions"]["allow"]
     assert "Write(/simproject.toml)" in data["permissions"]["ask"]
     assert "Write(/SITE.md)" in data["permissions"]["deny"]
