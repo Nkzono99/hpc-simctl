@@ -6,7 +6,7 @@ from pathlib import Path
 
 import typer
 
-from simctl.core.discovery import resolve_run
+from simctl.core.discovery import discover_runs, resolve_run
 from simctl.core.exceptions import ProjectNotFoundError, RunNotFoundError, SimctlError
 from simctl.core.project import find_project_root
 
@@ -43,4 +43,80 @@ def resolve_run_or_cwd(run: str | None, *, search_dir: Path | None = None) -> Pa
         return resolve_run(run, cwd)
     except SimctlError as e:
         typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1) from None
+
+
+def resolve_run_targets(
+    args: list[str] | None,
+    *,
+    search_dir: Path | None = None,
+) -> list[Path]:
+    """Resolve a list of CLI arguments into a list of run directories.
+
+    Each argument may be:
+
+    - a run identifier (run_id) → resolved to a single run directory;
+    - a path to a run directory (containing ``manifest.toml``) → used as-is;
+    - a path to a directory that *contains* runs (e.g. a survey directory or
+      ``runs/``) → recursively discovered for all run directories underneath.
+
+    If *args* is empty (or ``None``), the search falls back to the current
+    working directory:
+        - if cwd is itself a run directory, return ``[cwd]``;
+        - otherwise discover runs under cwd.
+
+    Args:
+        args: List of run identifiers or paths from the CLI.
+        search_dir: Override the search root (defaults to ``Path.cwd()``).
+
+    Returns:
+        A sorted list of unique run directories (by path).
+    """
+    cwd = (search_dir or Path.cwd()).resolve()
+
+    # Empty arglist → use cwd as either a run dir or a discovery root.
+    if not args:
+        if (cwd / "manifest.toml").exists():
+            return [cwd]
+        try:
+            return _discover_or_error(cwd)
+        except typer.Exit:
+            typer.echo(
+                "Error: cwd is not a run directory and contains no runs. "
+                "Specify a run identifier or directory.",
+                err=True,
+            )
+            raise
+
+    seen: dict[Path, None] = {}  # ordered set
+    for arg in args:
+        candidate = Path(arg)
+        # Direct path?
+        if candidate.exists():
+            resolved = candidate.resolve()
+            if (resolved / "manifest.toml").exists():
+                seen.setdefault(resolved, None)
+                continue
+            # Directory containing runs.
+            for rd in _discover_or_error(resolved):
+                seen.setdefault(rd, None)
+            continue
+
+        # Otherwise treat as run_id (looked up under the project's runs/).
+        try:
+            runs_dir = find_project_runs_dir(cwd)
+            seen.setdefault(resolve_run(arg, runs_dir), None)
+        except SimctlError as e:
+            typer.echo(f"Error resolving {arg!r}: {e}", err=True)
+            raise typer.Exit(code=1) from None
+
+    return sorted(seen.keys())
+
+
+def _discover_or_error(directory: Path) -> list[Path]:
+    """Discover runs under a directory, exiting cleanly on error."""
+    try:
+        return discover_runs(directory)
+    except SimctlError as e:
+        typer.echo(f"Error discovering runs under {directory}: {e}", err=True)
         raise typer.Exit(code=1) from None
