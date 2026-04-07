@@ -319,6 +319,20 @@ Slurm job parameters. These become `#SBATCH` directives in `job.sh`.
 | `gpus` | integer | No | GPU 数 (`--rsc g=N`) |
 | `walltime` | string | Yes | Wall time limit (HH:MM:SS) |
 
+> **RSC モードのフィールド名について (>= 0.1.10)**
+>
+> `case.toml` / `survey.toml` の `[job]` セクションでは上記の **`processes` / `threads` / `cores`** が user-facing
+> な名前です。ジョブスクリプトのレンダリングは内部で `ntasks` / `threads_per_process` / `cores_per_thread` の
+> 名前で受け取りますが、`simctl.core.run_creation._build_job_config` が `site.toml` の `resource_style` を
+> 見て翻訳するので、`case.toml` / `survey.toml` 側で内部名を書く必要はありません (書いても無視されます)。
+> どちらの site タイプでも `[job]` の正しい書き方は次のとおりです:
+>
+> - 標準 Slurm site (`resource_style = "standard"`): `nodes`, `ntasks`, `walltime`
+> - RSC site (`resource_style = "rsc"`): `processes`, `threads`, `cores`, `walltime`
+>
+> 0.1.9 以前は `processes` を書いてもレンダラに伝わらず、`--rsc p=1:t=1:c=1` が出る不具合がありました
+> ([Fix RSC mode field-name plumbing](https://github.com/Nkzono99/hpc-simctl/commit/0f7aac3))。
+
 #### 共通フィールド
 
 | Field | Type | Required | Description |
