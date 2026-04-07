@@ -265,10 +265,10 @@ simctl runs list runs/cavity/scan
 
 | コマンド | 説明 |
 |---------|------|
-| `simctl case new CASE` | 新規 case のスキャフォールド生成 |
+| `simctl case new CASE [--minimal] [--survey]` | 新規 case のスキャフォールド生成 (`--minimal` で小さな bundled テンプレートを使用、EMSES では `emu generate -u` を best-effort で自動実行し `[meta.physical]` を埋める) |
 | `simctl runs create CASE` | case から単一 run を生成 |
-| `simctl runs sweep [DIR]` | survey.toml からパラメータ直積で全 run 一括生成 |
-| `simctl runs submit [RUN]` | run を sbatch で投入 |
+| `simctl runs sweep [DIR] [--dry-run]` | survey.toml からパラメータ直積で全 run 一括生成 (`--dry-run` で件数・パラメータ組合せ・概算 core-hour のみ表示) |
+| `simctl runs submit [RUN]` | run を sbatch で投入 (`-qn` でキュー上書き、`--afterok` で依存ジョブ指定) |
 | `simctl runs submit --all [DIR]` | created な run を一括投入 |
 | `simctl runs clone` | run 複製・派生 |
 | `simctl runs extend` | スナップショットから継続 run 生成 |
@@ -277,12 +277,13 @@ simctl runs list runs/cavity/scan
 
 | コマンド | 説明 |
 |---------|------|
-| `simctl runs status [RUN]` | run の状態確認 |
-| `simctl runs sync [RUN]` | Slurm 状態を manifest.toml に反映 |
+| `simctl runs status [RUNS...]` | run の状態確認 (run_id / run dir / survey dir を複数渡してまとめて表示可) |
+| `simctl runs sync [RUNS...]` | Slurm 状態を manifest.toml に反映 (bulk 対応: survey 配下の created run は silent skip) |
 | `simctl runs log [RUN]` | 最新 job の stdout/stderr 表示 + 進捗% |
-| `simctl runs jobs [PATH]` | プロジェクト内の実行中ジョブ一覧 |
+| `simctl runs jobs [PATH] [--watch SECS]` | プロジェクト内の実行中ジョブ一覧 (`--watch` で自動更新) |
+| `simctl runs dashboard [TARGETS...] [--watch SECS] [--all]` | 複数 run の進捗 (state, step/N, %, last Slurm state) を 1 つの表で表示 |
 | `simctl runs history [PATH]` | 投入履歴表示 |
-| `simctl runs list [PATH]` | run の一覧表示 (状態・タグでフィルタ可能) |
+| `simctl runs list [PATHS...]` | run の一覧表示 (複数 PATH 指定可、状態・タグでフィルタ可能) |
 
 ### 解析・整理
 
@@ -291,8 +292,10 @@ simctl runs list runs/cavity/scan
 | `simctl analyze summarize [RUN]` | Adapter による run 解析 summary 生成 |
 | `simctl analyze collect [DIR]` | survey 内の全 run から集計データ生成 |
 | `simctl analyze plot [DIR]` | survey 集計結果の可視化 (`--recipe` / `--list-recipes` 対応) |
-| `simctl runs archive [RUN]` | run のアーカイブ |
-| `simctl runs purge-work [RUN]` | work/ 内の不要ファイル削除 |
+| `simctl runs cancel [RUN]` | submitted/running な run を `scancel` + `sync` で安全に停止 |
+| `simctl runs archive [RUN]` | run のアーカイブ (completed のみ) |
+| `simctl runs purge-work [RUN]` | work/ 内の不要ファイル削除 (archived のみ) |
+| `simctl runs delete [RUN]` | created / cancelled / failed の run ディレクトリをハード削除 (completed/archived は archive → purge-work を使う) |
 
 ### 知識管理
 
@@ -335,18 +338,19 @@ hpc-simctl/
       cli/                 # CLI エントリポイント (typer)
         main.py            # コマンド登録
         init.py            # init / setup / doctor
-        new.py             # case new
-        create.py          # runs create / runs sweep
-        submit.py          # runs submit
-        status.py          # runs status / runs sync
+        new.py             # case new (`--minimal`, EMSES `emu generate -u`)
+        create.py          # runs create / runs sweep (`--dry-run`)
+        submit.py          # runs submit (`-qn`, `--afterok`)
+        status.py          # runs status / runs sync (bulk-friendly)
         log.py             # runs log
-        jobs.py            # runs jobs
+        jobs.py            # runs jobs (`--watch`)
+        dashboard.py       # runs dashboard (multi-run 進捗ビュー)
         history.py         # runs history
-        list.py            # runs list
+        list.py            # runs list (複数 PATH 対応)
         clone.py           # runs clone
         extend.py          # runs extend
         analyze.py         # analyze summarize / collect / plot
-        manage.py          # runs archive / purge-work
+        manage.py          # runs archive / purge-work / cancel / delete
         update.py          # update (パッケージ更新)
         update_refs.py     # update-refs (refs/ 更新 + ナレッジ)
         knowledge.py       # knowledge / knowledge source
@@ -399,6 +403,12 @@ created --> submitted --> running --> completed
 
 completed --> archived --> purged
 ```
+
+`simctl runs cancel` は `submitted` / `running` の run に対して `scancel` と `sync`
+を組み合わせて発行し、最終状態を `cancelled` に遷移させます。
+`simctl runs delete` はライフサイクル外の操作で、`created` / `cancelled` / `failed`
+の run ディレクトリを直接削除します (`completed` / `archived` の run は
+`archive` → `purge-work` 経路を使ってください)。
 
 > **Note**: `simctl runs sync` は Slurm の観測結果を manifest に反映するため、
 > ポーリング間隔によっては `submitted → completed` のように途中状態を飛び越す遷移が発生します。

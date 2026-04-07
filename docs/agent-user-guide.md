@@ -17,15 +17,23 @@ simctl プロジェクトにおける Agent の作業ガイド。
 |------|---------|
 | プロジェクト状況把握 | `simctl context --json` |
 | case テンプレート生成 | `simctl case new <name>` |
+| 最小 case テンプレート生成 | `simctl case new <name> --minimal` |
 | survey 付き case 生成 | `simctl case new <name> --survey` |
 | run 生成 | `simctl runs create <case>` |
 | survey 全 run 生成 | `simctl runs sweep <survey>` |
+| sweep 内容を確認だけ | `simctl runs sweep <survey> --dry-run` |
 | job 投入 | `simctl runs submit` |
 | 全 run 一括投入 | `simctl runs submit --all` |
-| 状態確認 | `simctl runs status` |
-| Slurm 同期 | `simctl runs sync` |
+| キュー上書き / 依存ジョブ | `simctl runs submit -qn <queue>` / `--afterok <job_id>` |
+| 状態確認 (単一/複数/survey 一括) | `simctl runs status [RUNS...]` |
+| Slurm 同期 (単一/複数/survey 一括) | `simctl runs sync [RUNS...]` |
 | ログ確認 | `simctl runs log` |
 | エラーログ | `simctl runs log -e` |
+| 実行中ジョブ一覧 / 自動更新 | `simctl runs jobs` / `simctl runs jobs -w 30` |
+| 複数 run の進捗ダッシュボード | `simctl runs dashboard runs/<survey>` (`-w 30`, `--all` 対応) |
+| run 一覧 (複数 PATH 可) | `simctl runs list [PATHS...]` |
+| run 停止 (scancel + sync) | `simctl runs cancel` |
+| run のハード削除 (created/failed/cancelled) | `simctl runs delete` |
 | 解析 | `simctl analyze summarize` |
 | 集計 | `simctl analyze collect` |
 | 知見保存 | `simctl knowledge save` |
@@ -64,6 +72,12 @@ created/submitted/running → failed
 submitted/running → cancelled
 completed → archived → purged
 ```
+
+`simctl runs cancel` は `submitted` / `running` の run に対して `scancel` と
+`simctl runs sync` をまとめて実行し、`cancelled` 状態に遷移させる安全な経路。
+`simctl runs delete` はライフサイクル外の操作で、`created` / `cancelled` / `failed`
+の run ディレクトリを直接削除する (`completed` / `archived` の run には使えないので
+`archive` → `purge-work` を使うこと)。
 
 ## 知識の活用
 

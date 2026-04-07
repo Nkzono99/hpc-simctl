@@ -752,6 +752,14 @@ submitted/running -> cancelled
 completed -> archived -> purged
 ```
 
+`simctl runs cancel` は `submitted` / `running` の run に対して `scancel` と
+`sync` を組み合わせて発行し、`cancelled` 状態に遷移させる。
+
+ライフサイクル外操作として、`simctl runs delete` は `created` /
+`cancelled` / `failed` の run ディレクトリをハード削除する。
+`completed` / `archived` の run には適用できず、その場合は
+`archive → purge-work` を使う。
+
 ---
 
 ## 14. Simulator Adapter 仕様
@@ -1010,8 +1018,10 @@ production tag を持つ run では、以下を推奨または要求する。
 
 ## 18.8 整理
 
-* `simctl archive <run_dir or run_id>`
-* `simctl purge-work <run_dir or run_id>`
+* `simctl archive <run_dir or run_id>` — completed → archived
+* `simctl purge-work <run_dir or run_id>` — archived → purged
+* `simctl cancel <run_dir or run_id>` — submitted/running → cancelled (`scancel` と `sync` をまとめて実行する安全経路)
+* `simctl delete <run_dir or run_id>` — created / cancelled / failed の run ディレクトリをハード削除 (ライフサイクル外、completed/archived には不可)
 
 ---
 

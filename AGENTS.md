@@ -60,13 +60,14 @@ hpc-simctl/
         submit.py       # simctl runs submit
         status.py       # simctl runs status / sync
         log.py          # simctl runs log
-        jobs.py         # simctl runs jobs
+        jobs.py         # simctl runs jobs (--watch 対応)
         history.py      # simctl runs history
-        list.py         # simctl runs list
+        list.py         # simctl runs list (複数 PATH 対応)
+        dashboard.py    # simctl runs dashboard (multi-run 進捗ビュー)
         clone.py        # simctl runs clone
         extend.py       # simctl runs extend
         analyze.py      # simctl analyze summarize / collect / plot
-        manage.py       # simctl runs archive / purge-work
+        manage.py       # simctl runs archive / purge-work / cancel / delete
         knowledge.py    # simctl knowledge / knowledge source
         config.py       # simctl config
         update.py       # simctl update
@@ -96,11 +97,20 @@ hpc-simctl/
       jobgen/           # job.sh 生成
         __init__.py
         generator.py
-        templates/
       slurm/            # Slurm 連携 (sbatch / squeue / sacct)
         __init__.py
         submit.py
         query.py
+      sites/            # bundled site preset (simctl init で読込)
+        __init__.py
+        camphor.toml
+        camphor.md
+      harness/          # Agent harness 定義 (Claude Code 等)
+        __init__.py
+        claude.py
+      templates/        # project / case / survey 用 静的テンプレート
+        __init__.py
+        ...
   tests/
     conftest.py
     test_core/
@@ -119,23 +129,26 @@ hpc-simctl/
 | `simctl setup [URL]` | 既存プロジェクトを clone + 環境セットアップ |
 | `simctl doctor` | 環境検査 |
 | `simctl context --json` | Agent 向け project context を JSON で取得 |
-| `simctl case new CASE` | case のスキャフォールド生成 |
+| `simctl case new CASE [--minimal] [--survey]` | case のスキャフォールド生成 (`--minimal` で小さな bundled テンプレート、EMSES では `emu generate -u` を自動実行) |
 | `simctl runs create CASE` | case から単一 run を生成 |
-| `simctl runs sweep [DIR]` | survey.toml からパラメータ直積で全 run 生成 |
-| `simctl runs submit [RUN]` | run を sbatch で投入 |
+| `simctl runs sweep [DIR] [--dry-run]` | survey.toml からパラメータ直積で全 run 生成 (`--dry-run` で件数・パラメータ・概算 core-hour を表示するだけ) |
+| `simctl runs submit [RUN]` | run を sbatch で投入 (`-qn`, `--afterok` 対応) |
 | `simctl runs submit --all [DIR]` | created な run を一括投入 |
 | `simctl runs log [RUN]` | 最新 job の stdout/stderr 表示 + 進捗% |
-| `simctl runs status [RUN]` | run 状態確認 |
-| `simctl runs sync [RUN]` | Slurm 状態を manifest に反映 |
-| `simctl runs jobs [PATH]` | プロジェクト内の実行中ジョブ一覧 |
+| `simctl runs status [RUNS...]` | run 状態確認 (run_id・run dir・survey dir を複数渡してまとめて表示可) |
+| `simctl runs sync [RUNS...]` | Slurm 状態を manifest に反映 (bulk 対応: survey 配下の created な run は silent skip) |
+| `simctl runs jobs [PATH] [--watch SECS]` | プロジェクト内の実行中ジョブ一覧 (`--watch` で N 秒ごとに自動更新) |
+| `simctl runs dashboard [TARGETS...] [--watch SECS] [--all]` | 複数 run の進捗 (state, step/N, %, last Slurm state) を 1 つの表で表示 |
 | `simctl runs history [PATH]` | 投入履歴表示 |
-| `simctl runs list [PATH]` | run 一覧表示 |
+| `simctl runs list [PATHS...]` | run 一覧表示 (複数 PATH 指定可) |
 | `simctl runs clone` | run 複製・派生 |
 | `simctl runs extend` | スナップショットから継続 run 生成 |
 | `simctl analyze summarize [RUN]` | run 解析 summary 生成 |
 | `simctl analyze collect [DIR]` | survey 集計 |
-| `simctl runs archive [RUN]` | run アーカイブ |
-| `simctl runs purge-work [RUN]` | work/ 内の不要ファイル削除 |
+| `simctl runs archive [RUN]` | run アーカイブ (completed のみ) |
+| `simctl runs purge-work [RUN]` | work/ 内の不要ファイル削除 (archived のみ) |
+| `simctl runs cancel [RUN]` | scancel + sync を同時実行し、submitted/running な run を停止 |
+| `simctl runs delete [RUN]` | created/cancelled/failed な run ディレクトリをハード削除 (completed/archived は archive→purge-work を使う) |
 | `simctl config show` | 設定表示 |
 | `simctl config add-simulator` | シミュレータ追加 (対話型) |
 | `simctl config add-launcher` | ランチャー追加 (対話型) |
