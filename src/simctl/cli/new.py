@@ -51,6 +51,18 @@ def new(
             help="Also generate a survey.toml stub in runs/<case_name>/.",
         ),
     ] = False,
+    minimal: Annotated[
+        bool,
+        typer.Option(
+            "--minimal",
+            "-m",
+            help=(
+                "Use the small bundled adapter template instead of the rich "
+                "reference template from refs/.  The result is shorter and "
+                "easier to edit but contains fewer worked examples."
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Create a new case template with simulator-specific boilerplate.
 
@@ -58,8 +70,19 @@ def new(
     (resolved from the project root).  If the simulator cannot be determined,
     an explicit --simulator/-s is required.
 
+    With ``--minimal`` the case starts from the bundled adapter template
+    only — the rich reference template that simctl normally pulls from
+    ``refs/<simulator>/`` is skipped.  Use this when you want a small,
+    easy-to-edit starting point.
+
+    For EMSES cases, ``simctl case new`` also tries to populate
+    ``[meta.physical]`` in the generated ``plasma.toml`` by running
+    ``emu generate -u`` (best-effort: silently skipped if the ``emu``
+    CLI is not on PATH).
+
     Examples:
       simctl case new flat_surface -s emses
+      simctl case new flat_surface -s emses --minimal
       simctl case new periodic -s beach --survey
       cd cases/emses && simctl case new flat_surface
       simctl case new mycase -d /path/to/dest -s emses
@@ -142,22 +165,25 @@ def new(
         except Exception:
             pass  # Fall back to defaults
 
-    # Look for rich template files in refs/<repo>/
+    # Look for rich template files in refs/<repo>/.  Skipped under
+    # ``--minimal`` so the user always gets the small bundled adapter
+    # template, even if a refs/ override exists.
     ref_templates: dict[str, Path] = {}
-    try:
-        if project_root and hasattr(adapter_cls, "doc_repos"):
-            refs_dir = project_root / "refs"
-            for _url, repo_name in adapter_cls.doc_repos():
-                repo_dir = refs_dir / repo_name
-                if not repo_dir.is_dir():
-                    continue
-                # Look for template input files at repo root
-                for candidate_name in ("plasma.toml", "beach.toml"):
-                    candidate = repo_dir / candidate_name
-                    if candidate.is_file():
-                        ref_templates[candidate_name] = candidate
-    except Exception:
-        pass
+    if not minimal:
+        try:
+            if project_root and hasattr(adapter_cls, "doc_repos"):
+                refs_dir = project_root / "refs"
+                for _url, repo_name in adapter_cls.doc_repos():
+                    repo_dir = refs_dir / repo_name
+                    if not repo_dir.is_dir():
+                        continue
+                    # Look for template input files at repo root
+                    for candidate_name in ("plasma.toml", "beach.toml"):
+                        candidate = repo_dir / candidate_name
+                        if candidate.is_file():
+                            ref_templates[candidate_name] = candidate
+        except Exception:
+            pass
 
     # Write template files
     templates = adapter_cls.case_template()
@@ -192,6 +218,13 @@ def new(
         f"\nEdit {case_dir / 'case.toml'} to configure parameters and job settings."
     )
 
+    # For EMSES cases, populate [meta.physical] in plasma.toml via emu.
+    # Best-effort: silently skip if emu is not on PATH.
+    if sim_name == "emses":
+        plasma_toml = case_dir / "plasma.toml"
+        if plasma_toml.exists():
+            _try_emu_generate(plasma_toml)
+
     # Optionally generate survey.toml stub
     if survey:
         _generate_survey_stub(
@@ -200,6 +233,50 @@ def new(
             default_launcher,
             project_root=project_root,
             resource_style=site_resource_style,
+        )
+
+
+def _try_emu_generate(plasma_toml: Path) -> None:
+    """Run ``emu generate -u`` on a freshly-created plasma.toml.
+
+    Best-effort: prints a notice on success and silently skips when the
+    ``emu`` CLI is not installed (e.g. when EMSES has not been pip-installed
+    into the project venv yet).  Any other failure is reported as a
+    warning so the user can re-run manually.
+    """
+    import shutil
+    import subprocess
+
+    if shutil.which("emu") is None:
+        return
+
+    try:
+        result = subprocess.run(
+            ["emu", "generate", "-u", str(plasma_toml)],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+        typer.echo(
+            f"  Warning: failed to auto-run `emu generate -u`: {exc}",
+            err=True,
+        )
+        return
+
+    if result.returncode == 0:
+        typer.echo(
+            f"  Populated [meta.physical] in {plasma_toml.name} via `emu generate -u`."
+        )
+    else:
+        # Don't fail the case creation — the file is still usable, just
+        # without [meta.physical] info.  Surface the error so the user
+        # knows to re-run manually.
+        typer.echo(
+            "  Warning: `emu generate -u` exited with "
+            f"code {result.returncode}: {(result.stderr or '').strip()}",
+            err=True,
         )
 
 
