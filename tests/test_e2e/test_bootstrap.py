@@ -156,7 +156,6 @@ def _assert_minimum_bootstrap_layout(project_dir: Path) -> None:
         project_dir / "runs",
         project_dir / ".simctl",
         project_dir / ".claude" / "settings.json",
-        project_dir / ".claude" / "hooks",
         project_dir / ".claude" / "rules",
         project_dir / ".claude" / "skills",
         project_dir / "CLAUDE.md",
@@ -164,6 +163,11 @@ def _assert_minimum_bootstrap_layout(project_dir: Path) -> None:
     )
     for expected_path in expected_paths:
         assert expected_path.exists(), expected_path
+    # PreToolUse hooks are no longer scaffolded; their intent lives in
+    # .claude/rules/simctl-workflow.md.
+    hooks_dir = project_dir / ".claude" / "hooks"
+    if hooks_dir.exists():
+        assert not any(hooks_dir.iterdir()), hooks_dir
 
 
 @pytest.mark.parametrize("simulators", [(), ("emses",)])
@@ -192,13 +196,13 @@ def test_e2e_init_minimal(
     )
     assert "permissions" in settings
     assert "Edit(/campaign.toml)" in settings["permissions"]["allow"]
+    assert "Edit(/tools/hpc-simctl/**)" in settings["permissions"]["allow"]
+    assert "Bash(simctl runs submit*)" in settings["permissions"]["ask"]
     assert "Write(/simproject.toml)" in settings["permissions"]["ask"]
     assert "Write(/SITE.md)" in settings["permissions"]["deny"]
-
-    hooks_dir = project_dir / ".claude" / "hooks"
-    assert (hooks_dir / "approve-run.sh").is_file()
-    assert (hooks_dir / "protect-files.sh").is_file()
-    assert (hooks_dir / "guard-bash.sh").is_file()
+    # PreToolUse hooks were intentionally removed (moved to rules); the
+    # generated settings.json must not declare them.
+    assert "hooks" not in settings
 
     simulators_toml = (project_dir / "simulators.toml").read_text(encoding="utf-8")
     campaign_toml = (project_dir / "campaign.toml").read_text(encoding="utf-8")

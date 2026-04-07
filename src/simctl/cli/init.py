@@ -16,7 +16,7 @@ import typer
 from simctl.core.discovery import validate_uniqueness
 from simctl.core.exceptions import DuplicateRunIdError, ProjectConfigError
 from simctl.core.project import load_project
-from simctl.harness import CLAUDE_HOOK_TEMPLATES, build_claude_settings
+from simctl.harness import build_claude_settings
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -1349,24 +1349,16 @@ def init(
             skipped.append(display)
 
     # .claude/settings.json (team-shared permissions)
+    # Note: PreToolUse hooks are intentionally NOT scaffolded.  Behavioural
+    # expectations (submit approval, run-directory protection, Bash write
+    # guards) live in .claude/rules/simctl-workflow.md instead so the agent
+    # reads them without forcing per-action shell hooks on the user.
     claude_settings_path = project_dir / _CLAUDE_SETTINGS
     claude_settings_path.parent.mkdir(parents=True, exist_ok=True)
     if _write_if_missing(claude_settings_path, build_claude_settings()):
         created.append(_CLAUDE_SETTINGS)
     else:
         skipped.append(_CLAUDE_SETTINGS)
-
-    # .claude/hooks/ (approval + guard hooks)
-    hooks_base = project_dir / ".claude/hooks"
-    hooks_base.mkdir(parents=True, exist_ok=True)
-    for hook_name, template_name in CLAUDE_HOOK_TEMPLATES:
-        hook_path = hooks_base / hook_name
-        hook_display = f".claude/hooks/{hook_name}"
-        if _write_if_missing(hook_path, load_static(template_name)):
-            hook_path.chmod(0o755)
-            created.append(hook_display)
-        else:
-            skipped.append(hook_display)
 
     # .claude/rules/ (project-wide rules, split from CLAUDE.md)
     rules_base = project_dir / _RULES_DIR

@@ -219,35 +219,24 @@ class TestInit:
         assert "deny" in data["permissions"]
         assert any("simctl" in r for r in data["permissions"]["allow"])
         assert "Edit(/campaign.toml)" in data["permissions"]["allow"]
+        assert "Edit(/tools/hpc-simctl/**)" in data["permissions"]["allow"]
+        assert "Bash(simctl runs submit*)" in data["permissions"]["ask"]
         assert "Write(/simproject.toml)" in data["permissions"]["ask"]
         assert "Write(/SITE.md)" in data["permissions"]["deny"]
         assert "Edit(/runs/**/manifest.toml)" in data["permissions"]["deny"]
         assert "Read(/.env)" in data["permissions"]["deny"]
         assert data["permissions"]["disableBypassPermissionsMode"] == "disable"
-        hooks = data["hooks"]["PreToolUse"]
-        commands = {
-            hook["hooks"][0]["command"]
-            for hook in hooks
-            if hook["hooks"] and "command" in hook["hooks"][0]
-        }
-        assert 'bash "$CLAUDE_PROJECT_DIR/.claude/hooks/protect-files.sh"' in commands
-        assert 'bash "$CLAUDE_PROJECT_DIR/.claude/hooks/guard-bash.sh"' in commands
-        assert 'bash "$CLAUDE_PROJECT_DIR/.claude/hooks/approve-run.sh"' in commands
+        # PreToolUse hooks are intentionally NOT scaffolded; their intent
+        # is captured in .claude/rules/simctl-workflow.md instead.
+        assert "hooks" not in data
 
-    def test_init_claude_hooks(self, tmp_path: Path) -> None:
-        """Claude hook scripts are scaffolded for approvals and path guards."""
+    def test_init_does_not_create_claude_hooks_dir(self, tmp_path: Path) -> None:
+        """init must not scaffold .claude/hooks/ shell scripts."""
         runner.invoke(app, ["init", "-y", "--path", str(tmp_path)])
         hooks_dir = tmp_path / ".claude" / "hooks"
-        approve = hooks_dir / "approve-run.sh"
-        protect = hooks_dir / "protect-files.sh"
-        guard = hooks_dir / "guard-bash.sh"
-
-        assert approve.exists()
-        assert protect.exists()
-        assert guard.exists()
-        assert "permissionDecision" in approve.read_text(encoding="utf-8")
-        assert "PROTECTED_PATTERNS" in protect.read_text(encoding="utf-8")
-        assert "ASK_PATTERNS" in guard.read_text(encoding="utf-8")
+        # Either the directory doesn't exist, or it exists but is empty.
+        if hooks_dir.exists():
+            assert not any(hooks_dir.iterdir())
 
     def test_init_claude_rules(self, tmp_path: Path) -> None:
         """Project rules are created in .claude/rules/."""
@@ -260,6 +249,10 @@ class TestInit:
         assert "SITE.md" in workflow
         assert "analysis/scratch/" in workflow
         assert "promote-fact" in workflow
+        # Behavioural rules that used to live in PreToolUse hooks must now be
+        # documented in this rule file.
+        assert "simctl runs submit" in workflow
+        assert "tools/hpc-simctl" in workflow
 
     def test_init_subdirectory_claude_md(self, tmp_path: Path) -> None:
         """Context-specific CLAUDE.md files are created in cases/ and runs/."""

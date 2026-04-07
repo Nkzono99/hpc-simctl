@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from simctl.harness import CLAUDE_HOOK_TEMPLATES, build_claude_settings
+from simctl.harness import build_claude_settings
 
 
 def test_build_claude_settings_exposes_expected_policy() -> None:
@@ -23,10 +23,23 @@ def test_build_claude_settings_exposes_expected_policy() -> None:
     assert data["permissions"]["disableBypassPermissionsMode"] == "disable"
 
 
-def test_claude_hook_templates_list_all_scaffolded_hooks() -> None:
-    """Claude hook templates enumerate the files init should scaffold."""
-    assert CLAUDE_HOOK_TEMPLATES == (
-        ("approve-run.sh", "scaffold/hooks/approve-run.sh"),
-        ("protect-files.sh", "scaffold/hooks/protect-files.sh"),
-        ("guard-bash.sh", "scaffold/hooks/guard-bash.sh"),
-    )
+def test_settings_allow_tools_hpc_simctl_writes() -> None:
+    """tools/hpc-simctl/** must be allow-listed for in-place dev install."""
+    data = json.loads(build_claude_settings())
+    assert "Edit(/tools/hpc-simctl/**)" in data["permissions"]["allow"]
+    assert "Write(/tools/hpc-simctl/**)" in data["permissions"]["allow"]
+    # And must NOT appear in ask (no per-edit confirmation).
+    assert "Edit(/tools/hpc-simctl/**)" not in data["permissions"]["ask"]
+    assert "Write(/tools/hpc-simctl/**)" not in data["permissions"]["ask"]
+
+
+def test_runs_submit_is_ask_listed() -> None:
+    """simctl runs submit must be ask-listed (the old hook is now a rule)."""
+    data = json.loads(build_claude_settings())
+    assert "Bash(simctl runs submit*)" in data["permissions"]["ask"]
+
+
+def test_settings_does_not_install_pretooluse_hooks() -> None:
+    """Settings.json must not declare PreToolUse hooks (moved to rules)."""
+    data = json.loads(build_claude_settings())
+    assert "hooks" not in data
