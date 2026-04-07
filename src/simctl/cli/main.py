@@ -9,6 +9,7 @@ from simctl.cli.clone import clone
 from simctl.cli.config import config_app
 from simctl.cli.context import context
 from simctl.cli.create import create, sweep
+from simctl.cli.dashboard import dashboard
 from simctl.cli.extend import extend
 from simctl.cli.history import history
 from simctl.cli.init import doctor, init
@@ -43,6 +44,7 @@ runs_app.command("log")(log)
 runs_app.command("list")(list_runs)
 runs_app.command("jobs")(jobs)
 runs_app.command("history")(history)
+runs_app.command("dashboard")(dashboard)
 runs_app.command("clone")(clone)
 runs_app.command("extend")(extend)
 runs_app.command("archive")(archive)
