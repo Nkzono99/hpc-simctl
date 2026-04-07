@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import time
 from pathlib import Path
 from typing import Annotated, Optional
 
@@ -23,6 +24,17 @@ def jobs(
         bool,
         typer.Option("--all", "-a", help="Show all runs, not just active jobs."),
     ] = False,
+    watch: Annotated[
+        Optional[float],
+        typer.Option(
+            "--watch",
+            "-w",
+            help=(
+                "Refresh the table every N seconds (clears screen between "
+                "refreshes).  Press Ctrl-C to stop."
+            ),
+        ),
+    ] = None,
 ) -> None:
     """List active (submitted/running) jobs in the project.
 
@@ -31,6 +43,7 @@ def jobs(
     Examples:
       simctl runs jobs             # active jobs under cwd
       simctl runs jobs --all       # all runs with job info
+      simctl runs jobs -w 30       # auto-refresh every 30 seconds
     """
     search_dir = (path or Path.cwd()).resolve()
 
@@ -43,6 +56,14 @@ def jobs(
     except SimctlError:
         pass  # Use the given path
 
+    if watch is not None and watch > 0:
+        _watch_loop(search_dir, all_states=all_states, interval=watch)
+    else:
+        _print_jobs_once(search_dir, all_states=all_states)
+
+
+def _print_jobs_once(search_dir: Path, *, all_states: bool) -> None:
+    """Render the jobs table once and return without exiting on empty results."""
     try:
         run_dirs = discover_runs(search_dir)
     except SimctlError as e:
@@ -100,3 +121,25 @@ def jobs(
     # Summary
     active = sum(1 for r in rows if r[2] in active_states)
     typer.echo(f"\n{active} active, {len(rows)} total")
+
+
+def _watch_loop(search_dir: Path, *, all_states: bool, interval: float) -> None:
+    """Refresh the jobs view every ``interval`` seconds.
+
+    Uses a simple ANSI clear-screen between refreshes.  Stops on Ctrl-C
+    cleanly.
+    """
+    from datetime import datetime
+
+    try:
+        while True:
+            # ANSI: clear screen + move cursor home.
+            typer.echo("\x1b[2J\x1b[H", nl=False)
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            typer.echo(f"simctl runs jobs (watch every {interval:g}s) — {timestamp}")
+            typer.echo("")
+            _print_jobs_once(search_dir, all_states=all_states)
+            time.sleep(interval)
+    except KeyboardInterrupt:
+        typer.echo("\nStopped.")
+        raise typer.Exit(code=0) from None
