@@ -11,17 +11,16 @@ refs/
 .simctl/knowledge/
 .simctl/environment.toml
 
-# heavy run outputs
-runs/**/work/outputs/
-runs/**/work/restart/
-runs/**/work/tmp/
+# Run work directory (simulator outputs, restart, logs, status snapshots)
+# Everything under work/ is regenerable from input/, so we exclude it whole
+# rather than trying to enumerate per-simulator output filenames.
+runs/**/work/
+runs/**/status/
 
-# logs
-runs/**/work/*.out
-runs/**/work/*.err
-runs/**/work/*.log
+# Preprocessor-generated input files (created by EMSES preinp from plasma.toml)
+runs/**/input/plasma.inp
 
-# analysis cache
+# analysis cache / scratch (curated outputs in analysis/ remain tracked)
 runs/**/analysis/cache/
 runs/**/analysis/scratch/
 runs/**/analysis/.ipynb_checkpoints/

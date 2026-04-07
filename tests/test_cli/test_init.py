@@ -90,9 +90,11 @@ class TestInit:
         """.gitignore contains run output exclusion patterns."""
         runner.invoke(app, ["init", "-y", "--path", str(tmp_path)])
         content = (tmp_path / ".gitignore").read_text(encoding="utf-8")
-        assert "runs/**/work/outputs/" in content
-        assert "runs/**/work/restart/" in content
-        assert "runs/**/work/tmp/" in content
+        # The whole work/ tree is regenerable from input/, so it is excluded
+        # wholesale rather than enumerating per-simulator output filenames.
+        assert "runs/**/work/" in content
+        assert "runs/**/status/" in content
+        assert "runs/**/input/plasma.inp" in content
         assert "runs/**/analysis/scratch/" in content
 
     def test_init_skips_existing_files(self, tmp_path: Path) -> None:
