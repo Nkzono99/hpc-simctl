@@ -294,3 +294,74 @@ class TestSweep:
 
         assert manifest["origin"]["survey"] == "S20260327-test"
         assert set(manifest["variation"]["changed_keys"]) == {"nx", "ny"}
+
+    def test_sweep_dry_run_does_not_create_runs(self, tmp_path: Path) -> None:
+        """--dry-run prints planned runs and resource estimate without writing."""
+        project_dir = _make_project(tmp_path)
+        _make_case(project_dir, "base_case")
+        survey_dir = project_dir / "runs" / "my_survey"
+        _make_survey(survey_dir, "base_case")
+
+        result = runner.invoke(app, ["runs", "sweep", "--dry-run", str(survey_dir)])
+
+        assert result.exit_code == 0, result.output
+        assert "[dry-run]" in result.output
+        assert "4 runs would be created" in result.output
+        assert "base_case" in result.output
+        # Resource estimate line.
+        assert "core-hours" in result.output
+
+        # No run directories should exist after dry-run.
+        run_dirs = [
+            d
+            for d in survey_dir.iterdir()
+            if d.is_dir() and (d / "manifest.toml").exists()
+        ]
+        assert run_dirs == []
+
+    def test_sweep_dry_run_lists_combinations(self, tmp_path: Path) -> None:
+        """--dry-run prints one line per planned run with its parameters."""
+        project_dir = _make_project(tmp_path)
+        _make_case(project_dir, "base_case")
+        survey_dir = project_dir / "runs" / "my_survey"
+        _make_survey(survey_dir, "base_case")
+
+        result = runner.invoke(app, ["runs", "sweep", "--dry-run", str(survey_dir)])
+
+        assert result.exit_code == 0, result.output
+        # Display names from the naming template should appear (as they
+        # would in a real sweep).
+        assert "nx32_ny32" in result.output
+        assert "nx64_ny64" in result.output
+        # Parameter values should be shown.
+        assert "nx=32" in result.output
+        assert "ny=64" in result.output
+
+    def test_sweep_dry_run_short_flag(self, tmp_path: Path) -> None:
+        """``-n`` is an accepted short alias for --dry-run."""
+        project_dir = _make_project(tmp_path)
+        _make_case(project_dir, "base_case")
+        survey_dir = project_dir / "runs" / "my_survey"
+        _make_survey(survey_dir, "base_case")
+
+        result = runner.invoke(app, ["runs", "sweep", "-n", str(survey_dir)])
+        assert result.exit_code == 0, result.output
+        assert "[dry-run]" in result.output
+
+        # No run directories should exist.
+        run_dirs = [
+            d
+            for d in survey_dir.iterdir()
+            if d.is_dir() and (d / "manifest.toml").exists()
+        ]
+        assert run_dirs == []
+
+    def test_sweep_dry_run_no_survey_toml(self, tmp_path: Path) -> None:
+        """--dry-run still surfaces missing survey.toml errors."""
+        project_dir = _make_project(tmp_path)
+        survey_dir = project_dir / "runs" / "empty_survey"
+        survey_dir.mkdir(parents=True)
+
+        result = runner.invoke(app, ["runs", "sweep", "--dry-run", str(survey_dir)])
+        assert result.exit_code == 1
+        assert "Error" in result.output
