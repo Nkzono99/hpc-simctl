@@ -16,7 +16,7 @@ from simctl.cli.jobs import jobs
 from simctl.cli.knowledge import knowledge_app
 from simctl.cli.list import list_runs
 from simctl.cli.log import log
-from simctl.cli.manage import archive, purge_work
+from simctl.cli.manage import archive, cancel, delete, purge_work
 from simctl.cli.new import new
 from simctl.cli.setup import setup
 from simctl.cli.status import status, sync
@@ -47,6 +47,8 @@ runs_app.command("clone")(clone)
 runs_app.command("extend")(extend)
 runs_app.command("archive")(archive)
 runs_app.command("purge-work")(purge_work)
+runs_app.command("cancel")(cancel)
+runs_app.command("delete")(delete)
 
 analyze_app = typer.Typer(
     name="analyze",

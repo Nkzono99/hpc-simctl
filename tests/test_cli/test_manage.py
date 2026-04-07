@@ -1,10 +1,11 @@
-"""Tests for simctl runs archive and runs purge-work commands."""
+"""Tests for simctl runs archive / purge-work / cancel / delete commands."""
 
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
 
+import pytest
 import tomli_w
 from typer.testing import CliRunner
 
@@ -18,6 +19,7 @@ def _create_run(
     run_id: str,
     *,
     status: str = "completed",
+    job_id: str = "",
 ) -> Path:
     """Create a minimal run directory with manifest.toml."""
     run_dir = parent / run_id
@@ -32,6 +34,8 @@ def _create_run(
             "status": status,
         },
     }
+    if job_id:
+        manifest["job"] = {"job_id": job_id}
     with open(run_dir / "manifest.toml", "wb") as f:
         tomli_w.dump(manifest, f)
     return run_dir
@@ -173,3 +177,112 @@ class TestPurgeWork:
         result = runner.invoke(app, ["runs", "purge-work", "--yes", str(run_dir)])
         assert result.exit_code == 0
         assert "Freed: 0.0 B" in result.output
+
+
+class TestDelete:
+    """Tests for `simctl runs delete`."""
+
+    @pytest.mark.parametrize("status", ["created", "cancelled", "failed"])
+    def test_delete_terminal_run_removes_directory(
+        self, tmp_path: Path, status: str
+    ) -> None:
+        """Created/cancelled/failed runs can be deleted."""
+        run_dir = _create_run(tmp_path, "R20260327-0001", status=status)
+        assert run_dir.exists()
+
+        result = runner.invoke(app, ["runs", "delete", "--yes", str(run_dir)])
+        assert result.exit_code == 0, result.output
+        assert "Deleted run R20260327-0001" in result.output
+        assert not run_dir.exists()
+
+    @pytest.mark.parametrize(
+        "status", ["submitted", "running", "completed", "archived"]
+    )
+    def test_delete_rejects_non_terminal_or_completed(
+        self, tmp_path: Path, status: str
+    ) -> None:
+        """Live or valuable runs are protected from accidental deletion."""
+        run_dir = _create_run(tmp_path, "R20260327-0001", status=status)
+
+        result = runner.invoke(app, ["runs", "delete", "--yes", str(run_dir)])
+        assert result.exit_code == 1
+        assert run_dir.exists()  # not removed
+
+    def test_delete_cancelled_without_confirmation(self, tmp_path: Path) -> None:
+        """User can decline the confirmation prompt."""
+        run_dir = _create_run(tmp_path, "R20260327-0001", status="cancelled")
+
+        result = runner.invoke(app, ["runs", "delete", str(run_dir)], input="n\n")
+        assert result.exit_code == 0
+        assert "Cancelled." in result.output
+        assert run_dir.exists()  # still there
+
+    def test_delete_nonexistent_run(self) -> None:
+        result = runner.invoke(app, ["runs", "delete", "/nonexistent/run"])
+        assert result.exit_code == 1
+
+
+class TestCancel:
+    """Tests for `simctl runs cancel`."""
+
+    def test_cancel_requires_active_state(self, tmp_path: Path) -> None:
+        run_dir = _create_run(
+            tmp_path, "R20260327-0001", status="completed", job_id="12345"
+        )
+        result = runner.invoke(app, ["runs", "cancel", "--yes", str(run_dir)])
+        assert result.exit_code == 1
+        assert "submitted/running" in result.output.lower()
+
+    def test_cancel_requires_job_id(self, tmp_path: Path) -> None:
+        run_dir = _create_run(tmp_path, "R20260327-0001", status="submitted")
+        result = runner.invoke(app, ["runs", "cancel", "--yes", str(run_dir)])
+        assert result.exit_code == 1
+        assert "job_id" in result.output.lower()
+
+    def test_cancel_running_calls_scancel(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """`runs cancel` invokes scancel and then sync."""
+        from simctl.core import actions
+        from simctl.slurm import submit as slurm_submit
+        from simctl.slurm.submit import CommandResult
+
+        run_dir = _create_run(
+            tmp_path, "R20260327-0001", status="running", job_id="98765"
+        )
+
+        scancel_calls: list[list[str]] = []
+
+        def fake_runner(cmd: list[str]) -> CommandResult:
+            scancel_calls.append(cmd)
+            return CommandResult(returncode=0, stdout="", stderr="")
+
+        monkeypatch.setattr(slurm_submit, "_default_runner", fake_runner)
+
+        # Stub sync_run so we don't actually talk to Slurm.
+        from simctl.core.actions import ActionResult, ActionStatus
+
+        def fake_sync(rd: Path) -> ActionResult:
+            return ActionResult(
+                action="sync_run",
+                status=ActionStatus.SUCCESS,
+                message="State: running -> cancelled",
+                data={"slurm_state": "CANCELLED"},
+                state_before="running",
+                state_after="cancelled",
+            )
+
+        monkeypatch.setattr(actions, "sync_run", fake_sync)
+
+        result = runner.invoke(app, ["runs", "cancel", "--yes", str(run_dir)])
+        assert result.exit_code == 0, result.output
+        assert any(cmd[:2] == ["scancel", "98765"] for cmd in scancel_calls)
+        assert "running -> cancelled" in result.output
+
+    def test_cancel_declined(self, tmp_path: Path) -> None:
+        run_dir = _create_run(
+            tmp_path, "R20260327-0001", status="running", job_id="98765"
+        )
+        result = runner.invoke(app, ["runs", "cancel", str(run_dir)], input="n\n")
+        assert result.exit_code == 0
+        assert "Cancelled." in result.output
