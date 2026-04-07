@@ -110,3 +110,34 @@ def test_list_nonexistent_dir() -> None:
     result = runner.invoke(app, ["runs", "list", "/nonexistent/path"])
     assert result.exit_code == 1
     assert "Error" in result.output
+
+
+def test_list_multiple_paths(tmp_path: Path) -> None:
+    """Multiple positional path arguments are merged."""
+    survey_a = tmp_path / "series_a"
+    survey_b = tmp_path / "series_b"
+    survey_a.mkdir()
+    survey_b.mkdir()
+    _create_run(survey_a, "R20260327-0001")
+    _create_run(survey_a, "R20260327-0002")
+    _create_run(survey_b, "R20260327-0003")
+
+    result = runner.invoke(app, ["runs", "list", str(survey_a), str(survey_b)])
+    assert result.exit_code == 0
+    assert "R20260327-0001" in result.output
+    assert "R20260327-0002" in result.output
+    assert "R20260327-0003" in result.output
+
+
+def test_list_multiple_paths_dedup(tmp_path: Path) -> None:
+    """Overlapping paths are deduplicated; runs appear only once."""
+    survey = tmp_path / "series_a"
+    survey.mkdir()
+    _create_run(survey, "R20260327-0001")
+
+    result = runner.invoke(app, ["runs", "list", str(survey), str(survey)])
+    assert result.exit_code == 0
+    # Count data rows (lines starting with the run id, after the header)
+    lines = result.output.strip().split("\n")
+    data_lines = [line for line in lines[2:] if line.startswith("R20260327-0001")]
+    assert len(data_lines) == 1

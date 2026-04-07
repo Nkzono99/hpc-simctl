@@ -13,8 +13,12 @@ from simctl.core.manifest import read_manifest
 
 
 def list_runs(
-    path: Optional[Path] = typer.Argument(
-        None, help="Directory to search for runs. Defaults to current directory."
+    paths: Optional[list[Path]] = typer.Argument(
+        None,
+        help=(
+            "One or more directories to search for runs. "
+            "Defaults to the current directory."
+        ),
     ),
     status_filter: Optional[str] = typer.Option(
         None, "--status", help="Filter by run status (e.g. 'failed', 'completed')."
@@ -23,18 +27,25 @@ def list_runs(
         None, "--tag", help="Filter by classification tag."
     ),
 ) -> None:
-    """List runs under the given path."""
-    search_dir = path or Path.cwd()
+    """List runs under one or more paths."""
+    search_dirs = list(paths) if paths else [Path.cwd()]
 
-    if not search_dir.is_dir():
-        typer.echo(f"Error: directory not found: {search_dir}", err=True)
-        raise typer.Exit(code=1)
+    run_dirs: list[Path] = []
+    seen: set[Path] = set()
+    for search_dir in search_dirs:
+        if not search_dir.is_dir():
+            typer.echo(f"Error: directory not found: {search_dir}", err=True)
+            raise typer.Exit(code=1)
 
-    try:
-        run_dirs = discover_runs(search_dir)
-    except SimctlError as e:
-        typer.echo(f"Error discovering runs: {e}", err=True)
-        raise typer.Exit(code=1) from None
+        try:
+            for rd in discover_runs(search_dir):
+                resolved = rd.resolve()
+                if resolved not in seen:
+                    seen.add(resolved)
+                    run_dirs.append(rd)
+        except SimctlError as e:
+            typer.echo(f"Error discovering runs in {search_dir}: {e}", err=True)
+            raise typer.Exit(code=1) from None
 
     if not run_dirs:
         typer.echo("No runs found.")
