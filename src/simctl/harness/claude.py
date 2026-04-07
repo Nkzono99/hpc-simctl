@@ -51,6 +51,7 @@ _ALLOW_BASH: Final[tuple[str, ...]] = (
     "Bash(simctl config add-launcher*)",
     # Lifecycle move that does not delete data
     "Bash(simctl runs archive*)",
+    "Bash(simctl runs cancel*)",
     # Dev tooling
     "Bash(uv run pytest*)",
     "Bash(uv run ruff*)",
@@ -70,6 +71,7 @@ _ALLOW_BASH: Final[tuple[str, ...]] = (
 _ASK_BASH: Final[tuple[str, ...]] = (
     "Bash(simctl runs submit*)",  # spends HPC resources
     "Bash(simctl runs purge-work*)",  # deletes work/ files irreversibly
+    "Bash(simctl runs delete*)",  # removes run directory irreversibly
 )
 _DENY_BASH: Final[tuple[str, ...]] = (
     "Bash(rm -rf *)",

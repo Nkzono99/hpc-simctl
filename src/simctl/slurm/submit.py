@@ -80,6 +80,10 @@ class SlurmSubmitError(RuntimeError):
     """Raised when sbatch fails or returns unexpected output."""
 
 
+class SlurmCancelError(RuntimeError):
+    """Raised when scancel fails."""
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -156,6 +160,30 @@ def sbatch_submit(
         )
 
     return parse_job_id(result.stdout)
+
+
+def scancel_job(
+    job_id: str,
+    *,
+    runner: CommandRunner | None = None,
+) -> None:
+    """Cancel a Slurm job via ``scancel``.
+
+    Args:
+        job_id: The Slurm job ID to cancel.
+        runner: Optional callable that executes a command list and returns
+            a ``CommandResult``.  Defaults to the real subprocess runner.
+
+    Raises:
+        SlurmNotFoundError: If ``scancel`` is not on PATH.
+        SlurmCancelError: If scancel returns a non-zero exit code.
+    """
+    run = runner or _default_runner
+    result = run(["scancel", job_id])
+    if result.returncode != 0:
+        raise SlurmCancelError(
+            f"scancel failed (exit {result.returncode}):\n{result.stderr.strip()}"
+        )
 
 
 # Keep the old name as an alias so the existing test import still works,

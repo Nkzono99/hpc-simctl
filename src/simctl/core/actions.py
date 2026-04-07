@@ -247,6 +247,28 @@ ACTION_SPECS: dict[str, ActionSpec] = {
         requires_confirmation=True,
         confirmation_reason="Purging deletes generated work files and is intentionally gated.",
     ),
+    "cancel_run": ActionSpec(
+        name="cancel_run",
+        description="Cancel an active Slurm job (scancel) and sync the run state.",
+        required_params=("run_dir",),
+        preconditions=("run state in {submitted, running}", "job_id recorded"),
+        state_change="submitted/running -> cancelled",
+        risk_level="medium",
+        cost_class="low",
+    ),
+    "delete_run": ActionSpec(
+        name="delete_run",
+        description="Hard-delete a run directory.  Only allowed for terminal "
+        "non-completed states (created, cancelled, failed) so existing "
+        "results are never lost.",
+        required_params=("run_dir",),
+        preconditions=("run state in {created, cancelled, failed}",),
+        destructive=True,
+        risk_level="high",
+        cost_class="low",
+        requires_confirmation=True,
+        confirmation_reason="Deletion removes the run directory irreversibly.",
+    ),
     "save_insight": ActionSpec(
         name="save_insight",
         description="Record a markdown knowledge insight.",
@@ -865,6 +887,105 @@ def purge_work(run_dir: Path) -> ActionResult:
         },
         state_before=state_str,
         state_after=RunState.PURGED.value,
+    )
+
+
+def cancel_run(run_dir: Path) -> ActionResult:
+    """Cancel an active Slurm job (scancel) and sync the run state.
+
+    Wraps ``scancel <job_id>`` followed by ``sync_run`` so the manifest is
+    updated atomically once Slurm reports the cancellation.  Use this instead
+    of bare ``scancel`` so the run state ends up consistent.
+    """
+    from simctl.core.manifest import read_manifest
+    from simctl.slurm.submit import (
+        SlurmCancelError,
+        SlurmNotFoundError,
+        scancel_job,
+    )
+
+    manifest = read_manifest(run_dir)
+    run_id = manifest.run.get("id", run_dir.name)
+    job_id = manifest.job.get("job_id", "")
+    if not job_id:
+        return _precondition_fail("cancel_run", "No job_id recorded in manifest")
+
+    state_str, err = _require_state(run_dir, RunState.SUBMITTED, RunState.RUNNING)
+    if err:
+        return _precondition_fail("cancel_run", err)
+
+    try:
+        scancel_job(job_id)
+    except SlurmNotFoundError as e:
+        return _error("cancel_run", str(e))
+    except SlurmCancelError as e:
+        return _error("cancel_run", str(e))
+
+    # Slurm typically takes a moment to mark the job as cancelled.  Run
+    # sync_run so the manifest reflects whatever Slurm reports right now;
+    # the caller can re-sync later if needed.
+    sync_result = sync_run(run_dir)
+
+    if sync_result.status is not ActionStatus.SUCCESS:
+        return ActionResult(
+            action="cancel_run",
+            status=ActionStatus.SUCCESS,
+            message=(
+                f"scancel sent for job {job_id}; sync did not complete "
+                f"({sync_result.message}).  Re-run `simctl runs sync` shortly."
+            ),
+            data={"run_id": run_id, "job_id": job_id},
+            state_before=state_str,
+            state_after=state_str,
+        )
+
+    return ActionResult(
+        action="cancel_run",
+        status=ActionStatus.SUCCESS,
+        message=f"Cancelled job {job_id}; {sync_result.message}",
+        data={
+            "run_id": run_id,
+            "job_id": job_id,
+            "slurm_state": sync_result.data.get("slurm_state", ""),
+        },
+        state_before=state_str,
+        state_after=sync_result.state_after or state_str,
+    )
+
+
+def delete_run(run_dir: Path) -> ActionResult:
+    """Hard-delete a run directory.
+
+    Only runs in a terminal non-completed state (``created``, ``cancelled``,
+    or ``failed``) may be deleted.  Completed and archived runs hold valuable
+    results and must go through the archive/purge flow instead.
+    """
+    state_str, err = _require_state(
+        run_dir,
+        RunState.CREATED,
+        RunState.CANCELLED,
+        RunState.FAILED,
+    )
+    if err:
+        return _precondition_fail("delete_run", err)
+
+    from simctl.core.manifest import read_manifest
+
+    run_id = read_manifest(run_dir).run.get("id", run_dir.name)
+    bytes_removed = _dir_size(run_dir)
+
+    try:
+        shutil.rmtree(run_dir)
+    except OSError as e:
+        return _error("delete_run", f"Failed to remove {run_dir}: {e}")
+
+    return ActionResult(
+        action="delete_run",
+        status=ActionStatus.SUCCESS,
+        message=f"Deleted run {run_id}",
+        data={"run_id": run_id, "bytes_removed": bytes_removed},
+        state_before=state_str,
+        state_after="",
     )
 
 

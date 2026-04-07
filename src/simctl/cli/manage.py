@@ -1,4 +1,4 @@
-"""CLI commands for run lifecycle management: archive and purge."""
+"""CLI commands for run lifecycle management: archive, purge, cancel, delete."""
 
 from __future__ import annotations
 
@@ -9,6 +9,8 @@ import typer
 from simctl.cli.run_lookup import resolve_run_or_cwd
 from simctl.core.actions import ActionStatus
 from simctl.core.actions import archive_run as archive_run_action
+from simctl.core.actions import cancel_run as cancel_run_action
+from simctl.core.actions import delete_run as delete_run_action
 from simctl.core.actions import purge_work as purge_work_action
 from simctl.core.exceptions import SimctlError
 from simctl.core.manifest import read_manifest
@@ -122,4 +124,108 @@ def purge_work(
 
     typer.echo(f"Purged work files for run {run_id}.")
     typer.echo(f"  Freed: {_format_size(total_freed)}")
+    typer.echo(f"  Path: {run_dir}")
+
+
+def cancel(
+    run: str = typer.Argument(None, help="Run directory or run_id (defaults to cwd)."),
+    yes: bool = typer.Option(False, "--yes", help="Skip confirmation prompt."),
+) -> None:
+    """Cancel an active Slurm job (scancel) and sync the run state.
+
+    Combines ``scancel <job_id>`` and ``simctl runs sync`` so the manifest is
+    updated automatically.  Use this instead of bare ``scancel`` so the run
+    state ends up consistent.
+    """
+    run_dir = resolve_run_or_cwd(run, search_dir=Path.cwd())
+
+    try:
+        manifest = read_manifest(run_dir)
+    except SimctlError as e:
+        typer.echo(f"Error reading manifest: {e}", err=True)
+        raise typer.Exit(code=1) from None
+
+    current_status = manifest.run.get("status", "")
+    job_id = manifest.job.get("job_id", "")
+    run_id = manifest.run.get("id", "???")
+
+    if current_status not in {RunState.SUBMITTED.value, RunState.RUNNING.value}:
+        typer.echo(
+            "Error: can only cancel submitted/running runs, "
+            f"but run is '{current_status}'.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+    if not job_id:
+        typer.echo("Error: no job_id recorded in manifest.", err=True)
+        raise typer.Exit(code=1)
+
+    if not yes and not typer.confirm(
+        f"Cancel run {run_id} (Slurm job {job_id})?",
+        default=False,
+    ):
+        typer.echo("Cancelled.")
+        raise typer.Exit()
+
+    result = cancel_run_action(run_dir)
+    if result.status is not ActionStatus.SUCCESS:
+        typer.echo(f"Error: {result.message}", err=True)
+        raise typer.Exit(code=1)
+
+    typer.echo(result.message)
+    if result.state_after and result.state_before != result.state_after:
+        typer.echo(f"  State: {result.state_before} -> {result.state_after}")
+
+
+def delete(
+    run: str = typer.Argument(None, help="Run directory or run_id (defaults to cwd)."),
+    yes: bool = typer.Option(False, "--yes", help="Skip confirmation prompt."),
+) -> None:
+    """Hard-delete a run directory.
+
+    Only allowed for terminal non-completed states (created, cancelled,
+    failed) so existing results (completed/archived) are never lost.
+    Removes the entire run directory irreversibly.
+    """
+    run_dir = resolve_run_or_cwd(run, search_dir=Path.cwd())
+
+    try:
+        manifest = read_manifest(run_dir)
+    except SimctlError as e:
+        typer.echo(f"Error reading manifest: {e}", err=True)
+        raise typer.Exit(code=1) from None
+
+    current_status = manifest.run.get("status", "")
+    deletable = {
+        RunState.CREATED.value,
+        RunState.CANCELLED.value,
+        RunState.FAILED.value,
+    }
+    if current_status not in deletable:
+        typer.echo(
+            "Error: can only delete created/cancelled/failed runs, "
+            f"but run is '{current_status}'. "
+            "Use `simctl runs archive` (then purge-work) for completed runs.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    run_id = manifest.run.get("id", "???")
+    dir_size = _get_dir_size(run_dir)
+
+    if not yes and not typer.confirm(
+        f"Delete run {run_id} ({_format_size(dir_size)})? "
+        "This removes the directory irreversibly.",
+        default=False,
+    ):
+        typer.echo("Cancelled.")
+        raise typer.Exit()
+
+    result = delete_run_action(run_dir)
+    if result.status is not ActionStatus.SUCCESS:
+        typer.echo(f"Error: {result.message}", err=True)
+        raise typer.Exit(code=1)
+
+    typer.echo(f"Deleted run {run_id}.")
+    typer.echo(f"  Freed: {_format_size(dir_size)}")
     typer.echo(f"  Path: {run_dir}")
