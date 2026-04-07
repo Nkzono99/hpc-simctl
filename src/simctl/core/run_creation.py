@@ -92,62 +92,56 @@ def _get_simulator_config(
     return dict(project.simulators.get(simulator_name, {}))
 
 
-def _build_job_config(job: JobData | dict[str, Any]) -> dict[str, Any]:
-    if isinstance(job, JobData):
-        config: dict[str, Any] = {
-            "partition": job.partition,
-            "walltime": job.walltime,
-        }
-        if job.rsc:
-            config["rsc"] = True
-            config["processes"] = job.processes
-            config["threads"] = job.threads
-            config["cores"] = job.cores
-            if job.memory:
-                config["memory"] = job.memory
-            if job.gpus:
-                config["gpus"] = job.gpus
-        else:
-            config["nodes"] = job.nodes
-            config["ntasks"] = job.ntasks
-        if job.modules:
-            config["modules"] = list(job.modules)
-        if job.pre_commands:
-            config["pre_commands"] = list(job.pre_commands)
-        if job.post_commands:
-            config["post_commands"] = list(job.post_commands)
-        return config
+def _is_rsc_site(site: SiteProfile | None) -> bool:
+    """Return True when the active site emits ``--rsc`` directives."""
+    return site is not None and site.resource_style == "rsc"
 
-    result: dict[str, Any] = {
-        "partition": job.get("partition", ""),
-        "walltime": job.get("walltime", "01:00:00"),
+
+def _build_job_config(
+    job: JobData,
+    site: SiteProfile | None,
+) -> dict[str, Any]:
+    """Translate JobData into the dict consumed by ``_render_script``.
+
+    The renderer reads ``ntasks`` / ``threads_per_process`` / ``cores_per_thread``
+    in RSC mode and ``nodes`` / ``ntasks`` in standard mode.  This helper
+    bridges the user-facing ``processes`` / ``threads`` / ``cores`` field names
+    in ``case.toml`` to those internal names based on the active site profile.
+    """
+    config: dict[str, Any] = {
+        "partition": job.partition,
+        "walltime": job.walltime,
     }
-    if job.get("rsc"):
-        result["rsc"] = True
-        result["processes"] = job.get("processes", 1)
-        result["threads"] = job.get("threads", 1)
-        result["cores"] = job.get("cores", 1)
-        if job.get("memory"):
-            result["memory"] = job["memory"]
-        if job.get("gpus"):
-            result["gpus"] = job["gpus"]
+    if _is_rsc_site(site):
+        config["ntasks"] = job.processes
+        config["threads_per_process"] = job.threads
+        config["cores_per_thread"] = job.cores
+        if job.memory:
+            config["memory"] = job.memory
+        if job.gpus:
+            config["gpus"] = job.gpus
     else:
-        result["nodes"] = job.get("nodes", 1)
-        result["ntasks"] = job.get("ntasks", 1)
-    for key in ("modules", "pre_commands", "post_commands"):
-        if key in job:
-            result[key] = list(job[key])
-    return result
+        config["nodes"] = job.nodes
+        config["ntasks"] = job.ntasks
+    if job.modules:
+        config["modules"] = list(job.modules)
+    if job.pre_commands:
+        config["pre_commands"] = list(job.pre_commands)
+    if job.post_commands:
+        config["post_commands"] = list(job.post_commands)
+    return config
 
 
-def _build_manifest_job(job: JobData | dict[str, Any]) -> dict[str, Any]:
-    if not isinstance(job, JobData):
-        return {
-            "scheduler": "slurm",
-            "job_id": "",
-            "submitted_at": "",
-        }
+def _build_manifest_job(
+    job: JobData,
+    site: SiteProfile | None,
+) -> dict[str, Any]:
+    """Build the [job] section recorded in ``manifest.toml``.
 
+    The manifest snapshot uses the user-facing field names from ``case.toml``
+    (``processes`` / ``threads`` / ``cores`` for RSC sites, ``nodes`` /
+    ``ntasks`` for standard Slurm sites) so that humans can read it directly.
+    """
     result: dict[str, Any] = {
         "scheduler": "slurm",
         "job_id": "",
@@ -155,8 +149,7 @@ def _build_manifest_job(job: JobData | dict[str, Any]) -> dict[str, Any]:
         "walltime": job.walltime,
         "submitted_at": "",
     }
-    if job.rsc:
-        result["rsc"] = True
+    if _is_rsc_site(site):
         result["processes"] = job.processes
         result["threads"] = job.threads
         result["cores"] = job.cores
@@ -176,6 +169,7 @@ def _build_manifest(
     project: ProjectConfig,
     runtime_info: dict[str, Any],
     adapter: SimulatorAdapter,
+    site: SiteProfile | None,
     *,
     survey_id: str = "",
     variation_keys: list[str] | None = None,
@@ -212,7 +206,7 @@ def _build_manifest(
             "name": case_data.launcher,
         },
         simulator_source=provenance,
-        job=_build_manifest_job(case_data.job),
+        job=_build_manifest_job(case_data.job, site),
         variation={
             "changed_keys": list(variation_keys) if variation_keys else [],
         },
@@ -324,16 +318,20 @@ def create_prepared_run(
         run_info.run_dir,
     )
 
-    ntasks = case_data.job.processes if case_data.job.rsc else case_data.job.ntasks
+    effective_site = _merge_site_modules(site, case_data.simulator, sim_config)
+    ntasks = (
+        case_data.job.processes
+        if _is_rsc_site(effective_site)
+        else case_data.job.ntasks
+    )
     exec_line = launcher.build_exec_line(program_cmd, ntasks)
-    job_config = _build_job_config(case_data.job)
+    job_config = _build_job_config(case_data.job, effective_site)
 
     extra_setup: list[str] = []
     venv_activate = project.root_dir / ".venv" / "bin" / "activate"
     if venv_activate.exists():
         extra_setup.append(f"source {venv_activate}")
 
-    effective_site = _merge_site_modules(site, case_data.simulator, sim_config)
     generate_job_script(
         run_info.run_dir,
         job_config,
@@ -351,6 +349,7 @@ def create_prepared_run(
         project,
         runtime_info,
         adapter,
+        effective_site,
         survey_id=survey_id,
         variation_keys=variation_keys,
     )

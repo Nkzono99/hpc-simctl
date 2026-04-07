@@ -40,17 +40,17 @@ class ClassificationData:
 class JobData:
     """Slurm job configuration.
 
-    Supports both standard Slurm (nodes/ntasks) and custom rsc mode
-    (``#SBATCH --rsc p=N:t=T:c=C``).  When ``rsc`` is True, the
-    ``processes``, ``threads``, and ``cores`` fields define the resource
-    allocation instead of ``nodes``/``ntasks``.
+    Supports both standard Slurm (nodes/ntasks) and the camphor-style
+    ``--rsc p=N:t=T:c=C`` directive.  Which directive is emitted is decided
+    by the active site profile (``site.toml`` ``resource_style``), not by
+    fields stored on this dataclass.  Both groups of fields can be set in
+    ``case.toml``; the ones unused by the active site are ignored.
 
     Attributes:
         partition: Slurm partition name.
         nodes: Number of nodes (standard mode).
         ntasks: Number of MPI tasks (standard mode).
         walltime: Wall-clock time limit string (HH:MM:SS or H:MM:SS).
-        rsc: If True, use --rsc directive instead of --nodes/--ntasks.
         processes: Number of MPI processes (rsc mode, ``p``).
         threads: Threads per process (rsc mode, ``t``). Must be <= cores.
         cores: Cores per process (rsc mode, ``c``). Must be >= threads.
@@ -66,7 +66,6 @@ class JobData:
     nodes: int = 1
     ntasks: int = 1
     walltime: str = "01:00:00"
-    rsc: bool = False
     processes: int = 1
     threads: int = 1
     cores: int = 1
@@ -149,7 +148,6 @@ def _parse_job(data: dict[str, Any]) -> JobData:
         nodes=int(data.get("nodes", 1)),
         ntasks=int(data.get("ntasks", 1)),
         walltime=str(data.get("walltime", "01:00:00")),
-        rsc=bool(data.get("rsc", False)),
         processes=int(data.get("processes", 1)),
         threads=int(data.get("threads", 1)),
         cores=int(data.get("cores", 1)),
