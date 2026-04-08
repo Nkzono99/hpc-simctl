@@ -26,7 +26,7 @@ simctl プロジェクトにおける Agent の作業ガイド。
 | 全 run 一括投入 | `simctl runs submit --all` |
 | キュー上書き / 依存ジョブ | `simctl runs submit -qn <queue>` / `--afterok <job_id>` |
 | 状態確認 (単一/複数/survey 一括) | `simctl runs status [RUNS...]` |
-| Slurm 同期 (単一/複数/survey 一括) | `simctl runs sync [RUNS...]` |
+| Slurm 同期 (単一/複数/survey 一括) | `simctl runs sync [RUNS...]` (bulk: created + terminal state は silent skip) |
 | ログ確認 | `simctl runs log` |
 | エラーログ | `simctl runs log -e` |
 | 実行中ジョブ一覧 / 自動更新 | `simctl runs jobs` / `simctl runs jobs -w 30` |
@@ -36,7 +36,10 @@ simctl プロジェクトにおける Agent の作業ガイド。
 | run のハード削除 (created/failed/cancelled) | `simctl runs delete` |
 | 解析 | `simctl analyze summarize` |
 | 集計 | `simctl analyze collect` |
-| 知見保存 | `simctl knowledge save` |
+| lab notebook に追記 | `simctl notes append "<title>" "<body>"` |
+| lab notebook 日付一覧 | `simctl notes list` |
+| lab notebook 内容表示 | `simctl notes show [DATE\|today\|latest]` |
+| 知見保存 (curated) | `simctl knowledge save` |
 | 知見一覧 | `simctl knowledge list` |
 | 知見表示 | `simctl knowledge show <name>` |
 | 構造化 fact 一覧 | `simctl knowledge facts` |
@@ -54,6 +57,43 @@ simctl プロジェクトにおける Agent の作業ガイド。
 - `runs/**/survey.toml` — パラメータサーベイ定義
 - `runs/**/Rxxxx/manifest.toml` — run メタデータ (自動生成、手動編集禁止)
 
+## Lab notebook と curated knowledge の二層
+
+実験で残す情報は **2 層** で管理する。Agent 自身の memory には保存しない。
+
+| 種類 | 性質 | 書き先 | コマンド |
+|---|---|---|---|
+| 整理済の名前付き知見 | curated, durable, 上書き可 | `.simctl/insights/<name>.md` | `simctl knowledge save` |
+| 機械可読 atomic claim | curated, atomic | `.simctl/facts.toml` | `simctl knowledge add-fact` |
+| 時系列の lab notebook (準備の意思決定, 観察, 仮説, TODO) | append-only, chronological | `notes/YYYY-MM-DD.md` | `simctl notes append` |
+| 長文 refined レポート | refined, 改稿可 | `notes/reports/<topic>.md` | (直接編集) |
+
+- 「結果をまとめて」「知見を記録して」等の整理済情報 → `simctl knowledge save` / `add-fact` で curated 層に
+- 「今やってる作業のメモ」「途中経過」「議論の流れ」「準備フェーズの意思決定」 → `simctl notes append` で lab notebook に
+- 価値が出てきたら `notes/` → `notes/reports/` → `.simctl/insights/` / `facts.toml` の順に昇格
+
+`/note` skill は **準備フェーズから使う**。campaign 設計, case 設計,
+survey 設計, run 生成, 投入の各タイミングで意思決定の理由・トレードオフ・
+却下した代替案を `notes/YYYY-MM-DD.md` に残しておくと、後の `/learn`
+(curated 化) の素材として再利用できる。
+
+```bash
+# 準備フェーズで意思決定を残す
+simctl notes append "Series A 設計" - <<'EOF'
+独立軸: vti = 1..19 eV (10 点). 4σ CFL で 19 eV が上限.
+固定: vflow=400 km/s. 没案: vflow も振る → 資源不足.
+EOF
+
+# 後で日付一覧 → 内容を確認
+simctl notes list
+simctl notes show 2026-04-08
+simctl notes show today    # 今日
+simctl notes show latest   # 一番新しい日
+
+# /learn 時に notes を素材として読み込む
+simctl notes show latest | head -100
+```
+
 ## ハーネスのガード
 
 `simctl init` は `.claude/settings.json` と `.claude/hooks/` も生成し、
@@ -62,6 +102,7 @@ Claude Code 向けに project 内の保護ルールを設定する。
 - 直接編集してよいのは主に `campaign.toml`、`cases/**`、`runs/**/survey.toml`、通常の docs
 - 直接編集してはいけないのは `runs/**/manifest.toml`、`input/**`、`submit/**`、`work/**`、`SITE.md`
 - `.simctl/insights/` と `.simctl/facts.toml` は `simctl knowledge save` / `add-fact` を使う
+- `notes/YYYY-MM-DD.md` は `simctl notes append` 経由で append-only に追記する (既存 entry を書き換えない)
 - `simctl runs submit` は `--dry-run` を除いて実行前に確認を挟む
 
 ## 状態遷移

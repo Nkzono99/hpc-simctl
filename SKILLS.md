@@ -54,22 +54,27 @@ AI エージェントが実行可能なスキル（操作手順）の定義。
 
 ---
 
-## Skill: 知見の記録と活用
+## Skill: 知見の記録と活用 (`/learn`)
 
-**目的**: 実験結果から得られた知見を構造化して保存する
+**目的**: 実験結果から得られた知見を curated 層 (`.simctl/insights/`,
+`.simctl/facts.toml`) に永続化する
 
 ### 手順
 
-1. completed run の結果を `summarize_run` で確認
-2. パラメータと結果の関係を分析
-3. 知見を構造化:
+1. **`notes/` を素材として読む** — `simctl notes list` で日付一覧、
+   関連日を `simctl notes show <date>` で読んで散らばった観察・仮説・
+   反例を集める
+2. completed run の結果を `summarize_run` で確認
+3. パラメータと結果の関係を分析
+4. 知見を構造化:
    - `fact_type`: observation / constraint / dependency / policy / hypothesis
    - `simulator`: 対象シミュレータ
    - `scope_case`: 対象ケース
    - `param_name`: 関連パラメータ
    - `confidence`: high / medium / low
-4. `add_fact` で記録
-5. 既存 fact と矛盾する場合は `supersedes` で更新
+5. `add_fact` で記録、または `simctl knowledge save` で markdown insight として保存
+6. 既存 fact と矛盾する場合は `supersedes` で更新
+7. 出処になった `notes/<date>.md` の日付を insight 本文に書き残す
 
 ### Confidence 判断基準
 
@@ -84,6 +89,58 @@ AI エージェントが実行可能なスキル（操作手順）の定義。
 - hypothesis は fact_type="hypothesis" として明確に区別
 - 1回の観測で high confidence にしない
 - 数値的な制約は具体的な値を claim に含める
+
+---
+
+## Skill: 実験ノートの記録 (`/note`)
+
+**目的**: 研究プロセスの各フェーズで生まれる raw chronological information
+を `notes/YYYY-MM-DD.md` に append-only で残す。`/learn` の素材になる
+chain of thought を失わないようにする。
+
+### 手順
+
+1. 何かしら新しい観察・意思決定・試行・議論があったら呼ぶ
+2. 1-2 行の `<title>` と本文を `simctl notes append` に渡す
+3. 当該日付ファイルが無ければヘッダ付きで新規作成、あれば末尾に追記
+
+```bash
+# inline
+simctl notes append "<title>" "<body>"
+
+# stdin / heredoc
+simctl notes append "<title>" - <<'EOF'
+- A
+- B
+EOF
+```
+
+### いつ書くか — フェーズ別
+
+**準備フェーズ (campaign / case / survey 設計)**:
+
+- 意思決定の理由・トレードオフ・却下した代替案
+- 資源見積もり・smoke test の選び方・不安な前提
+
+**投入・実行フェーズ**:
+
+- 投入 commit hash, run_id 範囲, queue, walltime
+- 中断・再投入・OOM・kill の経緯と対処
+- 暫定 status
+
+**解析フェーズ**:
+
+- 試したコマンドと結果 (1-3 行)
+- 観察した数値・パターン
+- 仮説、失敗、TODO、user との議論
+
+### 注意点
+
+- **append-only**: 既存 entry を書き換えない
+- 1 entry = 1 トピック (混ぜない)
+- curated 層に直接書こうとしない (まず `/note`, あとで `/learn`)
+- 価値が出てきたら `notes/reports/<topic>.md` に refined version を書き、
+  さらに `simctl knowledge save` / `add-fact` で curated 化
 
 ---
 

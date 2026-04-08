@@ -628,10 +628,11 @@ campaign.toml              ← ユーザーが記述
   [observables] 測定量
 ```
 
-### 実験知見
+### 実験知見 (curated)
 
 ```
 .simctl/insights/*.md      ← /learn で保存
+.simctl/facts.toml         ← simctl knowledge add-fact
 simproject.toml:[knowledge.sources] ← 外部 knowledge source 定義
     ↓ simctl knowledge source sync
 insights のインポート       ← プロジェクト横断の知識共有
@@ -639,6 +640,22 @@ insights のインポート       ← プロジェクト横断の知識共有
 
 知見の種類: `constraint` (制約), `result` (結果サマリー),
 `analysis` (物理的考察), `dependency` (パラメータ依存性)
+
+### Lab notebook (chronological)
+
+```
+notes/YYYY-MM-DD.md        ← simctl notes append (append-only)
+notes/reports/<topic>.md   ← refined long-form (改稿可)
+    ↓ /learn で素材として読む
+.simctl/insights/, facts.toml ← curated 化
+```
+
+curated knowledge と lab notebook は **二層構造**:
+
+- 整理済の永続知見 (上書き可・名前付き) は `.simctl/insights/` / `facts.toml`
+- 時系列の chain of thought (準備フェーズの意思決定・観察・仮説・TODO) は `notes/YYYY-MM-DD.md`
+- `simctl notes append` は今日の日次ファイルに `## HH:MM <title>` 形式で追記
+- 価値が出てきたら notes → reports → insights / facts.toml の順に昇格
 
 詳細は [docs/knowledge-layer.md](knowledge-layer.md) を参照。
 
