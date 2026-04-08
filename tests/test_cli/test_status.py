@@ -335,6 +335,70 @@ def test_sync_multi_run_arguments(tmp_path: Path) -> None:
     assert "R20260327-0002" in result.output
 
 
+def test_sync_bulk_skips_terminal_states(tmp_path: Path) -> None:
+    """In multi-target mode, completed/failed/cancelled runs are skipped silently.
+
+    Without this skip, ``sync_run_action`` raises a precondition_failed
+    error for terminal states (it only accepts submitted/running) and
+    ``simctl runs sync runs/`` would error out the moment any run in the
+    survey has finished — exactly the wrong behaviour for monitoring a
+    long survey.
+    """
+    (tmp_path / "simproject.toml").write_text('[project]\nname = "test"\n')
+    survey = tmp_path / "runs" / "series_x"
+    _create_run(
+        survey / "R20260327-0001",
+        run_id="R20260327-0001",
+        status="completed",
+        job_id="11111",
+    )
+    _create_run(
+        survey / "R20260327-0002",
+        run_id="R20260327-0002",
+        status="running",
+        job_id="22222",
+    )
+    _create_run(
+        survey / "R20260327-0003",
+        run_id="R20260327-0003",
+        status="failed",
+        job_id="33333",
+    )
+
+    with (
+        patch("simctl.cli.status.Path.cwd", return_value=tmp_path),
+        patch(
+            "simctl.slurm.query.query_job_status",
+            return_value=JobStatus(
+                run_state=RunState.COMPLETED, slurm_state="COMPLETED"
+            ),
+        ),
+    ):
+        result = runner.invoke(app, ["runs", "sync", str(survey)])
+
+    assert result.exit_code == 0, result.output
+    # Only the running run goes through the sync action.
+    assert "R20260327-0002" in result.output
+    # The completed and failed runs are skipped silently — their lines
+    # should not appear as state-change records.
+    assert "R20260327-0001:" not in result.output
+    assert "R20260327-0003:" not in result.output
+
+
+def test_sync_single_terminal_run_reports_skip(tmp_path: Path) -> None:
+    """Single-target sync of a terminal run prints a skip notice (no error)."""
+    (tmp_path / "simproject.toml").write_text('[project]\nname = "test"\n')
+    run_dir = tmp_path / "runs" / "R20260327-0001"
+    _create_run(run_dir, status="completed", job_id="11111")
+
+    with patch("simctl.cli.status.Path.cwd", return_value=tmp_path):
+        result = runner.invoke(app, ["runs", "sync", str(run_dir)])
+
+    assert result.exit_code == 0
+    assert "completed" in result.output
+    assert "nothing to sync" in result.output
+
+
 def test_status_multi_run_arguments(tmp_path: Path) -> None:
     """Status accepts multiple targets and prints each."""
     (tmp_path / "simproject.toml").write_text('[project]\nname = "test"\n')

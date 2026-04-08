@@ -14,6 +14,7 @@ from simctl.core.exceptions import (
     ManifestNotFoundError,
 )
 from simctl.core.manifest import read_manifest
+from simctl.core.state import RunState
 from simctl.slurm.query import SlurmQueryError, query_job_status
 from simctl.slurm.submit import SlurmNotFoundError
 
@@ -103,13 +104,30 @@ def sync(
     both manifest.toml and status/state.json if the state has changed.
 
     When passed a survey directory (e.g. ``simctl runs sync runs/series_A``)
-    every run found underneath is sync'd.  Runs whose manifest does not
-    record a job_id (typical for ``created`` runs that haven't been
-    submitted yet) are silently skipped so the bulk command remains useful
-    on mixed-state surveys.
+    every run found underneath is sync'd.  In bulk / multi-target mode the
+    following runs are skipped silently so the command remains useful on
+    mixed-state surveys:
+
+    - runs without a recorded ``job_id`` (typical for ``created`` runs that
+      haven't been submitted yet);
+    - runs already in a terminal state (``completed``, ``failed``,
+      ``cancelled``, ``archived``, ``purged``) — those have nothing left to
+      sync.
+
+    In single-target mode the user is explicitly asking about a specific
+    run, so the precondition errors are surfaced instead of swallowed.
     """
     targets = resolve_run_targets(runs, search_dir=Path.cwd())
     multi = len(targets) > 1
+
+    # Terminal states that no longer need (or accept) Slurm reconciliation.
+    terminal_states = {
+        RunState.COMPLETED.value,
+        RunState.FAILED.value,
+        RunState.CANCELLED.value,
+        RunState.ARCHIVED.value,
+        RunState.PURGED.value,
+    }
 
     failures = 0
     for run_dir in targets:
@@ -122,9 +140,7 @@ def sync(
 
         # In multi-target / bulk mode, runs without a job_id are skipped
         # silently — they typically belong to ``created`` runs that haven't
-        # been submitted yet, and we want bulk sync over a mixed-state
-        # survey to remain useful.  In single-target mode the user is
-        # explicitly asking about a specific run, so report the error.
+        # been submitted yet.
         if not manifest.job.get("job_id", ""):
             if multi:
                 continue
@@ -135,6 +151,21 @@ def sync(
                 err=True,
             )
             raise typer.Exit(code=1)
+
+        # Same idea for runs already in a terminal state — there is nothing
+        # for sync_run() to do, and the underlying action raises a
+        # precondition_failed for completed/failed/cancelled.  Skip silently
+        # in bulk mode so the rest of the survey still gets processed.
+        current_state = str(manifest.run.get("status", ""))
+        if current_state in terminal_states:
+            if multi:
+                continue
+            run_id_str = manifest.run.get("id", run_dir.name)
+            typer.echo(
+                f"{run_id_str}: state already terminal ({current_state}) — "
+                "nothing to sync"
+            )
+            continue
 
         result = sync_run_action(run_dir)
         run_id = str(result.data.get("run_id", run_dir.name))
