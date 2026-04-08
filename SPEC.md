@@ -181,6 +181,11 @@ sim-manager/
           survey.toml
           R20260328-0001/
             ...
+
+  notes/                 # project-wide lab notebook (chronological)
+    YYYY-MM-DD.md        # 日次の append-only ノート (`simctl notes append`)
+    reports/             # 長文 refined レポート
+    README.md            # 二層 (curated vs lab notebook) 規約
 ```
 
 ---
@@ -988,8 +993,16 @@ production tag を持つ run では、以下を推奨または要求する。
 
 ## 18.4 状態追跡
 
-* `simctl status <run_dir or run_id>`
-* `simctl sync <run_dir or run_id>`
+* `simctl runs status [RUNS...]`
+* `simctl runs sync [RUNS...]`
+
+`runs status` / `runs sync` は run_id・run dir・survey dir を複数指定できる。
+`runs sync` を bulk モード (survey dir または複数指定) で呼び出した場合、
+`job_id` 未記録の run と terminal state (`completed`, `failed`,
+`cancelled`, `archived`, `purged`) の run は **silent skip** され、残りの
+submitted / running な run のみが Slurm に問い合わせられる。
+single-target モードでは "nothing to sync" notice を出してエラー扱いに
+しない。
 
 ---
 
@@ -1018,10 +1031,38 @@ production tag を持つ run では、以下を推奨または要求する。
 
 ## 18.8 整理
 
-* `simctl archive <run_dir or run_id>` — completed → archived
-* `simctl purge-work <run_dir or run_id>` — archived → purged
-* `simctl cancel <run_dir or run_id>` — submitted/running → cancelled (`scancel` と `sync` をまとめて実行する安全経路)
-* `simctl delete <run_dir or run_id>` — created / cancelled / failed の run ディレクトリをハード削除 (ライフサイクル外、completed/archived には不可)
+* `simctl runs archive <run_dir or run_id>` — completed → archived
+* `simctl runs purge-work <run_dir or run_id>` — archived → purged
+* `simctl runs cancel <run_dir or run_id>` — submitted/running → cancelled (`scancel` と `sync` をまとめて実行する安全経路)
+* `simctl runs delete <run_dir or run_id>` — created / cancelled / failed の run ディレクトリをハード削除 (ライフサイクル外、completed/archived には不可)
+
+---
+
+## 18.9 Lab notebook (実験ノート)
+
+curated knowledge (`.simctl/insights/`, `.simctl/facts.toml`) と並列に運用する
+**append-only な時系列ノート**。1 ファイル = 1 日 (`notes/YYYY-MM-DD.md`)、
+各エントリは `## HH:MM <title>` で始まる。
+
+* `simctl notes append TITLE [BODY]` — 今日 (JST) の lab notebook に追記。
+  本文は引数 (inline) または `-` / 引数省略で stdin から読む。
+* `simctl notes list [-n N]` — 最近の lab notebook 日付一覧 (新しい順, デフォルト 14 日)
+* `simctl notes show [DATE|today|latest]` — 指定日の内容を表示
+
+書き込みポリシー:
+
+* **append-only**: 既存 entry は触らない。新しい entry を末尾に追加する
+* 1 ファイル = 1 日。日付は ISO 形式 (`2026-04-08.md`)
+* 既存ファイルが無ければ `# YYYY-MM-DD — lab notebook` ヘッダ付きで新規作成
+* 各 entry は `## HH:MM <title>` 直下に本文 (markdown 自由)
+
+curated layer との関係:
+
+* `notes/YYYY-MM-DD.md` は **raw chronological log** (準備フェーズの意思決定、
+  観察、仮説、TODO)
+* `notes/reports/<topic>.md` は refined long-form (改稿可)
+* `.simctl/insights/<name>.md` / `.simctl/facts.toml` は curated, durable
+* 価値が出てきたら `notes/` → `reports/` → `insights/` / `facts.toml` の順で昇格
 
 ---
 
@@ -1063,10 +1104,22 @@ production tag を持つ run では、以下を推奨または要求する。
 * `squeue` / `sacct` / adapter 判定により状態を更新
 * `status/state.json` を更新
 * manifest の `run.status` を同期
+* bulk モード (survey dir または複数 RUNS) では `job_id` 未記録 / terminal
+  state な run を silent skip し、残りのみを処理する
 
 ---
 
-## 19.5 `summarize`
+## 19.5 `notes append`
+
+* `notes/<JST today>.md` を解決 (project root 直下を優先、なければ cwd/notes)
+* ファイルが無ければ `# YYYY-MM-DD — lab notebook` ヘッダを付けて新規作成
+* 末尾に `## HH:MM <title>` 見出しと本文を append (既存 entry には触らない)
+* 本文ソース: 引数 inline / `-` または引数省略時は stdin
+* 空タイトル・空本文はエラー (exit 2)
+
+---
+
+## 19.6 `summarize`
 
 * Adapter により出力を読み取り
 * 主要指標を抽出
@@ -1074,7 +1127,7 @@ production tag を持つ run では、以下を推奨または要求する。
 
 ---
 
-## 19.6 `collect`
+## 19.7 `collect`
 
 * 指定 survey 配下の各 run の summary を収集
 * `survey_summary.csv` などを生成

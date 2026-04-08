@@ -13,7 +13,15 @@ hpc-simctl の知識層は 4 つのドメインで構成される:
 | **実行環境知識** | クラスタ構成、パーティション、モジュール | `.simctl/environment.toml` | `simctl doctor` |
 | **研究意図** | 仮説、実験設計、変数定義、観測量 | `campaign.toml` | ユーザーが記述 |
 
-加えて、実験から得られた **知見 (insights)** がプロジェクト横断で蓄積・共有される。
+加えて、実験から得られた情報は **二層** で蓄積・共有される:
+
+- **curated knowledge**: 整理済の永続知見 — `.simctl/insights/<name>.md` (Markdown), `.simctl/facts.toml` (atomic claims)
+- **lab notebook**: append-only な時系列ログ — `notes/YYYY-MM-DD.md` (日次ノート), `notes/reports/<topic>.md` (refined long-form)
+
+curated knowledge は名前付き・上書き可・durable で、最終的な findings を
+入れる場所。lab notebook は raw chronological で、準備フェーズの意思決定・
+観察・仮説・TODO をその場で残す場所。価値が出てきたら lab notebook →
+reports → insights / facts.toml の順に昇格する。
 
 ## ディレクトリ構成
 
@@ -43,12 +51,18 @@ project/
         imports.md               # CLAUDE.md から @import される
       candidates/                # 外部 source 由来の候補 knowledge
         facts/                   # candidate fact transport
-    insights/                    # 実験から得た知見
+    insights/                    # 実験から得た curated 知見 (Markdown)
       emses_cfl_limit.md         # 安定性の知見
       mag_scan_results.md        # 実験結果サマリー
       heating_mechanism.md       # 物理的考察
     environment.toml             # 実行環境記述
-    facts.toml                   # 構造化された知識 (AI 向け)
+    facts.toml                   # 構造化された curated 知識 (AI 向け)
+  notes/                         # Lab notebook (chronological, append-only)
+    2026-04-08.md                # 日次の作業ノート (`simctl notes append`)
+    2026-04-09.md
+    reports/                     # 長文 refined レポート
+      cs_vs_vti_scaling.md
+    README.md                    # 二層運用規約
 ```
 
 ## シミュレータ知識
@@ -315,6 +329,126 @@ project の `CLAUDE.md` から `@.simctl/knowledge/enabled/imports.md` で一括
 - **`simctl init`** (対話モード): GitHub の `*shared_knowledge*` リポジトリを自動検索し、候補として提案。手動 URL 入力も可能
 - **`simctl setup`**: `simproject.toml` に設定された知識ソースを自動同期し、`imports.md` をレンダリング
 
+## Lab notebook (`notes/`)
+
+curated knowledge と並列に運用する **append-only な時系列ノート**。
+research process の各フェーズ (準備 / 実行 / 解析) で生まれる raw な
+情報を、後で整理する前にそのまま残すための場所。
+
+### なぜ curated knowledge と分けるのか
+
+`simctl knowledge save <name>` は **同名で書くと上書き** される。
+これは curated knowledge が「最終的な整理済 findings」を入れる場所として
+正しい挙動だが、「今やってる作業のメモ」「途中で見つけた反例」「却下した
+代替案」「ユーザーとの議論の流れ」といった **chronological な情報** とは
+shape が違う。
+
+lab notebook はこの隙間を埋める:
+
+| 用途 | 場所 | 性質 | コマンド |
+|---|---|---|---|
+| 整理済の名前付き知見 | `.simctl/insights/<name>.md` | curated, durable, 上書き可 | `simctl knowledge save` |
+| 機械可読 atomic claim | `.simctl/facts.toml` | curated, atomic | `simctl knowledge add-fact` |
+| 日次の lab notebook | `notes/YYYY-MM-DD.md` | append-only, chronological | `simctl notes append` |
+| 長文 refined レポート | `notes/reports/<topic>.md` | refined, 改稿可 | (直接編集) |
+
+### ファイル形式
+
+- 1 ファイル = 1 日。日付は ISO (`2026-04-08.md`)、JST 基準
+- 既存ファイルが無ければ `# YYYY-MM-DD — lab notebook` ヘッダを付けて新規作成
+- 各 entry は `## HH:MM <title>` 直下に本文 (markdown 自由)
+- **append-only**: 既存 entry には触らない
+
+例:
+
+```markdown
+# 2026-04-08 — lab notebook
+
+## 14:32 Series A vti scan 設計
+
+独立軸: vti = 1..19 eV (10 点, 線形). 4σ CFL で 19 eV が上限.
+固定: vflow=400 km/s, vte=10 eV, plate -34 V.
+没案: vflow も振る → 30 run × 2 で資源不足.
+
+## 16:05 cs scaling preview
+
+3 点で `tan α = 0.79 (cs/vflow) + 0.02, R² = 0.9997` が出た.
+vti scaling より明らかに良い. 3 点だけなのが心配, Series B 完走で確認.
+```
+
+### コマンド
+
+```bash
+# 追記 (inline)
+simctl notes append "<title>" "<body...>"
+
+# 追記 (stdin から本文)
+simctl notes append "<title>" -
+echo "..." | simctl notes append "<title>"
+
+# heredoc
+simctl notes append "<title>" - <<'EOF'
+- A
+- B
+- C
+EOF
+
+# 一覧 (新しい順, デフォルト 14 日)
+simctl notes list
+simctl notes list -n 30
+
+# 内容表示
+simctl notes show today      # 今日 (JST)
+simctl notes show latest     # 最新の日
+simctl notes show 2026-04-08 # 特定日
+```
+
+### いつ書くか — フェーズ別ガイド
+
+`/note` skill は **準備フェーズから使う**。解析時だけでなく:
+
+**準備フェーズ (campaign / case / survey 設計)**:
+
+- 意思決定の理由 (なぜこの値・範囲・解像度を選んだか)
+- 設計トレードオフ (何と何を秤にかけて、何を切り捨てたか)
+- 却下した代替案 (一度考えてやめたデザイン)
+- 資源見積もり (想定 core-hour, queue, 投入順序の判断材料)
+- 検証計画 (smoke test の選び方, 成否判定基準)
+- 不安・前提 (「ここが心配」「ここが勘」と思う部分)
+
+**投入・実行フェーズ**:
+
+- 投入したコマンド・対象 run・queue・資源量
+- 中断・再投入の理由
+- ジョブの異常 (kill, requeue, OOM, 異常終了) と対処
+- 暫定 status (e.g. "夕方時点で 12/30 完走")
+
+**解析フェーズ**:
+
+- 試したコマンド・スクリプトと結果 (1-3 行)
+- 観察したこと (e.g. "α が R0036 で 6.13°")
+- 仮説 (e.g. "intercept は sheath 厚由来かも")
+- 失敗・つまづき
+- TODO・次の一手
+- 議論の流れ (user との対話で出てきた論点)
+
+### 昇格パス
+
+```
+notes/YYYY-MM-DD.md           ← 日次の chain of thought
+        ↓ (ストーリーが固まる)
+notes/reports/<topic>.md      ← refined long-form report
+        ↓ (atomic な知見を抽出)
+.simctl/insights/<name>.md    ← curated insight
+.simctl/facts.toml            ← atomic claim
+```
+
+`/learn` skill は **`notes/` を素材として読む** ことを前提にしている:
+`simctl notes list` で日付一覧を取り、関連する `simctl notes show` で
+読んで、散らばった raw observation を一つの insight にまとめてから
+`simctl knowledge save` / `add-fact` で curated 化する。出処になった
+日付を insight 本文に書き残しておくと、後から原料を辿れる。
+
 ## 知見 (Insights)
 
 ### 知見の種類
@@ -440,23 +574,28 @@ shared facts は candidate として source ごとの TOML に保持され、`kn
 ## AI エージェントの推奨ワークフロー
 
 ```
-1. UNDERSTAND: campaign.toml + knowledge/ + insights/ を読む
-   → 研究目的、既知の制約、過去の知見を把握
+1. UNDERSTAND: campaign.toml + knowledge/ + insights/ + notes/ を読む
+   → 研究目的、既知の制約、過去の知見、最近の lab notebook を把握
 
 2. PLAN: parameter_schema() + validate_params() を活用
    → 物理的に妥当なパラメータセットを設計
+   → 設計の理由・トレードオフ・却下案を simctl notes append で残す
 
 3. EXECUTE: simctl runs create + simctl runs submit
    → survey.toml → run 生成 → job 投入
+   → 投入直前に simctl notes append でスナップショット (commit hash, run_id 範囲)
 
-4. MONITOR: simctl runs status + simctl runs log
-   → 実行状況の追跡
+4. MONITOR: simctl runs status + simctl runs log + simctl runs sync
+   → 実行状況の追跡 (bulk sync は terminal state を silent skip)
+   → 異常があれば simctl notes append で記録
 
 5. ANALYZE: simctl analyze summarize + simctl analyze collect
    → 結果の集計・要約
+   → 観察・仮説を simctl notes append で raw に残す
 
-6. LEARN: simctl knowledge save
-   → 結果と考察を insights/ に保存
+6. LEARN: simctl notes list / show で素材を集めて simctl knowledge save / add-fact
+   → 結果と考察を curated 層 (.simctl/insights/, facts.toml) に昇格
+   → 出処になった日付を insight 本文に書き残す
 
 7. ITERATE: 知見に基づいてパラメータを改善
    → 次の実験サイクルへ
