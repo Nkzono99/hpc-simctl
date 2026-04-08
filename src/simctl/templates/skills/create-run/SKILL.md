@@ -114,3 +114,22 @@ simctl runs submit --all -qn <partition>
 - input/ や submit/job.sh を直接作らない
 - survey の run 数が多い場合は投入前に plan を出して承認を取る
 - `simctl runs submit --all --dry-run` で投入前に確認できる
+
+## `/note` で残すべきこと
+
+run / survey 生成の前後で lab notebook に記録する:
+
+- 何 run 生成したか (件数, 内訳, 命名規則)
+- 想定総コスト (core-h, walltime)
+- どの case を base にしたか, 上書きしたパラメータの一覧
+- sweep 軸の意味付け (e.g. "vti を 1-19 eV にしたのは…")
+- 投入前の commit hash (`git rev-parse HEAD`)
+
+```bash
+simctl notes append "Series A sweep 生成" - <<'EOF'
+runs/series_A_flat_plate/ に 10 run.
+base case: cases/emses/flat_plate, sweep 軸: ions[0].vti = 1..19 eV.
+display_name: vti{vti}.
+total core-h ≈ 64k. snapshot commit: 53a7e62.
+EOF
+```

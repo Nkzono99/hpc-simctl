@@ -48,6 +48,25 @@ simctl runs list runs/<category>/<survey_name>
 - `status = "stable"` の entry をベースにする
 - fragment を使う場合は `[merge]` と `[compatibility]` を確認する
 
+## `/note` で残すべきこと
+
+survey 設計の意思決定は `notes/YYYY-MM-DD.md` に残す:
+
+- どのパラメータ軸を選んだか・なぜか (物理的に何を見たいか)
+- スイープ範囲・点数を決めた根拠 (CFL, 物理的に意味のある下限上限)
+- 振らないパラメータの fix 値とその理由
+- 想定 core-hour と queue, 投入順序の判断
+- 一度試して没にした設計 (e.g. 解像度を上げて 1 軸にした, 2 軸を諦めた)
+
+```bash
+simctl notes append "Series A vti scan 設計" - <<'EOF'
+独立軸: vti = 1, 3, 5, ..., 19 eV (10 点, 線形).
+理由: 4σ CFL で 19 eV が上限, 1 eV が drift 主導側の下限.
+固定: vflow=400 km/s, vte=10 eV, plate -34 V.
+コスト: 10 run × 800 core × 8 h ≈ 64k core-h. gr20001a で OK.
+EOF
+```
+
 ## TOML フォーマット
 
 詳細は `tools/hpc-simctl/docs/toml-reference.md` の survey.toml セクションを参照。

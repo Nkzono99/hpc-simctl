@@ -42,6 +42,27 @@ class TestInit:
         assert (tmp_path / ".simctl" / "knowledge" / "candidates" / "facts").is_dir()
         assert (tmp_path / ".claude" / "skills").is_dir()
         assert (tmp_path / ".vscode" / "settings.json").exists()
+        # Lab notebook scaffolding
+        assert (tmp_path / "notes").is_dir()
+        assert (tmp_path / "notes" / "reports").is_dir()
+        assert (tmp_path / "notes" / "README.md").is_file()
+
+    def test_init_notes_readme_content(self, tmp_path: Path) -> None:
+        """notes/README.md describes the lab-notebook convention."""
+        runner.invoke(app, ["init", "-y", "--path", str(tmp_path)])
+        readme = (tmp_path / "notes" / "README.md").read_text(encoding="utf-8")
+        assert "lab notebook" in readme
+        assert "simctl notes append" in readme
+        assert "notes/YYYY-MM-DD.md" in readme
+
+    def test_init_creates_note_skill(self, tmp_path: Path) -> None:
+        """The /note skill is scaffolded next to the other skills."""
+        runner.invoke(app, ["init", "-y", "--path", str(tmp_path)])
+        skill_md = tmp_path / ".claude" / "skills" / "note" / "SKILL.md"
+        assert skill_md.is_file()
+        content = skill_md.read_text(encoding="utf-8")
+        assert "name: note" in content
+        assert "simctl notes append" in content
 
     def test_init_simproject_content(self, tmp_path: Path) -> None:
         """simproject.toml has correct project name derived from dir name."""
