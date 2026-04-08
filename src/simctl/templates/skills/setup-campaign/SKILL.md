@@ -73,9 +73,34 @@ unit = "V (normalized)"
 
 1. `campaign.toml` を更新する
 2. 記入内容のサマリーを表示する
-3. 次のステップを提案する:
+3. **`/note` で経緯を残す** (下記参照)
+4. 次のステップを提案する:
    - ケースが未作成なら `simctl case new <case_name> -s <simulator>` を提案 (cases/<sim>/ に自動生成)
    - ケースが既存なら survey 設計を提案
+
+## `/note` で残すべきこと
+
+campaign 設計の意思決定は raw な状態で `notes/YYYY-MM-DD.md` に残しておく
+(後の `/learn` の素材になる):
+
+- どのテーマ・仮説を採用したか、なぜか
+- 却下した代替仮説 (一度考えてやめたもの)
+- independent / fixed / controlled の境界をどう判断したか
+- スコープを絞った理由 (時間・資源・物理的妥当性)
+- ユーザーとの議論で出た論点 (言われたまま採用したのはどれか, 反対したのはどれか)
+
+例:
+
+```bash
+simctl notes append "campaign セットアップ" - <<'EOF'
+Theme: thermal-motion-induced ion depletion (2D PIC).
+Hypothesis: vti が大きいほど plate 下流の枯渇角 alpha が広がる。
+
+independent: vti (1-19 eV, CFL 4σ で 19 eV が上限).
+fixed: vflow=400 km/s, dx=0.5 m, box 4000x800.
+没案: vflow も振る → 2 軸スキャンは 30 run × 2 で資源が足りない。
+EOF
+```
 
 ## 注意
 
