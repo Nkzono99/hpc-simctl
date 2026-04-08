@@ -233,7 +233,9 @@ ACTION_SPECS: dict[str, ActionSpec] = {
         risk_level="high",
         cost_class="low",
         requires_confirmation=True,
-        confirmation_reason="Archiving changes lifecycle state and is treated as a review gate.",
+        confirmation_reason=(
+            "Archiving changes lifecycle state and is treated as a review gate."
+        ),
     ),
     "purge_work": ActionSpec(
         name="purge_work",
@@ -245,7 +247,9 @@ ACTION_SPECS: dict[str, ActionSpec] = {
         risk_level="high",
         cost_class="high",
         requires_confirmation=True,
-        confirmation_reason="Purging deletes generated work files and is intentionally gated.",
+        confirmation_reason=(
+            "Purging deletes generated work files and is intentionally gated."
+        ),
     ),
     "cancel_run": ActionSpec(
         name="cancel_run",
@@ -299,7 +303,8 @@ ACTION_SPECS: dict[str, ActionSpec] = {
         risk_level="medium",
         cost_class="low",
         confirmation_conditions=(
-            "recommended before recording a new high-confidence fact from fresh survey results",
+            "recommended before recording a new high-confidence fact from fresh "
+            "survey results",
         ),
     ),
     "promote_fact": ActionSpec(

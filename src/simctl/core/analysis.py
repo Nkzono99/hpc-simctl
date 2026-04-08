@@ -153,7 +153,8 @@ def _normalize_recipe_columns(
         for item in value:
             if not isinstance(item, str) or not item.strip():
                 raise SimctlError(
-                    f"Plot recipe '{recipe_name}' has invalid {field_name} entry: {item!r}"
+                    f"Plot recipe '{recipe_name}' has invalid {field_name} "
+                    f"entry: {item!r}"
                 )
             columns.append(item.strip())
     elif value not in ("", None):
@@ -812,10 +813,10 @@ def render_survey_plot(
         output_path = survey_dir / "summary" / "plots" / f"{stem}.png"
 
     try:
-        import matplotlib
+        import matplotlib  # type: ignore[import-not-found]
 
         matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
+        import matplotlib.pyplot as plt  # type: ignore[import-not-found]
     except Exception as exc:
         raise SimctlError(
             "matplotlib is required for simctl analyze plot. "
@@ -854,8 +855,7 @@ def render_survey_plot(
         for idx, series in enumerate(series_list):
             values_by_category = {str(point[0]): point[1] for point in series.points}
             offsets = [
-                pos + (idx - (group_count - 1) / 2.0) * width
-                for pos in base_positions
+                pos + (idx - (group_count - 1) / 2.0) * width for pos in base_positions
             ]
             ys = [
                 values_by_category.get(category, float("nan"))
@@ -946,10 +946,7 @@ def collect_survey_summaries(survey_dir: Path) -> SurveyCollectionResult:
             ),
         }
 
-        if (
-            not summary_path.is_file()
-            and state == RunState.COMPLETED.value
-        ):
+        if not summary_path.is_file() and state == RunState.COMPLETED.value:
             try:
                 generated = generate_run_summary(run_dir)
             except (
@@ -994,9 +991,9 @@ def collect_survey_summaries(survey_dir: Path) -> SurveyCollectionResult:
 
         figures = _extract_figures(run_dir, summary)
         for figure in figures:
-            figure_path = (
-                run_dir / "analysis" / figure["path"]
-            ).relative_to(survey_dir)
+            figure_path = (run_dir / "analysis" / figure["path"]).relative_to(
+                survey_dir
+            )
             figure_rows.append(
                 {
                     "run_id": run_id,
@@ -1018,9 +1015,7 @@ def collect_survey_summaries(survey_dir: Path) -> SurveyCollectionResult:
         run_rows.append(row)
 
     if not csv_rows:
-        raise SimctlError(
-            "No summaries found. Run 'simctl analyze summarize' first."
-        )
+        raise SimctlError("No summaries found. Run 'simctl analyze summarize' first.")
 
     ordered_columns = _ordered_columns(csv_rows)
 
