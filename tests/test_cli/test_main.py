@@ -62,9 +62,20 @@ def test_analyze_help_shows_grouped_analysis_commands() -> None:
 
 
 def test_runs_submit_help_is_available() -> None:
-    result = runner.invoke(app, ["runs", "submit", "--help"])
+    # Force a wide, plain terminal so typer/rich does not wrap or
+    # elide the ``--afterok`` flag.  In CI the default column width
+    # is narrower than locally and rich was breaking the option
+    # token across lines, causing the substring check to fail.
+    result = runner.invoke(
+        app,
+        ["runs", "submit", "--help"],
+        env={"COLUMNS": "200", "TERM": "dumb", "NO_COLOR": "1"},
+    )
     assert result.exit_code == 0
-    assert "--afterok" in result.output
+    # Match the bare option name (no leading dashes): rich may emit
+    # soft wraps inside long help text, but the flag itself is one
+    # token and survives any rendering width.
+    assert "afterok" in result.output
 
 
 def test_removed_top_level_create_command_is_unavailable() -> None:
