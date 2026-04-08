@@ -118,6 +118,30 @@ def _create_simctl_skeleton(project_dir: Path, created: list[str]) -> None:
         created.append(".simctl/knowledge/candidates/facts/")
 
 
+def _create_notes_skeleton(project_dir: Path, created: list[str]) -> None:
+    """Create the lab-notebook skeleton (``notes/`` + README + ``reports/``).
+
+    The lab notebook lives next to ``.simctl/insights/`` but serves a
+    different purpose: chronological, append-only entries, edited via
+    ``simctl notes append`` or the ``/note`` skill.
+
+    Args:
+        project_dir: Project root directory.
+        created: Mutable list to append created items.
+    """
+    notes_dir = project_dir / "notes"
+    if _mkdir_if_missing(notes_dir):
+        created.append("notes/")
+    if _mkdir_if_missing(notes_dir / "reports"):
+        created.append("notes/reports/")
+
+    from simctl.templates import load_static
+
+    readme_path = notes_dir / "README.md"
+    if _write_if_missing(readme_path, load_static("scaffold/notes/README.md")):
+        created.append("notes/README.md")
+
+
 def _build_simulators_toml(simulator_names: list[str]) -> str:
     """Build simulators.toml content from adapter default configs.
 
@@ -1277,6 +1301,9 @@ def init(
 
     # .simctl/ skeleton (insights, facts, generated knowledge)
     _create_simctl_skeleton(project_dir, created)
+
+    # notes/ skeleton (chronological lab notebook + reports)
+    _create_notes_skeleton(project_dir, created)
 
     # refs/ — clone simulator doc repos
     if sim_names:

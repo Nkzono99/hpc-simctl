@@ -19,6 +19,9 @@ from simctl.cli.list import list_runs
 from simctl.cli.log import log
 from simctl.cli.manage import archive, cancel, delete, purge_work
 from simctl.cli.new import new
+from simctl.cli.notes import append as notes_append
+from simctl.cli.notes import list_notes as notes_list
+from simctl.cli.notes import show as notes_show
 from simctl.cli.setup import setup
 from simctl.cli.status import status, sync
 from simctl.cli.submit import run_cmd
@@ -60,6 +63,14 @@ analyze_app.command("summarize")(summarize)
 analyze_app.command("collect")(collect)
 analyze_app.command("plot")(plot)
 
+notes_app = typer.Typer(
+    name="notes",
+    help="Lab notebook commands (notes/YYYY-MM-DD.md).",
+)
+notes_app.command("append")(notes_append)
+notes_app.command("list")(notes_list)
+notes_app.command("show")(notes_show)
+
 app = typer.Typer(
     name="simctl",
     help="HPC simulation run management CLI tool.",
@@ -75,6 +86,7 @@ app.command("context")(context)
 app.add_typer(case_app, name="case")
 app.add_typer(runs_app, name="runs")
 app.add_typer(analyze_app, name="analyze")
+app.add_typer(notes_app, name="notes")
 app.command("update")(update)
 app.command("update-refs")(update_refs)
 
