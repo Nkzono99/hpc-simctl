@@ -329,7 +329,8 @@ class EmseAdapter(SimulatorAdapter):
             },
             "field-output-vs-nx": {
                 "description": (
-                    "Track how many HDF5 field outputs were produced at each x-grid size."
+                    "Track how many HDF5 field outputs were produced at each "
+                    "x-grid size."
                 ),
                 "x": ["param.tmgrid.nx", "nx"],
                 "y": ["output_counts.hdf5_fields"],

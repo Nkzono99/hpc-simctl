@@ -134,16 +134,21 @@ def test_save_knowledge_source_creates_section(tmp_path: Path) -> None:
 def test_save_knowledge_source_replaces_existing(tmp_path: Path) -> None:
     _create_project(tmp_path)
     source1 = KnowledgeSource(
-        name="kb", source_type="git", url="https://old.git",
+        name="kb",
+        source_type="git",
+        url="https://old.git",
         kind="profiles",
         mount="refs/knowledge/kb",
     )
     save_knowledge_source(tmp_path, source1)
 
     source2 = KnowledgeSource(
-        name="kb", source_type="git", url="https://new.git",
+        name="kb",
+        source_type="git",
+        url="https://new.git",
         kind="profiles",
-        mount="refs/knowledge/kb", profiles=["updated"],
+        mount="refs/knowledge/kb",
+        profiles=["updated"],
     )
     save_knowledge_source(tmp_path, source2)
 
@@ -157,7 +162,9 @@ def test_save_knowledge_source_replaces_existing(tmp_path: Path) -> None:
 def test_save_knowledge_source_path_type(tmp_path: Path) -> None:
     _create_project(tmp_path)
     source = KnowledgeSource(
-        name="local-kb", source_type="path", url="../my-kb",
+        name="local-kb",
+        source_type="path",
+        url="../my-kb",
         kind="project",
     )
     save_knowledge_source(tmp_path, source)
@@ -172,16 +179,16 @@ def test_save_knowledge_source_path_type(tmp_path: Path) -> None:
 def test_save_knowledge_source_preserves_schema_comment(tmp_path: Path) -> None:
     project_root = _create_project(
         tmp_path,
-        '\n# human note\n[knowledge]\nenabled = true\n',
+        "\n# human note\n[knowledge]\nenabled = true\n",
     )
     project_file = project_root / "simproject.toml"
     project_file.write_text(
-        '#:schema https://example.test/simproject.json\n'
-        '[project]\n'
+        "#:schema https://example.test/simproject.json\n"
+        "[project]\n"
         'name = "test-project"\n'
-        '# human note\n'
-        '[knowledge]\n'
-        'enabled = true\n',
+        "# human note\n"
+        "[knowledge]\n"
+        "enabled = true\n",
         encoding="utf-8",
     )
 
@@ -209,7 +216,9 @@ def test_save_knowledge_source_preserves_schema_comment(tmp_path: Path) -> None:
 def test_remove_knowledge_source_removes(tmp_path: Path) -> None:
     _create_project(tmp_path)
     source = KnowledgeSource(
-        name="kb", source_type="git", url="https://x.git",
+        name="kb",
+        source_type="git",
+        url="https://x.git",
         kind="profiles",
         mount="refs/knowledge/kb",
     )
@@ -265,7 +274,9 @@ def test_sync_source_path_exists(tmp_path: Path) -> None:
     project.mkdir()
 
     source = KnowledgeSource(
-        name="test-kb", source_type="path", url=str(kb_dir),
+        name="test-kb",
+        source_type="path",
+        url=str(kb_dir),
         kind="profiles",
         mount="refs/knowledge/test-kb",
     )
@@ -304,7 +315,9 @@ def test_sync_source_path_not_found(tmp_path: Path) -> None:
     project.mkdir()
 
     source = KnowledgeSource(
-        name="missing", source_type="path", url="/nonexistent/path",
+        name="missing",
+        source_type="path",
+        url="/nonexistent/path",
         kind="project",
         mount="refs/knowledge/missing",
     )
@@ -317,7 +330,8 @@ def test_sync_source_git_clone(tmp_path: Path) -> None:
     project.mkdir()
 
     source = KnowledgeSource(
-        name="git-kb", source_type="git",
+        name="git-kb",
+        source_type="git",
         url="https://github.com/lab/kb.git",
         kind="profiles",
         mount="refs/knowledge/git-kb",
@@ -342,7 +356,8 @@ def test_sync_source_git_pull(tmp_path: Path) -> None:
     (mount / ".git").mkdir()  # fake git dir
 
     source = KnowledgeSource(
-        name="git-kb", source_type="git",
+        name="git-kb",
+        source_type="git",
         url="https://github.com/lab/kb.git",
         kind="profiles",
         mount="refs/knowledge/git-kb",
@@ -399,7 +414,7 @@ def test_validate_source_structure_checks_entrypoints_manifest(tmp_path: Path) -
     kb_dir = _create_knowledge_source(tmp_path)
     (kb_dir / "entrypoints.toml").write_text(
         'imports = ["docs/agent-guide.md"]\n'
-        '[profiles.common]\n'
+        "[profiles.common]\n"
         'imports = ["analysis/recipes/common.toml"]\n',
         encoding="utf-8",
     )
@@ -415,11 +430,11 @@ def test_validate_source_structure_checks_analysis_schema_files(tmp_path: Path) 
     observables_dir.mkdir(parents=True)
     recipes_dir.mkdir(parents=True)
     (observables_dir / "density.toml").write_text(
-        "[observable]\nname = \"density\"\n",
+        '[observable]\nname = "density"\n',
         encoding="utf-8",
     )
     (recipes_dir / "summary.toml").write_text(
-        "[recipe]\nname = \"summary\"\n",
+        '[recipe]\nname = "summary"\n',
         encoding="utf-8",
     )
 
@@ -521,13 +536,17 @@ def test_render_imports_with_profiles(tmp_path: Path) -> None:
     mount_dir = project / "refs" / "knowledge" / "kb"
     mount_dir.parent.mkdir(parents=True)
     import shutil
+
     shutil.copytree(kb_dir, mount_dir)
 
     config = KnowledgeConfig(
         sources=[
             KnowledgeSource(
-                name="kb", source_type="path", url=str(kb_dir),
-                mount="refs/knowledge/kb", profiles=["common"],
+                name="kb",
+                source_type="path",
+                url=str(kb_dir),
+                mount="refs/knowledge/kb",
+                profiles=["common"],
             ),
         ],
     )
@@ -584,8 +603,11 @@ def test_render_imports_no_profiles_uses_claude_md(tmp_path: Path) -> None:
     config = KnowledgeConfig(
         sources=[
             KnowledgeSource(
-                name="kb", source_type="path", url=".",
-                mount="refs/knowledge/kb", profiles=[],
+                name="kb",
+                source_type="path",
+                url=".",
+                mount="refs/knowledge/kb",
+                profiles=[],
             ),
         ],
     )
@@ -605,8 +627,11 @@ def test_render_imports_missing_profile_adds_comment(tmp_path: Path) -> None:
     config = KnowledgeConfig(
         sources=[
             KnowledgeSource(
-                name="kb", source_type="path", url=".",
-                mount="refs/knowledge/kb", profiles=["nonexistent"],
+                name="kb",
+                source_type="path",
+                url=".",
+                mount="refs/knowledge/kb",
+                profiles=["nonexistent"],
             ),
         ],
     )
@@ -660,7 +685,9 @@ def test_import_external_insights_namespaces_by_source(tmp_path: Path) -> None:
     assert (project / ".simctl" / "insights" / "beta__stability.md").is_file()
 
 
-def test_import_external_insights_skips_existing_namespaced_file(tmp_path: Path) -> None:
+def test_import_external_insights_skips_existing_namespaced_file(
+    tmp_path: Path,
+) -> None:
     project = tmp_path / "project"
     project.mkdir()
     _create_project(project)

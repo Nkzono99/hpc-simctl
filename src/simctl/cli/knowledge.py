@@ -315,9 +315,7 @@ def sync(
                 status = sync_source(root, src)
                 typer.echo(f"  [{src.kind}/{src.source_type}] {src.name}: {status}")
             except KnowledgeSourceError as e:
-                typer.echo(
-                    f"  [{src.kind}/{src.source_type}] {src.name}: error - {e}"
-                )
+                typer.echo(f"  [{src.kind}/{src.source_type}] {src.name}: error - {e}")
     else:
         for name, status in sync_all_sources(root, config):
             typer.echo(f"  {name}: {status}")
@@ -899,8 +897,7 @@ def status_cmd() -> None:
         typer.echo(f"\n  imports.md: {imports_path.relative_to(root)} (exists)")
     else:
         typer.echo(
-            "\n  imports.md: not generated "
-            "(run 'simctl knowledge source render')"
+            "\n  imports.md: not generated (run 'simctl knowledge source render')"
         )
 
 
@@ -930,8 +927,7 @@ def _validate_requested_profiles(
     missing = [profile for profile in requested_profiles if profile not in available]
     if missing:
         typer.echo(
-            "Error: unknown profiles for "
-            f"{source_name}: {', '.join(missing)}",
+            f"Error: unknown profiles for {source_name}: {', '.join(missing)}",
             err=True,
         )
         raise typer.Exit(code=1)

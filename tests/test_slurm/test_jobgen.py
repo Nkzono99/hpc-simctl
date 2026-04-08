@@ -190,7 +190,9 @@ class TestGenerateJobScript:
         exec_idx = content.index("srun ./solver")
         assert setup_idx < exec_idx
 
-    def test_version_commands(self, run_dir: Path, job_config: dict[str, object]) -> None:
+    def test_version_commands(
+        self, run_dir: Path, job_config: dict[str, object]
+    ) -> None:
         """Version capture commands appear before the exec line."""
         path = generate_job_script(
             run_dir,

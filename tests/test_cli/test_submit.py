@@ -120,7 +120,7 @@ def test_submit_success(tmp_path: Path) -> None:
             "simctl.slurm.submit.sbatch_submit",
             return_value="99999",
         ),
-        ):
+    ):
         result = runner.invoke(app, ["runs", "submit", str(run_dir)])
 
     assert result.exit_code == 0
@@ -172,7 +172,7 @@ def test_submit_all(tmp_path: Path) -> None:
             "simctl.slurm.submit.sbatch_submit",
             side_effect=["22222", "33333"],
         ),
-        ):
+    ):
         result = runner.invoke(app, ["runs", "submit", "--all", str(survey_dir)])
 
     assert result.exit_code == 0
@@ -221,7 +221,7 @@ def test_submit_empty_input_dir(tmp_path: Path) -> None:
             "simctl.slurm.submit.sbatch_submit",
             return_value="99999",
         ),
-        ):
+    ):
         result = runner.invoke(app, ["runs", "submit", str(run_dir)])
 
     assert result.exit_code != 0
@@ -242,7 +242,7 @@ def test_submit_sbatch_failure(tmp_path: Path) -> None:
             "simctl.slurm.submit.sbatch_submit",
             side_effect=SlurmSubmitError("sbatch failed (exit 1):\nPermission denied"),
         ),
-        ):
+    ):
         result = runner.invoke(app, ["runs", "submit", str(run_dir)])
 
     assert result.exit_code != 0

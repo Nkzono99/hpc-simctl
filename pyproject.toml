@@ -71,6 +71,13 @@ strict = true
 warn_return_any = true
 warn_unused_configs = true
 mypy_path = "src"
+# Scaffolded summarize.py files under templates/adapters/ are reference
+# implementations copied into user projects.  They depend on third-party
+# scientific stacks (numpy, pandas, matplotlib, emout, beach) that are
+# intentionally not in simctl's own dependencies.
+exclude = [
+    "^src/simctl/templates/adapters/.*/summarize\\.py$",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

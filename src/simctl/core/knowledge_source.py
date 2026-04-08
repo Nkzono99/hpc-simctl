@@ -213,10 +213,7 @@ def _repo_name_from_url(url: str) -> str:
 
 def _safe_namespace(value: str) -> str:
     """Return a filesystem-safe namespace token for imported knowledge."""
-    normalized = [
-        ch.lower() if ch.isalnum() else "_"
-        for ch in value.strip()
-    ]
+    normalized = [ch.lower() if ch.isalnum() else "_" for ch in value.strip()]
     token = "".join(normalized).strip("_")
     while "__" in token:
         token = token.replace("__", "_")
@@ -298,9 +295,7 @@ def load_entrypoints(
             raise KnowledgeSourceError(msg)
         for profile_name, profile_entry in profiles_raw.items():
             if not isinstance(profile_entry, dict):
-                msg = (
-                    f"{manifest_name}: [profiles.{profile_name}] must be a table"
-                )
+                msg = f"{manifest_name}: [profiles.{profile_name}] must be a table"
                 raise KnowledgeSourceError(msg)
             entry_imports = _normalize_import_list(
                 profile_entry.get("entrypoint", ""),
@@ -526,7 +521,9 @@ def _sync_source_entry(entry: Any, source: KnowledgeSource) -> None:
         del entry["mount"]
 
     if source.kind == "profiles" and source.profiles:
-        entry["profiles"] = array(source.profiles)
+        profiles_array = array()
+        profiles_array.extend(source.profiles)
+        entry["profiles"] = profiles_array
     elif "profiles" in entry:
         del entry["profiles"]
 
@@ -723,9 +720,7 @@ def sync_source(project_root: Path, source: KnowledgeSource) -> str:
     if source.source_type == "path":
         resolved = _resolve_path_source(project_root, source.url)
         if not resolved.is_dir():
-            raise KnowledgeSourceError(
-                f"Knowledge source path not found: {resolved}"
-            )
+            raise KnowledgeSourceError(f"Knowledge source path not found: {resolved}")
         if source.kind != "profiles":
             return "available"
 
@@ -793,8 +788,7 @@ def sync_source(project_root: Path, source: KnowledgeSource) -> str:
     )
     if result.returncode != 0:
         raise KnowledgeSourceError(
-            f"git clone failed for {source.name}: "
-            f"{(result.stderr or '').strip()[:300]}"
+            f"git clone failed for {source.name}: {(result.stderr or '').strip()[:300]}"
         )
     return "cloned"
 
@@ -971,9 +965,7 @@ def _validate_analysis_file(
         observables = raw.get("observables")
         if isinstance(observable, dict):
             if not any(key in observable for key in ("source", "path", "metric")):
-                issues.append(
-                    f"observables schema missing source/path/metric in {rel}"
-                )
+                issues.append(f"observables schema missing source/path/metric in {rel}")
             return issues
         if isinstance(observables, dict) and observables:
             for name, entry in observables.items():
@@ -985,7 +977,9 @@ def _validate_analysis_file(
                         f"observables.{name} missing source/path/metric in {rel}"
                     )
             return issues
-        issues.append(f"observables schema must define [observable] or [observables] in {rel}")
+        issues.append(
+            f"observables schema must define [observable] or [observables] in {rel}"
+        )
         return issues
 
     recipe = raw.get("recipe")
@@ -1037,8 +1031,7 @@ def validate_source_structure(source_path: Path) -> list[str]:
             continue
         if not content.strip():
             issues.append(
-                "Profile is empty: "
-                f"{profile_path.relative_to(source_path).as_posix()}"
+                f"Profile is empty: {profile_path.relative_to(source_path).as_posix()}"
             )
             continue
         issues.extend(
@@ -1084,8 +1077,7 @@ def validate_source_structure(source_path: Path) -> list[str]:
             continue
         if not content.strip():
             issues.append(
-                "Agent doc is empty: "
-                f"{agent_doc.relative_to(source_path).as_posix()}"
+                f"Agent doc is empty: {agent_doc.relative_to(source_path).as_posix()}"
             )
 
     analysis_dir = source_path / "analysis"
@@ -1189,7 +1181,8 @@ def render_imports(
                     )
                 else:
                     lines.append(
-                        f"<!-- source {source.name}: missing import target {rel_path} -->"
+                        f"<!-- source {source.name}: missing import target "
+                        f"{rel_path} -->"
                     )
                 continue
             rendered = f"{source.mount}/{rel_path}".replace("\\", "/")

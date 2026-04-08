@@ -66,7 +66,6 @@ class TestLoadSurvey:
         with pytest.raises(SurveyConfigError, match="Invalid TOML"):
             load_survey(tmp_path)
 
-
     def test_load_survey_with_linked(self, tmp_path: Path) -> None:
         (tmp_path / "survey.toml").write_text(
             '[survey]\nid = "S1"\nname = "t"\nbase_case = "c"\n'
@@ -172,7 +171,7 @@ class TestExpandSurvey:
             {"seed": [1, 2]},
             [{"nx": [32, 64], "ny": [32, 64]}],
         )
-        assert len(result) == 4  # 2 seeds × 2 linked pairs
+        assert len(result) == 4  # 2 seeds x 2 linked pairs
         assert {"seed": 1, "nx": 32, "ny": 32} in result
         assert {"seed": 1, "nx": 64, "ny": 64} in result
         assert {"seed": 2, "nx": 32, "ny": 32} in result
@@ -186,7 +185,7 @@ class TestExpandSurvey:
                 {"dt": [0.1, 0.01], "steps": [100, 1000]},
             ],
         )
-        # 2 pairs × 2 pairs = 4 (Cartesian across groups)
+        # 2 pairs x 2 pairs = 4 (Cartesian across groups)
         assert len(result) == 4
         assert {"nx": 32, "ny": 32, "dt": 0.1, "steps": 100} in result
         assert {"nx": 64, "ny": 64, "dt": 0.01, "steps": 1000} in result
@@ -199,7 +198,7 @@ class TestExpandSurvey:
                 {"dt": [0.1, 0.01]},
             ],
         )
-        # 3 seeds × 2 linked pairs × 2 dt values = 12
+        # 3 seeds x 2 linked pairs x 2 dt values = 12
         assert len(result) == 12
 
     def test_both_empty(self) -> None:
