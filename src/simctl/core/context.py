@@ -73,7 +73,9 @@ def build_project_context(project_root: Path) -> dict[str, Any]:
     ctx["facts"] = _collect_facts_summary(project_root, diagnostics, section_status)
 
     # -- Knowledge index --
-    ctx["knowledge"] = _collect_knowledge_paths(project_root, diagnostics, section_status)
+    ctx["knowledge"] = _collect_knowledge_paths(
+        project_root, diagnostics, section_status
+    )
 
     # -- Available actions --
     try:

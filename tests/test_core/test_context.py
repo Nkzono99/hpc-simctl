@@ -38,7 +38,7 @@ def test_context_includes_knowledge_integration_details(tmp_path: Path) -> None:
                         "type": "path",
                         "kind": "project",
                         "path": "../other-project",
-                    }
+                    },
                 ],
             },
         },
@@ -152,6 +152,4 @@ def test_context_reports_diagnostics_for_broken_sections(tmp_path: Path) -> None
     assert ctx["status"] == "degraded"
     assert ctx["facts"] == []
     assert ctx["section_status"]["facts"] == "error"
-    assert any(
-        diagnostic["section"] == "facts" for diagnostic in ctx["diagnostics"]
-    )
+    assert any(diagnostic["section"] == "facts" for diagnostic in ctx["diagnostics"])

@@ -21,6 +21,7 @@ from simctl.core.state import RunState
 
 logger = logging.getLogger(__name__)
 
+
 def _resolve_run_dir(identifier: str) -> Path:
     """Resolve a run identifier (path or run_id) to a run directory.
 

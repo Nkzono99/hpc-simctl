@@ -446,9 +446,7 @@ class TestCollect:
         assert "output_counts.logs" in csv_content
 
         figures_index = json.loads(
-            (tmp_path / "summary" / "figures_index.json").read_text(
-                encoding="utf-8"
-            )
+            (tmp_path / "summary" / "figures_index.json").read_text(encoding="utf-8")
         )
         assert figures_index["figures"][0]["path"].endswith("figures/plot.png")
         assert figures_index["figures"][0]["caption"] == "Test plot"
@@ -490,9 +488,7 @@ class TestCollect:
         assert "param.aspect" in csv_content
 
         aggregate = json.loads(
-            (tmp_path / "summary" / "survey_summary.json").read_text(
-                encoding="utf-8"
-            )
+            (tmp_path / "summary" / "survey_summary.json").read_text(encoding="utf-8")
         )
         assert aggregate["runs"][0]["flat_metadata"]["origin.case"] == "cavity_base"
         assert aggregate["runs"][0]["flat_metadata"]["param.u"] == 400000.0
@@ -602,18 +598,20 @@ class TestPlot:
         mock_result.points_plotted = 2
         mock_result.generated_summaries = 0
 
-        with patch(
-            "simctl.cli.analyze.resolve_survey_plot_recipe",
-            return_value=resolved_recipe,
-        ):
-            with patch(
+        with (
+            patch(
+                "simctl.cli.analyze.resolve_survey_plot_recipe",
+                return_value=resolved_recipe,
+            ),
+            patch(
                 "simctl.cli.analyze.render_survey_plot",
                 return_value=mock_result,
-            ) as render_mock:
-                result = runner.invoke(
-                    app,
-                    ["analyze", "plot", str(tmp_path), "--recipe", "energy-vs-u"],
-                )
+            ) as render_mock,
+        ):
+            result = runner.invoke(
+                app,
+                ["analyze", "plot", str(tmp_path), "--recipe", "energy-vs-u"],
+            )
 
         assert result.exit_code == 0
         assert "Recipe: energy-vs-u" in result.output

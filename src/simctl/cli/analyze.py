@@ -10,8 +10,8 @@ import typer
 from simctl.cli.run_lookup import resolve_run_or_cwd
 from simctl.core.actions import ActionStatus, execute_action
 from simctl.core.analysis import (
-    load_survey_plot_table,
     list_survey_plot_recipes,
+    load_survey_plot_table,
     render_survey_plot,
     resolve_survey_plot_recipe,
 )
@@ -75,8 +75,7 @@ def collect(
     generated_summaries = int(result.data.get("generated_summaries", 0))
     if generated_summaries > 0:
         typer.echo(
-            "  Auto-summarized:"
-            f" {generated_summaries} completed runs during collect"
+            f"  Auto-summarized: {generated_summaries} completed runs during collect"
         )
     missing_summaries = int(result.data.get("missing_summaries", 0))
     if missing_summaries > 0:

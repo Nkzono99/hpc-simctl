@@ -255,10 +255,7 @@ def _expand_linked(linked: list[dict[str, list[Any]]]) -> list[dict[str, Any]]:
     for group in linked:
         keys = list(group.keys())
         n = len(group[keys[0]])
-        zipped = [
-            {k: group[k][i] for k in keys}
-            for i in range(n)
-        ]
+        zipped = [{k: group[k][i] for k in keys} for i in range(n)]
         group_expansions.append(zipped)
 
     # Cartesian product across groups

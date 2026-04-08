@@ -99,8 +99,8 @@ class TestCaseTemplate:
         assert "potential_density_profile.png" in summarize_script
         assert "unit.phi.reverse" in summarize_script
         assert "inp.npc" in summarize_script
-        assert 'input_path=str(input_path)' in summarize_script
-        assert 'output_directory=str(output_dir)' in summarize_script
+        assert "input_path=str(input_path)" in summarize_script
+        assert "output_directory=str(output_dir)" in summarize_script
         assert "energy_total.png" not in summarize_script
 
     def test_summarize_scaffold_uses_input_and_latest_output_dirs(

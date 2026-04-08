@@ -293,7 +293,7 @@ def test_promote_fact_promotes_candidate_fact(tmp_path: Path) -> None:
         "[transport]\n"
         'source = "shared"\n'
         'kind = "project"\n'
-        '\n'
+        "\n"
         "[[facts]]\n"
         'id = "f004"\n'
         'claim = "keep dt below 1.0"\n'

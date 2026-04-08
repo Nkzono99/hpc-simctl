@@ -94,7 +94,7 @@ def _write_profile_knowledge_repo(root: Path, profiles: Sequence[str]) -> None:
                 [
                     f"[profiles.{profile_name}]",
                     (
-                        'imports = ['
+                        "imports = ["
                         f'"profiles/{profile_name}.md", "docs/{profile_name}.md"'
                         "]"
                     ),
@@ -241,9 +241,7 @@ def test_e2e_setup_idempotent(
     (project_dir / "simproject.toml").write_text(simproject_before, encoding="utf-8")
     (project_dir / "simulators.toml").write_text("[simulators]\n", encoding="utf-8")
     (project_dir / "launchers.toml").write_text(
-        "[launchers.srun]\n"
-        'type = "srun"\n'
-        "use_slurm_ntasks = true\n",
+        '[launchers.srun]\ntype = "srun"\nuse_slurm_ntasks = true\n',
         encoding="utf-8",
     )
     (project_dir / "CLAUDE.md").write_text(claude_before, encoding="utf-8")
@@ -266,9 +264,9 @@ def test_e2e_setup_idempotent(
     assert (project_dir / "tools" / "hpc-simctl").is_dir()
     assert imports_path.is_file()
 
-    assert (
-        project_dir / "simproject.toml"
-    ).read_text(encoding="utf-8") == simproject_before
+    assert (project_dir / "simproject.toml").read_text(
+        encoding="utf-8"
+    ) == simproject_before
     assert (project_dir / "CLAUDE.md").read_text(encoding="utf-8") == claude_before
 
     imports_after_second = imports_path.read_text(encoding="utf-8")
@@ -457,9 +455,7 @@ def test_e2e_doctor_after_bootstrap(
     assert attach.exit_code == 0, attach.output
     assert render.exit_code == 0, render.output
     assert (project_dir / ".claude" / "settings.json").is_file()
-    assert (
-        project_dir / ".simctl" / "knowledge" / "enabled" / "imports.md"
-    ).is_file()
+    assert (project_dir / ".simctl" / "knowledge" / "enabled" / "imports.md").is_file()
 
     with pytest.MonkeyPatch.context() as doctor_patch:
         doctor_patch.setattr(

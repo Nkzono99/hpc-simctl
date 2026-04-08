@@ -330,8 +330,13 @@ def test_attach_path_source(tmp_path: Path) -> None:
         result = runner.invoke(
             app,
             [
-                "knowledge", "source", "attach", "path", "my-kb",
-                str(kb_dir), "--no-sync",
+                "knowledge",
+                "source",
+                "attach",
+                "path",
+                "my-kb",
+                str(kb_dir),
+                "--no-sync",
             ],
         )
 
@@ -383,9 +388,14 @@ def test_attach_git_source_with_profiles(tmp_path: Path) -> None:
         result = runner.invoke(
             app,
             [
-                "knowledge", "source", "attach", "git", "lab-kb",
+                "knowledge",
+                "source",
+                "attach",
+                "git",
+                "lab-kb",
                 "https://github.com/lab/kb.git",
-                "--profiles", "common,emses",
+                "--profiles",
+                "common,emses",
                 "--no-sync",
             ],
         )
@@ -722,12 +732,8 @@ path = "../linked-b"
     assert "Importing transported knowledge from external sources" in result.output
     assert "alpha" in result.output
     assert "beta" not in result.output
-    assert (
-        project_root / ".simctl" / "insights" / "alpha__alpha-note.md"
-    ).is_file()
-    assert not (
-        project_root / ".simctl" / "insights" / "beta__beta-note.md"
-    ).exists()
+    assert (project_root / ".simctl" / "insights" / "alpha__alpha-note.md").is_file()
+    assert not (project_root / ".simctl" / "insights" / "beta__beta-note.md").exists()
 
 
 def test_profile_enable_and_disable_updates_rendered_imports(tmp_path: Path) -> None:
