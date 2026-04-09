@@ -47,6 +47,5 @@ jobs:
         run: uv sync --dev
 
       - name: Run tests with coverage floor
-        # Keep a no-regression gate near the current suite total; raise this
-        # threshold as low-covered modules gain tests.
-        run: uv run pytest --cov=simctl --cov-report=term-missing --cov-fail-under=74
+        # Enforce the project's target minimum coverage.
+        run: uv run pytest --cov=simctl --cov-report=term-missing --cov-fail-under=80
