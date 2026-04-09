@@ -1140,6 +1140,8 @@ _DISPATCH: dict[str, Any] = {
     "retry_run": retry_run,
     "archive_run": archive_run,
     "purge_work": purge_work,
+    "cancel_run": cancel_run,
+    "delete_run": delete_run,
     "save_insight": save_insight,
     "add_fact": add_fact,
     "promote_fact": promote_fact,

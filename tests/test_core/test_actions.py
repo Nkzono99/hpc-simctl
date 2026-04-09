@@ -14,6 +14,7 @@ from simctl.core.actions import (
     add_fact,
     collect_survey,
     create_survey,
+    execute_action,
     promote_fact,
     purge_work,
     retry_run,
@@ -25,6 +26,8 @@ from simctl.core.actions import (
     create_run as create_run_action,
 )
 from simctl.core.knowledge import list_insights, load_facts
+from simctl.core.state import RunState
+from simctl.slurm.query import JobStatus
 
 
 def _write_manifest(run_dir: Path, data: dict[str, Any]) -> None:
@@ -411,3 +414,154 @@ def test_submit_run_rejects_empty_input_dir(tmp_path: Path) -> None:
 
     assert result.status is ActionStatus.PRECONDITION_FAILED
     assert "input/" in result.message
+
+
+def test_execute_action_submit_run_updates_manifest_and_passes_options(
+    tmp_path: Path,
+) -> None:
+    run_dir = tmp_path / "R20260330-0001"
+    _write_manifest(
+        run_dir,
+        {
+            "run": {
+                "id": "R20260330-0001",
+                "status": "created",
+            },
+            "job": {
+                "partition": "debug",
+            },
+        },
+    )
+    (run_dir / "submit").mkdir(parents=True, exist_ok=True)
+    (run_dir / "submit" / "job.sh").write_text(
+        "#!/bin/bash\n#SBATCH --job-name=test\necho hello\n",
+        encoding="utf-8",
+    )
+    (run_dir / "input").mkdir(parents=True, exist_ok=True)
+    (run_dir / "input" / "params.json").write_text("{}", encoding="utf-8")
+    (run_dir / "work").mkdir(parents=True, exist_ok=True)
+
+    with patch(
+        "simctl.slurm.submit.sbatch_submit", return_value="12345"
+    ) as mock_submit:
+        result = execute_action(
+            "submit_run",
+            run_dir=run_dir,
+            queue_name="compute",
+            afterok="67890",
+        )
+
+    assert result.status is ActionStatus.SUCCESS
+    assert result.data["job_id"] == "12345"
+    mock_submit.assert_called_once()
+    assert mock_submit.call_args.args[0] == run_dir / "submit" / "job.sh"
+    assert mock_submit.call_args.args[1] == run_dir / "work"
+    assert mock_submit.call_args.kwargs["extra_args"] == ["--partition=compute"]
+    assert mock_submit.call_args.kwargs["afterok"] == "67890"
+
+    from simctl.core.manifest import read_manifest
+
+    updated = read_manifest(run_dir)
+    assert updated.run["status"] == "submitted"
+    assert updated.job["job_id"] == "12345"
+    assert updated.job["queue"] == "compute"
+    assert (run_dir / "status" / "state.json").exists()
+
+
+def test_execute_action_sync_run_updates_manifest_and_state_file(
+    tmp_path: Path,
+) -> None:
+    run_dir = tmp_path / "R20260330-0001"
+    _write_manifest(
+        run_dir,
+        {
+            "run": {
+                "id": "R20260330-0001",
+                "status": "submitted",
+            },
+            "job": {
+                "job_id": "12345",
+            },
+        },
+    )
+
+    with patch(
+        "simctl.slurm.query.query_job_status",
+        return_value=JobStatus(run_state=RunState.RUNNING, slurm_state="RUNNING"),
+    ):
+        result = execute_action("sync_run", run_dir=run_dir)
+
+    assert result.status is ActionStatus.SUCCESS
+    assert result.state_before == "submitted"
+    assert result.state_after == "running"
+    assert result.data["slurm_state"] == "RUNNING"
+
+    from simctl.core.manifest import read_manifest
+
+    updated = read_manifest(run_dir)
+    assert updated.run["status"] == "running"
+    assert updated.run["last_slurm_state"] == "RUNNING"
+    assert (run_dir / "status" / "state.json").exists()
+
+
+def test_execute_action_cancel_run_scancels_and_syncs_manifest(tmp_path: Path) -> None:
+    run_dir = tmp_path / "R20260330-0001"
+    _write_manifest(
+        run_dir,
+        {
+            "run": {
+                "id": "R20260330-0001",
+                "status": "running",
+            },
+            "job": {
+                "job_id": "98765",
+            },
+        },
+    )
+
+    with (
+        patch("simctl.slurm.submit.scancel_job") as mock_scancel,
+        patch(
+            "simctl.slurm.query.query_job_status",
+            return_value=JobStatus(
+                run_state=RunState.CANCELLED,
+                slurm_state="CANCELLED",
+            ),
+        ),
+    ):
+        result = execute_action("cancel_run", run_dir=run_dir)
+
+    assert result.status is ActionStatus.SUCCESS
+    assert result.state_before == "running"
+    assert result.state_after == "cancelled"
+    mock_scancel.assert_called_once_with("98765")
+
+    from simctl.core.manifest import read_manifest
+
+    updated = read_manifest(run_dir)
+    assert updated.run["status"] == "cancelled"
+    assert updated.run["last_slurm_state"] == "CANCELLED"
+    assert (run_dir / "status" / "state.json").exists()
+
+
+def test_execute_action_delete_run_removes_directory(tmp_path: Path) -> None:
+    run_dir = tmp_path / "R20260330-0001"
+    _write_manifest(
+        run_dir,
+        {
+            "run": {
+                "id": "R20260330-0001",
+                "status": "failed",
+            }
+        },
+    )
+    artifact = run_dir / "work" / "outputs" / "data.bin"
+    artifact.parent.mkdir(parents=True, exist_ok=True)
+    artifact.write_bytes(b"x" * 256)
+
+    result = execute_action("delete_run", run_dir=run_dir)
+
+    assert result.status is ActionStatus.SUCCESS
+    assert result.data["run_id"] == "R20260330-0001"
+    assert result.data["bytes_removed"] >= 256
+    assert not run_dir.exists()

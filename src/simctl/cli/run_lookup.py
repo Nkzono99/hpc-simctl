@@ -39,11 +39,37 @@ def resolve_run_or_cwd(run: str | None, *, search_dir: Path | None = None) -> Pa
             return cwd
         typer.echo("Error: No manifest.toml in cwd. Specify a run.", err=True)
         raise typer.Exit(code=1)
+
     try:
-        return resolve_run(run, cwd)
+        return _resolve_run_argument(run, search_dir=cwd)
     except SimctlError as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=1) from None
+
+
+def _resolve_run_argument(identifier: str, *, search_dir: Path) -> Path:
+    """Resolve an explicit run argument from any project subdirectory.
+
+    Prefers path-like arguments relative to ``search_dir`` so callers can use
+    ``./runs/...`` or absolute paths.  If no manifest is found at that path,
+    falls back to project-wide run_id lookup under the nearest enclosing
+    project's ``runs/`` directory.
+    """
+    try:
+        candidate = Path(identifier)
+    except OSError as e:
+        raise RunNotFoundError(f"Invalid run path {identifier!r}: {e}") from None
+
+    if candidate.is_absolute():
+        resolved = candidate.resolve()
+    else:
+        resolved = (search_dir / candidate).resolve()
+
+    if (resolved / "manifest.toml").exists():
+        return resolved
+
+    runs_dir = find_project_runs_dir(search_dir)
+    return resolve_run(identifier, runs_dir)
 
 
 def resolve_run_targets(

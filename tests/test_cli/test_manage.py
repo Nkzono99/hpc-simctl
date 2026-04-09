@@ -221,6 +221,26 @@ class TestDelete:
         result = runner.invoke(app, ["runs", "delete", "/nonexistent/run"])
         assert result.exit_code == 1
 
+    def test_delete_resolves_run_id_from_project_subdirectory(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """run_id lookup should work project-wide, not only under cwd."""
+        (tmp_path / "simproject.toml").write_text('[project]\nname = "test"\n')
+        run_dir = _create_run(
+            tmp_path / "runs",
+            "R20260327-0001",
+            status="failed",
+        )
+        nested = tmp_path / "cases" / "example"
+        nested.mkdir(parents=True)
+        monkeypatch.chdir(nested)
+
+        result = runner.invoke(app, ["runs", "delete", "--yes", "R20260327-0001"])
+
+        assert result.exit_code == 0, result.output
+        assert "Deleted run R20260327-0001" in result.output
+        assert not run_dir.exists()
+
 
 class TestCancel:
     """Tests for `simctl runs cancel`."""
