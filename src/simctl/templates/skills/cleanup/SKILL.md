@@ -37,8 +37,7 @@ simctl runs delete
 
 ## 注意
 
-- `archive` / `purge-work` / `cancel` / `delete` はいずれも確認が必要な操作
-- 実行前に対象と理由を必ず報告する
+- `archive` / `purge-work` / `delete` は確認が必要な操作
+- `cancel` は追加確認プロンプトなしで進めてよいが、実行前に対象と理由を必ず報告する
 - `delete` は不可逆。`completed` / `archived` の run を捨てたい場合は
   `archive` → `purge-work` を使う
-

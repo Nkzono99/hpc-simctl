@@ -104,6 +104,7 @@ Claude Code 向けに project 内の保護ルールを設定する。
 - `.simctl/insights/` と `.simctl/facts.toml` は `simctl knowledge save` / `add-fact` を使う
 - `notes/YYYY-MM-DD.md` は `simctl notes append` 経由で append-only に追記する (既存 entry を書き換えない)
 - `simctl runs submit` は `--dry-run` を除いて実行前に確認を挟む
+- `simctl runs cancel` は harness 上 allow 扱いだが、実行前に対象 run と理由は報告する
 
 ## 状態遷移
 
