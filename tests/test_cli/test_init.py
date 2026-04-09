@@ -1,4 +1,4 @@
-"""Tests for simctl init and simctl doctor CLI commands."""
+"""Tests for runops init and runops doctor CLI commands."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from unittest.mock import patch
 import pytest
 from typer.testing import CliRunner
 
-from simctl.cli.main import app
+from runops.cli.main import app
 
 runner = CliRunner()
 
@@ -17,19 +17,19 @@ runner = CliRunner()
 def _mock_bootstrap(monkeypatch: pytest.MonkeyPatch) -> None:
     """Skip the bootstrap step (uv/git clone) in all init tests."""
     monkeypatch.setattr(
-        "simctl.cli.init._bootstrap_environment",
+        "runops.cli.init._bootstrap_environment",
         lambda *_args, **_kwargs: None,
     )
 
 
 class TestInit:
-    """Tests for the 'simctl init' command."""
+    """Tests for the 'runops init' command."""
 
     def test_init_creates_all_files(self, tmp_path: Path) -> None:
         """Init in an empty directory creates all expected files and dirs."""
         result = runner.invoke(app, ["init", "-y", "--path", str(tmp_path)])
         assert result.exit_code == 0
-        assert (tmp_path / "simproject.toml").exists()
+        assert (tmp_path / "runops.toml").exists()
         assert (tmp_path / "simulators.toml").exists()
         assert (tmp_path / "launchers.toml").exists()
         assert (tmp_path / "campaign.toml").exists()
@@ -39,7 +39,7 @@ class TestInit:
         assert (tmp_path / ".git").is_dir()
         assert (tmp_path / "CLAUDE.md").exists()
         assert (tmp_path / "AGENTS.md").exists()
-        assert (tmp_path / ".simctl" / "knowledge" / "candidates" / "facts").is_dir()
+        assert (tmp_path / ".runops" / "knowledge" / "candidates" / "facts").is_dir()
         assert (tmp_path / ".claude" / "skills").is_dir()
         assert (tmp_path / ".vscode" / "settings.json").exists()
         # Lab notebook scaffolding
@@ -52,7 +52,7 @@ class TestInit:
         runner.invoke(app, ["init", "-y", "--path", str(tmp_path)])
         readme = (tmp_path / "notes" / "README.md").read_text(encoding="utf-8")
         assert "lab notebook" in readme
-        assert "simctl notes append" in readme
+        assert "runops notes append" in readme
         assert "notes/YYYY-MM-DD.md" in readme
 
     def test_init_creates_note_skill(self, tmp_path: Path) -> None:
@@ -62,23 +62,23 @@ class TestInit:
         assert skill_md.is_file()
         content = skill_md.read_text(encoding="utf-8")
         assert "name: note" in content
-        assert "simctl notes append" in content
+        assert "runops notes append" in content
 
     def test_init_simproject_content(self, tmp_path: Path) -> None:
-        """simproject.toml has correct project name derived from dir name."""
+        """runops.toml has correct project name derived from dir name."""
         result = runner.invoke(app, ["init", "-y", "--path", str(tmp_path)])
         assert result.exit_code == 0
-        content = (tmp_path / "simproject.toml").read_text(encoding="utf-8")
+        content = (tmp_path / "runops.toml").read_text(encoding="utf-8")
         assert "[project]" in content
         assert f'name = "{tmp_path.name}"' in content
 
     def test_init_custom_name(self, tmp_path: Path) -> None:
-        """--name option overrides directory name in simproject.toml."""
+        """--name option overrides directory name in runops.toml."""
         result = runner.invoke(
             app, ["init", "-y", "--path", str(tmp_path), "--name", "my-project"]
         )
         assert result.exit_code == 0
-        content = (tmp_path / "simproject.toml").read_text(encoding="utf-8")
+        content = (tmp_path / "runops.toml").read_text(encoding="utf-8")
         assert 'name = "my-project"' in content
         assert "my-project" in result.output
 
@@ -120,10 +120,10 @@ class TestInit:
 
     def test_init_skips_existing_files(self, tmp_path: Path) -> None:
         """Init does not overwrite existing files."""
-        (tmp_path / "simproject.toml").write_text('[project]\nname = "original"\n')
+        (tmp_path / "runops.toml").write_text('[project]\nname = "original"\n')
         result = runner.invoke(app, ["init", "-y", "--path", str(tmp_path)])
         assert result.exit_code == 0
-        content = (tmp_path / "simproject.toml").read_text(encoding="utf-8")
+        content = (tmp_path / "runops.toml").read_text(encoding="utf-8")
         assert 'name = "original"' in content
         assert "Skipped" in result.output
 
@@ -132,7 +132,7 @@ class TestInit:
         result = runner.invoke(app, ["init", "-y", "--path", str(tmp_path)])
         assert result.exit_code == 0
         assert "Created:" in result.output
-        assert "simproject.toml" in result.output
+        assert "runops.toml" in result.output
 
     def test_init_creates_target_directory(self, tmp_path: Path) -> None:
         """Init creates the target directory if it does not exist."""
@@ -140,7 +140,7 @@ class TestInit:
         result = runner.invoke(app, ["init", "-y", "--path", str(target)])
         assert result.exit_code == 0
         assert target.is_dir()
-        assert (target / "simproject.toml").exists()
+        assert (target / "runops.toml").exists()
 
     def test_init_defaults_to_cwd(self, tmp_path: Path) -> None:
         """Init without path argument uses current working directory."""
@@ -151,7 +151,7 @@ class TestInit:
             os.chdir(tmp_path)
             result = runner.invoke(app, ["init", "-y"])
             assert result.exit_code == 0
-            assert (tmp_path / "simproject.toml").exists()
+            assert (tmp_path / "runops.toml").exists()
         finally:
             os.chdir(original_cwd)
 
@@ -170,7 +170,7 @@ class TestInit:
         # Simulator details are via imports.md, not inline
         assert "シミュレータ固有知識" not in content
         assert "Agent ガイド" not in content
-        assert "simctl context" in content
+        assert "runops context" in content
         assert "campaign.toml" in content
         # Ref repos should be listed
         assert "リファレンスリポジトリ" in content
@@ -183,7 +183,7 @@ class TestInit:
         """CLAUDE.md is generated without simulator sections when none given."""
         runner.invoke(app, ["init", "-y", "--path", str(tmp_path)])
         content = (tmp_path / "CLAUDE.md").read_text(encoding="utf-8")
-        assert "simctl" in content
+        assert "runops" in content
         assert "シミュレータ固有知識" not in content
         # No cookbook rule when no simulators
         cookbook_rule = tmp_path / ".claude" / "rules" / "cookbook.md"
@@ -196,8 +196,8 @@ class TestInit:
         assert agents_path.exists()
         assert not agents_path.is_symlink()
         content = agents_path.read_text(encoding="utf-8")
-        assert "simctl" in content
-        assert "simctl context" in content
+        assert "runops" in content
+        assert "runops context" in content
         assert "役割分担" in content
 
     def test_init_skills(self, tmp_path: Path) -> None:
@@ -208,7 +208,7 @@ class TestInit:
         assert (skills_dir / "survey-design" / "SKILL.md").exists()
         assert (skills_dir / "check-status" / "SKILL.md").exists()
         assert (skills_dir / "analyze" / "SKILL.md").exists()
-        assert (skills_dir / "simctl-reference" / "SKILL.md").exists()
+        assert (skills_dir / "runops-reference" / "SKILL.md").exists()
         setup_content = (skills_dir / "setup-env" / "SKILL.md").read_text(
             encoding="utf-8"
         )
@@ -240,17 +240,17 @@ class TestInit:
         assert "allow" in data["permissions"]
         assert "ask" in data["permissions"]
         assert "deny" in data["permissions"]
-        assert any("simctl" in r for r in data["permissions"]["allow"])
+        assert any("runops" in r for r in data["permissions"]["allow"])
         assert "Edit(/campaign.toml)" in data["permissions"]["allow"]
-        assert "Edit(/tools/hpc-simctl/**)" in data["permissions"]["allow"]
-        assert "Bash(simctl runs submit*)" in data["permissions"]["ask"]
-        assert "Write(/simproject.toml)" in data["permissions"]["ask"]
+        assert "Edit(/tools/runops/**)" in data["permissions"]["allow"]
+        assert "Bash(runops runs submit*)" in data["permissions"]["ask"]
+        assert "Write(/runops.toml)" in data["permissions"]["ask"]
         assert "Write(/SITE.md)" in data["permissions"]["deny"]
         assert "Edit(/runs/**/manifest.toml)" in data["permissions"]["deny"]
         assert "Read(/.env)" in data["permissions"]["deny"]
         assert data["permissions"]["disableBypassPermissionsMode"] == "disable"
         # PreToolUse hooks are intentionally NOT scaffolded; their intent
-        # is captured in .claude/rules/simctl-workflow.md instead.
+        # is captured in .claude/rules/runops-workflow.md instead.
         assert "hooks" not in data
 
     def test_init_does_not_create_claude_hooks_dir(self, tmp_path: Path) -> None:
@@ -265,17 +265,17 @@ class TestInit:
         """Project rules are created in .claude/rules/."""
         runner.invoke(app, ["init", "-y", "--path", str(tmp_path)])
         rules_dir = tmp_path / ".claude" / "rules"
-        assert (rules_dir / "simctl-workflow.md").exists()
+        assert (rules_dir / "runops-workflow.md").exists()
         assert (rules_dir / "plan-before-act.md").exists()
-        workflow = (rules_dir / "simctl-workflow.md").read_text(encoding="utf-8")
+        workflow = (rules_dir / "runops-workflow.md").read_text(encoding="utf-8")
         assert "manifest.toml" in workflow
         assert "SITE.md" in workflow
         assert "analysis/scratch/" in workflow
         assert "promote-fact" in workflow
         # Behavioural rules that used to live in PreToolUse hooks must now be
         # documented in this rule file.
-        assert "simctl runs submit" in workflow
-        assert "tools/hpc-simctl" in workflow
+        assert "runops runs submit" in workflow
+        assert "tools/runops" in workflow
 
     def test_init_subdirectory_claude_md(self, tmp_path: Path) -> None:
         """Context-specific CLAUDE.md files are created in cases/ and runs/."""
@@ -327,15 +327,15 @@ class TestInit:
     def test_init_schema_comments(self, tmp_path: Path) -> None:
         """Generated TOMLs include #:schema comments."""
         runner.invoke(app, ["init", "-y", "--path", str(tmp_path)])
-        for filename in ("simproject.toml", "simulators.toml", "launchers.toml"):
+        for filename in ("runops.toml", "simulators.toml", "launchers.toml"):
             content = (tmp_path / filename).read_text(encoding="utf-8")
             assert "#:schema" in content
 
     def test_init_references_tools_dir(self, tmp_path: Path) -> None:
-        """CLAUDE.md references tools/hpc-simctl/ for docs."""
+        """CLAUDE.md references tools/runops/ for docs."""
         runner.invoke(app, ["init", "-y", "--path", str(tmp_path)])
         content = (tmp_path / "CLAUDE.md").read_text(encoding="utf-8")
-        assert "tools/hpc-simctl/" in content
+        assert "tools/runops/" in content
         # docs/ directory should NOT be generated
         assert not (tmp_path / "docs").exists()
 
@@ -343,10 +343,10 @@ class TestInit:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Interactive init copies SITE.md when a bundled site profile is chosen."""
-        from simctl.cli.init import _BundledSiteProfile
+        from runops.cli.init import _BundledSiteProfile
 
         repo_root = Path(__file__).resolve().parents[2]
-        site_dir = repo_root / "src" / "simctl" / "sites"
+        site_dir = repo_root / "src" / "runops" / "sites"
         profile = _BundledSiteProfile(
             name="camphor",
             launcher={"type": "srun", "use_slurm_ntasks": True},
@@ -354,13 +354,13 @@ class TestInit:
             docs_path=site_dir / "camphor.md",
         )
 
-        monkeypatch.setattr("simctl.cli.init._prompt_simulators", lambda: ([], {}))
+        monkeypatch.setattr("runops.cli.init._prompt_simulators", lambda: ([], {}))
         monkeypatch.setattr(
-            "simctl.cli.init._prompt_launchers",
+            "runops.cli.init._prompt_launchers",
             lambda: ({"srun": {"type": "srun", "use_slurm_ntasks": True}}, profile),
         )
         monkeypatch.setattr(
-            "simctl.cli.init._prompt_knowledge_sources",
+            "runops.cli.init._prompt_knowledge_sources",
             lambda _project_dir: [],
         )
 
@@ -381,31 +381,31 @@ class TestInit:
         def _fake_bootstrap(
             project_dir: Path,
             _sim_names: list[str],
-            _simctl_repo: str,
+            _runops_repo: str,
             created: list[str],
             _skipped: list[str],
         ) -> None:
-            (project_dir / "tools" / "hpc-simctl").mkdir(parents=True, exist_ok=True)
-            (project_dir / "tools" / "hpc-simctl" / "entrypoints.toml").write_text(
+            (project_dir / "tools" / "runops").mkdir(parents=True, exist_ok=True)
+            (project_dir / "tools" / "runops" / "entrypoints.toml").write_text(
                 'imports = ["docs/agent-user-guide.md"]\n',
                 encoding="utf-8",
             )
-            docs_dir = project_dir / "tools" / "hpc-simctl" / "docs"
+            docs_dir = project_dir / "tools" / "runops" / "docs"
             docs_dir.mkdir(parents=True, exist_ok=True)
             (docs_dir / "agent-user-guide.md").write_text("# Agent guide\n")
-            created.append("tools/hpc-simctl")
+            created.append("tools/runops")
 
-        monkeypatch.setattr("simctl.cli.init._bootstrap_environment", _fake_bootstrap)
+        monkeypatch.setattr("runops.cli.init._bootstrap_environment", _fake_bootstrap)
 
         result = runner.invoke(app, ["init", "-y", "--path", str(tmp_path)])
 
         assert result.exit_code == 0
-        imports_path = tmp_path / ".simctl" / "knowledge" / "enabled" / "imports.md"
+        imports_path = tmp_path / ".runops" / "knowledge" / "enabled" / "imports.md"
         assert imports_path.is_file()
         imports = imports_path.read_text(encoding="utf-8")
-        assert "@tools/hpc-simctl/docs/agent-user-guide.md" in imports
+        assert "@tools/runops/docs/agent-user-guide.md" in imports
         claude = (tmp_path / "CLAUDE.md").read_text(encoding="utf-8")
-        assert "@.simctl/knowledge/enabled/imports.md" in claude
+        assert "@.runops/knowledge/enabled/imports.md" in claude
 
     def test_init_default_is_interactive(self, tmp_path: Path) -> None:
         """Init without -y is interactive (prompts for project name)."""
@@ -416,46 +416,46 @@ class TestInit:
 
 
 class TestDoctor:
-    """Tests for the 'simctl doctor' command."""
+    """Tests for the 'runops doctor' command."""
 
     def test_doctor_all_pass(self, tmp_path: Path) -> None:
         """Doctor passes on a properly initialized project with sbatch."""
         # Set up a valid project
-        (tmp_path / "simproject.toml").write_text('[project]\nname = "test-project"\n')
+        (tmp_path / "runops.toml").write_text('[project]\nname = "test-project"\n')
         (tmp_path / "simulators.toml").write_text("[simulators]\n")
         (tmp_path / "launchers.toml").write_text("[launchers]\n")
         (tmp_path / "runs").mkdir()
 
-        with patch("simctl.cli.init.shutil.which", return_value="/usr/bin/sbatch"):
+        with patch("runops.cli.init.shutil.which", return_value="/usr/bin/sbatch"):
             result = runner.invoke(app, ["doctor", str(tmp_path)])
 
         assert result.exit_code == 0
         assert "All checks passed" in result.output
 
     def test_doctor_missing_simproject(self, tmp_path: Path) -> None:
-        """Doctor fails if simproject.toml is missing."""
+        """Doctor fails if runops.toml is missing."""
         result = runner.invoke(app, ["doctor", str(tmp_path)])
         assert result.exit_code == 1
-        assert "[FAIL] simproject.toml not found" in result.output
+        assert "[FAIL] runops.toml not found" in result.output
 
     def test_doctor_invalid_simproject(self, tmp_path: Path) -> None:
-        """Doctor fails if simproject.toml is invalid."""
-        (tmp_path / "simproject.toml").write_text("invalid content\n")
+        """Doctor fails if runops.toml is invalid."""
+        (tmp_path / "runops.toml").write_text("invalid content\n")
         (tmp_path / "simulators.toml").write_text("[simulators]\n")
         (tmp_path / "launchers.toml").write_text("[launchers]\n")
 
-        with patch("simctl.cli.init.shutil.which", return_value="/usr/bin/sbatch"):
+        with patch("runops.cli.init.shutil.which", return_value="/usr/bin/sbatch"):
             result = runner.invoke(app, ["doctor", str(tmp_path)])
 
         assert result.exit_code == 1
-        assert "[FAIL] simproject.toml" in result.output
+        assert "[FAIL] runops.toml" in result.output
 
     def test_doctor_missing_simulators(self, tmp_path: Path) -> None:
         """Doctor fails if simulators.toml is missing."""
-        (tmp_path / "simproject.toml").write_text('[project]\nname = "test-project"\n')
+        (tmp_path / "runops.toml").write_text('[project]\nname = "test-project"\n')
         (tmp_path / "launchers.toml").write_text("[launchers]\n")
 
-        with patch("simctl.cli.init.shutil.which", return_value="/usr/bin/sbatch"):
+        with patch("runops.cli.init.shutil.which", return_value="/usr/bin/sbatch"):
             result = runner.invoke(app, ["doctor", str(tmp_path)])
 
         assert result.exit_code == 1
@@ -463,10 +463,10 @@ class TestDoctor:
 
     def test_doctor_missing_launchers(self, tmp_path: Path) -> None:
         """Doctor fails if launchers.toml is missing."""
-        (tmp_path / "simproject.toml").write_text('[project]\nname = "test-project"\n')
+        (tmp_path / "runops.toml").write_text('[project]\nname = "test-project"\n')
         (tmp_path / "simulators.toml").write_text("[simulators]\n")
 
-        with patch("simctl.cli.init.shutil.which", return_value="/usr/bin/sbatch"):
+        with patch("runops.cli.init.shutil.which", return_value="/usr/bin/sbatch"):
             result = runner.invoke(app, ["doctor", str(tmp_path)])
 
         assert result.exit_code == 1
@@ -474,11 +474,11 @@ class TestDoctor:
 
     def test_doctor_missing_sbatch(self, tmp_path: Path) -> None:
         """Doctor fails if sbatch is not in PATH."""
-        (tmp_path / "simproject.toml").write_text('[project]\nname = "test-project"\n')
+        (tmp_path / "runops.toml").write_text('[project]\nname = "test-project"\n')
         (tmp_path / "simulators.toml").write_text("[simulators]\n")
         (tmp_path / "launchers.toml").write_text("[launchers]\n")
 
-        with patch("simctl.cli.init.shutil.which", return_value=None):
+        with patch("runops.cli.init.shutil.which", return_value=None):
             result = runner.invoke(app, ["doctor", str(tmp_path)])
 
         assert result.exit_code == 1
@@ -486,7 +486,7 @@ class TestDoctor:
 
     def test_doctor_duplicate_run_ids(self, tmp_path: Path) -> None:
         """Doctor fails if duplicate run_ids exist."""
-        (tmp_path / "simproject.toml").write_text('[project]\nname = "test-project"\n')
+        (tmp_path / "runops.toml").write_text('[project]\nname = "test-project"\n')
         (tmp_path / "simulators.toml").write_text("[simulators]\n")
         (tmp_path / "launchers.toml").write_text("[launchers]\n")
         runs_dir = tmp_path / "runs"
@@ -500,7 +500,7 @@ class TestDoctor:
                 '[run]\nid = "R20260327-0001"\nstatus = "created"\n'
             )
 
-        with patch("simctl.cli.init.shutil.which", return_value="/usr/bin/sbatch"):
+        with patch("runops.cli.init.shutil.which", return_value="/usr/bin/sbatch"):
             result = runner.invoke(app, ["doctor", str(tmp_path)])
 
         assert result.exit_code == 1
@@ -508,11 +508,11 @@ class TestDoctor:
 
     def test_doctor_no_runs_dir(self, tmp_path: Path) -> None:
         """Doctor passes run_id check when runs/ does not exist."""
-        (tmp_path / "simproject.toml").write_text('[project]\nname = "test-project"\n')
+        (tmp_path / "runops.toml").write_text('[project]\nname = "test-project"\n')
         (tmp_path / "simulators.toml").write_text("[simulators]\n")
         (tmp_path / "launchers.toml").write_text("[launchers]\n")
 
-        with patch("simctl.cli.init.shutil.which", return_value="/usr/bin/sbatch"):
+        with patch("runops.cli.init.shutil.which", return_value="/usr/bin/sbatch"):
             result = runner.invoke(app, ["doctor", str(tmp_path)])
 
         assert result.exit_code == 0
@@ -521,7 +521,7 @@ class TestDoctor:
     def test_doctor_reports_failure_count(self, tmp_path: Path) -> None:
         """Doctor output includes the number of failed checks."""
         # Empty dir: simproject, simulators, launchers all missing + no sbatch
-        with patch("simctl.cli.init.shutil.which", return_value=None):
+        with patch("runops.cli.init.shutil.which", return_value=None):
             result = runner.invoke(app, ["doctor", str(tmp_path)])
 
         assert result.exit_code == 1

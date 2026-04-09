@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import tomli_w
 
-from simctl.core.actions import (
+from runops.core.actions import (
     ActionStatus,
     add_fact,
     collect_survey,
@@ -22,12 +22,12 @@ from simctl.core.actions import (
     submit_run,
     summarize_run,
 )
-from simctl.core.actions import (
+from runops.core.actions import (
     create_run as create_run_action,
 )
-from simctl.core.knowledge import list_insights, load_facts
-from simctl.core.state import RunState
-from simctl.slurm.query import JobStatus
+from runops.core.knowledge import list_insights, load_facts
+from runops.core.state import RunState
+from runops.slurm.query import JobStatus
 
 
 def _write_manifest(run_dir: Path, data: dict[str, Any]) -> None:
@@ -37,7 +37,7 @@ def _write_manifest(run_dir: Path, data: dict[str, Any]) -> None:
 
 
 def _create_project_with_case(project_root: Path) -> None:
-    (project_root / "simproject.toml").write_text(
+    (project_root / "runops.toml").write_text(
         '[project]\nname = "test-project"\n',
         encoding="utf-8",
     )
@@ -190,7 +190,7 @@ def test_collect_survey_auto_summarizes_completed_runs(tmp_path: Path) -> None:
     mock_adapter.summarize.return_value = {"energy": 2.5}
     mock_adapter_cls = MagicMock(return_value=mock_adapter)
 
-    with patch("simctl.core.analysis.get_adapter", return_value=mock_adapter_cls):
+    with patch("runops.core.analysis.get_adapter", return_value=mock_adapter_cls):
         result = collect_survey(tmp_path)
 
     assert result.status is ActionStatus.SUCCESS
@@ -219,7 +219,7 @@ def test_summarize_run_writes_summary_json(tmp_path: Path) -> None:
     mock_adapter.summarize.return_value = {"energy": 42.0}
     mock_adapter_cls = MagicMock(return_value=mock_adapter)
 
-    with patch("simctl.core.analysis.get_adapter", return_value=mock_adapter_cls):
+    with patch("runops.core.analysis.get_adapter", return_value=mock_adapter_cls):
         result = summarize_run(run_dir)
 
     assert result.status is ActionStatus.SUCCESS
@@ -290,7 +290,7 @@ def test_add_fact_supports_superseding_fact(tmp_path: Path) -> None:
 
 
 def test_promote_fact_promotes_candidate_fact(tmp_path: Path) -> None:
-    candidate_dir = tmp_path / ".simctl" / "knowledge" / "candidates" / "facts"
+    candidate_dir = tmp_path / ".runops" / "knowledge" / "candidates" / "facts"
     candidate_dir.mkdir(parents=True, exist_ok=True)
     (candidate_dir / "shared.toml").write_text(
         "[transport]\n"
@@ -384,7 +384,7 @@ def test_submit_run_updates_manifest_and_state_file(tmp_path: Path) -> None:
     (run_dir / "input").mkdir(parents=True, exist_ok=True)
     (run_dir / "input" / "params.json").write_text("{}", encoding="utf-8")
 
-    with patch("simctl.slurm.submit.sbatch_submit", return_value="12345"):
+    with patch("runops.slurm.submit.sbatch_submit", return_value="12345"):
         result = submit_run(run_dir)
 
     assert result.status is ActionStatus.SUCCESS
@@ -442,7 +442,7 @@ def test_execute_action_submit_run_updates_manifest_and_passes_options(
     (run_dir / "work").mkdir(parents=True, exist_ok=True)
 
     with patch(
-        "simctl.slurm.submit.sbatch_submit", return_value="12345"
+        "runops.slurm.submit.sbatch_submit", return_value="12345"
     ) as mock_submit:
         result = execute_action(
             "submit_run",
@@ -459,7 +459,7 @@ def test_execute_action_submit_run_updates_manifest_and_passes_options(
     assert mock_submit.call_args.kwargs["extra_args"] == ["--partition=compute"]
     assert mock_submit.call_args.kwargs["afterok"] == "67890"
 
-    from simctl.core.manifest import read_manifest
+    from runops.core.manifest import read_manifest
 
     updated = read_manifest(run_dir)
     assert updated.run["status"] == "submitted"
@@ -486,7 +486,7 @@ def test_execute_action_sync_run_updates_manifest_and_state_file(
     )
 
     with patch(
-        "simctl.slurm.query.query_job_status",
+        "runops.slurm.query.query_job_status",
         return_value=JobStatus(run_state=RunState.RUNNING, slurm_state="RUNNING"),
     ):
         result = execute_action("sync_run", run_dir=run_dir)
@@ -496,7 +496,7 @@ def test_execute_action_sync_run_updates_manifest_and_state_file(
     assert result.state_after == "running"
     assert result.data["slurm_state"] == "RUNNING"
 
-    from simctl.core.manifest import read_manifest
+    from runops.core.manifest import read_manifest
 
     updated = read_manifest(run_dir)
     assert updated.run["status"] == "running"
@@ -520,9 +520,9 @@ def test_execute_action_cancel_run_scancels_and_syncs_manifest(tmp_path: Path) -
     )
 
     with (
-        patch("simctl.slurm.submit.scancel_job") as mock_scancel,
+        patch("runops.slurm.submit.scancel_job") as mock_scancel,
         patch(
-            "simctl.slurm.query.query_job_status",
+            "runops.slurm.query.query_job_status",
             return_value=JobStatus(
                 run_state=RunState.CANCELLED,
                 slurm_state="CANCELLED",
@@ -536,7 +536,7 @@ def test_execute_action_cancel_run_scancels_and_syncs_manifest(tmp_path: Path) -
     assert result.state_after == "cancelled"
     mock_scancel.assert_called_once_with("98765")
 
-    from simctl.core.manifest import read_manifest
+    from runops.core.manifest import read_manifest
 
     updated = read_manifest(run_dir)
     assert updated.run["status"] == "cancelled"

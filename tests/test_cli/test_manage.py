@@ -1,4 +1,4 @@
-"""Tests for simctl runs archive / purge-work / cancel / delete commands."""
+"""Tests for runops runs archive / purge-work / cancel / delete commands."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import pytest
 import tomli_w
 from typer.testing import CliRunner
 
-from simctl.cli.main import app
+from runops.cli.main import app
 
 runner = CliRunner()
 
@@ -74,7 +74,7 @@ class TestArchive:
         assert result.exit_code == 0
         assert "Cancelled." in result.output
 
-        from simctl.core.manifest import read_manifest
+        from runops.core.manifest import read_manifest
 
         manifest = read_manifest(run_dir)
         assert manifest.run["status"] == "completed"
@@ -153,7 +153,7 @@ class TestPurgeWork:
         assert "Cancelled." in result.output
         assert work_outputs.exists()
 
-        from simctl.core.manifest import read_manifest
+        from runops.core.manifest import read_manifest
 
         manifest = read_manifest(run_dir)
         assert manifest.run["status"] == "archived"
@@ -180,7 +180,7 @@ class TestPurgeWork:
 
 
 class TestDelete:
-    """Tests for `simctl runs delete`."""
+    """Tests for `runops runs delete`."""
 
     @pytest.mark.parametrize("status", ["created", "cancelled", "failed"])
     def test_delete_terminal_run_removes_directory(
@@ -225,7 +225,7 @@ class TestDelete:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """run_id lookup should work project-wide, not only under cwd."""
-        (tmp_path / "simproject.toml").write_text('[project]\nname = "test"\n')
+        (tmp_path / "runops.toml").write_text('[project]\nname = "test"\n')
         run_dir = _create_run(
             tmp_path / "runs",
             "R20260327-0001",
@@ -243,7 +243,7 @@ class TestDelete:
 
 
 class TestCancel:
-    """Tests for `simctl runs cancel`."""
+    """Tests for `runops runs cancel`."""
 
     def test_cancel_requires_active_state(self, tmp_path: Path) -> None:
         run_dir = _create_run(
@@ -263,9 +263,9 @@ class TestCancel:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """`runs cancel` invokes scancel and then sync."""
-        from simctl.core import actions
-        from simctl.slurm import submit as slurm_submit
-        from simctl.slurm.submit import CommandResult
+        from runops.core import actions
+        from runops.slurm import submit as slurm_submit
+        from runops.slurm.submit import CommandResult
 
         run_dir = _create_run(
             tmp_path, "R20260327-0001", status="running", job_id="98765"
@@ -280,7 +280,7 @@ class TestCancel:
         monkeypatch.setattr(slurm_submit, "_default_runner", fake_runner)
 
         # Stub sync_run so we don't actually talk to Slurm.
-        from simctl.core.actions import ActionResult, ActionStatus
+        from runops.core.actions import ActionResult, ActionStatus
 
         def fake_sync(rd: Path) -> ActionResult:
             return ActionResult(

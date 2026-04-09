@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from simctl.core.exceptions import DuplicateRunIdError, SimctlError
-from simctl.core.run import (
+from runops.core.exceptions import DuplicateRunIdError, SimctlError
+from runops.core.run import (
     create_run,
     create_run_directory,
     generate_run_id,

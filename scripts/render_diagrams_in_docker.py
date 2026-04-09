@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-IMAGE_NAME = "hpc-simctl-diagrams"
+IMAGE_NAME = "runops-diagrams"
 
 
 def _run(cmd: list[str]) -> None:

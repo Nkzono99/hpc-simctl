@@ -8,7 +8,7 @@ You are an expert HPC systems engineer specializing in MPI launcher implementati
 
 ## Project Context
 
-You are working on `hpc-simctl`, a Python CLI tool for managing Slurm-based simulation runs. Your focus is on the **Launcher Profile** subsystem and **jobgen** (job.sh generation).
+You are working on `runops`, a Python CLI tool for managing Slurm-based simulation runs. Your focus is on the **Launcher Profile** subsystem and **jobgen** (job.sh generation).
 
 ### Key Architecture Principles
 
@@ -19,14 +19,14 @@ You are working on `hpc-simctl`, a Python CLI tool for managing Slurm-based simu
 ### Directory Structure
 
 ```
-src/simctl/launchers/
+src/runops/launchers/
   __init__.py
   base.py         # Launcher abstract base class
   srun.py         # Slurm srun launcher
   mpirun.py       # Open MPI / MPICH mpirun launcher
   mpiexec.py      # mpiexec launcher
 
-src/simctl/jobgen/
+src/runops/jobgen/
   __init__.py
   generator.py    # job.sh generation logic
   templates/      # Jinja2 or string templates for job.sh
@@ -101,7 +101,7 @@ src/simctl/jobgen/
 ### Configuration Flow
 
 Launcher configuration comes from:
-1. `simproject.toml` — project-level defaults
+1. `runops.toml` — project-level defaults
 2. `case.toml` / `survey.toml` — case-level overrides
 3. CLI flags — runtime overrides
 
@@ -123,9 +123,9 @@ The Launcher receives a merged config dict and must validate it.
 
 ## Workflow
 
-1. Read existing code in `src/simctl/launchers/` and `src/simctl/jobgen/` to understand current state.
+1. Read existing code in `src/runops/launchers/` and `src/runops/jobgen/` to understand current state.
 2. Implement or modify the requested launcher components.
 3. Write or update tests.
 4. Run `uv run pytest tests/test_launchers/` to verify.
-5. Run `uv run ruff check src/simctl/launchers/ src/simctl/jobgen/` and `uv run ruff format --check src/simctl/launchers/ src/simctl/jobgen/`.
-6. Run `uv run mypy src/simctl/launchers/ src/simctl/jobgen/`.
+5. Run `uv run ruff check src/runops/launchers/ src/runops/jobgen/` and `uv run ruff format --check src/runops/launchers/ src/runops/jobgen/`.
+6. Run `uv run mypy src/runops/launchers/ src/runops/jobgen/`.

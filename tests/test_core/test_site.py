@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from simctl.core.site import (
+from runops.core.site import (
     MOCK_SITE,
     STANDARD_SITE,
     SiteProfile,
@@ -92,8 +92,8 @@ class TestLoadSiteProfile:
             "[site.simulators.emses]\n"
             'modules = ["hdf5/1.12"]\n'
         )
-        # Also create simproject.toml so it looks like a project
-        (tmp_path / "simproject.toml").write_text('[project]\nname = "test"\n')
+        # Also create runops.toml so it looks like a project
+        (tmp_path / "runops.toml").write_text('[project]\nname = "test"\n')
 
         profile = load_site_profile(tmp_path)
         assert profile.name == "testsite"
@@ -214,7 +214,7 @@ class TestMockSiteWithJobgen:
     """Verify MOCK_SITE works end-to-end with job script generation."""
 
     def test_generate_with_mock_site(self, tmp_path: Path) -> None:
-        from simctl.jobgen.generator import generate_job_script
+        from runops.jobgen.generator import generate_job_script
 
         run_dir = tmp_path / "R0001"
         run_dir.mkdir()
@@ -236,7 +236,7 @@ class TestMockSiteWithJobgen:
 
     def test_generate_with_rsc_site(self, tmp_path: Path) -> None:
         """Verify a custom rsc site profile works with jobgen."""
-        from simctl.jobgen.generator import generate_job_script
+        from runops.jobgen.generator import generate_job_script
 
         camphor = SiteProfile(
             name="camphor3",

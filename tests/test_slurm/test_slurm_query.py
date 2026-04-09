@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from simctl.core.state import RunState
-from simctl.slurm.query import (
+from runops.core.state import RunState
+from runops.slurm.query import (
     SlurmQueryError,
     _parse_timelimit,
     map_slurm_state,
@@ -14,7 +14,7 @@ from simctl.slurm.query import (
     sinfo_partitions,
     squeue_status,
 )
-from simctl.slurm.submit import CommandResult, SlurmNotFoundError
+from runops.slurm.submit import CommandResult, SlurmNotFoundError
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -40,7 +40,7 @@ def _runner(
 
 
 class TestMapSlurmState:
-    """Tests for the Slurm-to-simctl state mapping."""
+    """Tests for the Slurm-to-runops state mapping."""
 
     @pytest.mark.parametrize(
         ("slurm_state", "expected"),

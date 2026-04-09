@@ -1,4 +1,4 @@
-"""Tests for simctl update-harness CLI command."""
+"""Tests for runops update-harness CLI command."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from simctl.cli.main import app
-from simctl.harness.builder import (
+from runops.cli.main import app
+from runops.harness.builder import (
     HARNESS_LOCK_PATH,
     hash_text,
     load_harness_lock,
@@ -23,13 +23,13 @@ runner = CliRunner()
 def _mock_bootstrap(monkeypatch: pytest.MonkeyPatch) -> None:
     """Skip the bootstrap step (uv/git clone) in all tests."""
     monkeypatch.setattr(
-        "simctl.cli.init._bootstrap_environment",
+        "runops.cli.init._bootstrap_environment",
         lambda *_args, **_kwargs: None,
     )
 
 
 def _init_project(tmp_path: Path) -> None:
-    """Create a minimal project via simctl init."""
+    """Create a minimal project via runops init."""
     result = runner.invoke(app, ["init", "-y", "--path", str(tmp_path)])
     assert result.exit_code == 0
 
@@ -45,13 +45,13 @@ class TestUpdateHarnessBasic:
         assert "up to date" in result.output
 
     def test_creates_harness_lock(self, tmp_path: Path) -> None:
-        """init creates .simctl/harness.lock with template hashes."""
+        """init creates .runops/harness.lock with template hashes."""
         _init_project(tmp_path)
         lock = load_harness_lock(tmp_path)
         assert "CLAUDE.md" in lock
         assert "AGENTS.md" in lock
         assert ".claude/settings.json" in lock
-        assert ".claude/rules/simctl-workflow.md" in lock
+        assert ".claude/rules/runops-workflow.md" in lock
         assert ".claude/rules/upstream-feedback.md" in lock
 
     def test_overwrites_unedited_files(self, tmp_path: Path) -> None:
@@ -163,7 +163,7 @@ class TestUpdateHarnessBasic:
 
 
 class TestInitUpstreamFeedback:
-    """Tests for --no-upstream-feedback in simctl init."""
+    """Tests for --no-upstream-feedback in runops init."""
 
     def test_default_includes_feedback_rule(self, tmp_path: Path) -> None:
         """By default, upstream-feedback.md rule is created."""
@@ -171,7 +171,7 @@ class TestInitUpstreamFeedback:
         rule = tmp_path / ".claude" / "rules" / "upstream-feedback.md"
         assert rule.exists()
         content = rule.read_text(encoding="utf-8")
-        assert "Nkzono99/hpc-simctl" in content
+        assert "Nkzono99/runops" in content
         assert "gh issue create" in content
 
     def test_no_upstream_feedback_flag(self, tmp_path: Path) -> None:
@@ -184,9 +184,9 @@ class TestInitUpstreamFeedback:
         assert not rule.exists()
 
     def test_simproject_records_upstream_feedback(self, tmp_path: Path) -> None:
-        """simproject.toml includes [harness] upstream_feedback = true."""
+        """runops.toml includes [harness] upstream_feedback = true."""
         _init_project(tmp_path)
-        content = (tmp_path / "simproject.toml").read_text(encoding="utf-8")
+        content = (tmp_path / "runops.toml").read_text(encoding="utf-8")
         assert "[harness]" in content
         assert "upstream_feedback = true" in content
 
@@ -195,11 +195,11 @@ class TestInitUpstreamFeedback:
         runner.invoke(
             app, ["init", "-y", "--no-upstream-feedback", "--path", str(tmp_path)]
         )
-        content = (tmp_path / "simproject.toml").read_text(encoding="utf-8")
+        content = (tmp_path / "runops.toml").read_text(encoding="utf-8")
         assert "upstream_feedback = false" in content
 
     def test_update_harness_respects_setting(self, tmp_path: Path) -> None:
-        """update-harness reads upstream_feedback from simproject.toml."""
+        """update-harness reads upstream_feedback from runops.toml."""
         # Init without feedback
         runner.invoke(
             app, ["init", "-y", "--no-upstream-feedback", "--path", str(tmp_path)]
@@ -214,7 +214,7 @@ class TestInitUpstreamFeedback:
 
 
 class TestHarnessLock:
-    """Tests for .simctl/harness.lock persistence."""
+    """Tests for .runops/harness.lock persistence."""
 
     def test_lock_is_valid_json(self, tmp_path: Path) -> None:
         """harness.lock is valid JSON with version and hashes."""

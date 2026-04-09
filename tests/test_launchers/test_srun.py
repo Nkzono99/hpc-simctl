@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from simctl.launchers.srun import SrunLauncher
+from runops.launchers.srun import SrunLauncher
 
 
 class TestBuildLaunchCommand:

@@ -1,4 +1,4 @@
-"""Tests for simctl config CLI commands."""
+"""Tests for runops config CLI commands."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from simctl.cli.main import app
+from runops.cli.main import app
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -19,34 +19,34 @@ runner = CliRunner()
 
 
 def _setup_project(tmp_path: Path) -> None:
-    """Create a minimal simctl project for config tests."""
-    (tmp_path / "simproject.toml").write_text('[project]\nname = "test-project"\n')
+    """Create a minimal runops project for config tests."""
+    (tmp_path / "runops.toml").write_text('[project]\nname = "test-project"\n')
     (tmp_path / "simulators.toml").write_text("[simulators]\n")
     (tmp_path / "launchers.toml").write_text("[launchers]\n")
 
 
 class TestConfigShow:
-    """Tests for 'simctl config show'."""
+    """Tests for 'runops config show'."""
 
     def test_show_displays_all_configs(self, tmp_path: Path) -> None:
         """Show command prints all config files."""
         _setup_project(tmp_path)
         result = runner.invoke(app, ["config", "show", "--path", str(tmp_path)])
         assert result.exit_code == 0
-        assert "simproject.toml" in result.output
+        assert "runops.toml" in result.output
         assert "simulators.toml" in result.output
         assert "launchers.toml" in result.output
         assert "test-project" in result.output
 
     def test_show_fails_without_project(self, tmp_path: Path) -> None:
-        """Show fails if simproject.toml is missing."""
+        """Show fails if runops.toml is missing."""
         result = runner.invoke(app, ["config", "show", "--path", str(tmp_path)])
         assert result.exit_code == 1
-        assert "simproject.toml not found" in result.output
+        assert "runops.toml not found" in result.output
 
 
 class TestConfigAddSimulator:
-    """Tests for 'simctl config add-simulator'."""
+    """Tests for 'runops config add-simulator'."""
 
     def test_add_simulator_with_name(self, tmp_path: Path) -> None:
         """Add simulator by name with default config (non-interactive)."""
@@ -109,7 +109,7 @@ class TestConfigAddSimulator:
 
 
 class TestConfigAddLauncher:
-    """Tests for 'simctl config add-launcher'."""
+    """Tests for 'runops config add-launcher'."""
 
     def test_add_launcher_srun(self, tmp_path: Path) -> None:
         """Add srun launcher profile."""
@@ -136,13 +136,13 @@ class TestConfigAddLauncher:
 
 
 class TestInteractiveInit:
-    """Tests for 'simctl init' (interactive by default)."""
+    """Tests for 'runops init' (interactive by default)."""
 
     @pytest.fixture(autouse=True)
     def _mock_bootstrap(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Skip the bootstrap step (uv/git clone) in interactive init tests."""
         monkeypatch.setattr(
-            "simctl.cli.init._bootstrap_environment",
+            "runops.cli.init._bootstrap_environment",
             lambda *_args, **_kwargs: None,
         )
 

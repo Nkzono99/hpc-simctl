@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import tomli_w
 
-from simctl.core.context import (
+from runops.core.context import (
     _collect_facts_summary,
     _collect_knowledge_paths,
     _collect_recent_failures,
@@ -19,7 +19,7 @@ from simctl.core.context import (
     _load_simulator_names,
     build_project_context,
 )
-from simctl.core.exceptions import SimctlError
+from runops.core.exceptions import SimctlError
 
 
 def _write_toml(path: Path, data: dict) -> None:
@@ -30,13 +30,13 @@ def _write_toml(path: Path, data: dict) -> None:
 
 def test_context_includes_knowledge_integration_details(tmp_path: Path) -> None:
     _write_toml(
-        tmp_path / "simproject.toml",
+        tmp_path / "runops.toml",
         {
             "project": {"name": "test-project"},
             "knowledge": {
                 "enabled": True,
                 "mount_dir": "refs/knowledge",
-                "derived_dir": ".simctl/knowledge",
+                "derived_dir": ".runops/knowledge",
                 "sources": [
                     {
                         "name": "shared-kb",
@@ -61,11 +61,11 @@ def test_context_includes_knowledge_integration_details(tmp_path: Path) -> None:
     (mounted_kb / "profiles").mkdir(parents=True)
     (mounted_kb / "profiles" / "common.md").write_text("# Common\n", encoding="utf-8")
 
-    imports_path = tmp_path / ".simctl" / "knowledge" / "enabled" / "imports.md"
+    imports_path = tmp_path / ".runops" / "knowledge" / "enabled" / "imports.md"
     imports_path.parent.mkdir(parents=True, exist_ok=True)
     imports_path.write_text("@refs/knowledge/shared-kb/profiles/common.md\n")
 
-    insight_path = tmp_path / ".simctl" / "insights" / "result_note.md"
+    insight_path = tmp_path / ".runops" / "insights" / "result_note.md"
     insight_path.parent.mkdir(parents=True, exist_ok=True)
     insight_path.write_text(
         "---\n"
@@ -81,7 +81,7 @@ def test_context_includes_knowledge_integration_details(tmp_path: Path) -> None:
     other_project.mkdir(parents=True, exist_ok=True)
 
     _write_toml(
-        tmp_path / ".simctl" / "facts.toml",
+        tmp_path / ".runops" / "facts.toml",
         {
             "facts": [
                 {
@@ -151,12 +151,12 @@ def test_context_includes_knowledge_integration_details(tmp_path: Path) -> None:
 
 def test_context_reports_diagnostics_for_broken_sections(tmp_path: Path) -> None:
     _write_toml(
-        tmp_path / "simproject.toml",
+        tmp_path / "runops.toml",
         {
             "project": {"name": "broken-project"},
         },
     )
-    facts_path = tmp_path / ".simctl" / "facts.toml"
+    facts_path = tmp_path / ".runops" / "facts.toml"
     facts_path.parent.mkdir(parents=True, exist_ok=True)
     facts_path.write_text("not valid toml", encoding="utf-8")
 
@@ -270,7 +270,7 @@ def test_collect_facts_summary_serializes_local_and_candidate_fields(
         ),
     ]
 
-    with patch("simctl.core.knowledge.query_facts", return_value=facts):
+    with patch("runops.core.knowledge.query_facts", return_value=facts):
         summary = _collect_facts_summary(tmp_path, diagnostics, section_status)
 
     assert summary[0]["id"] == "f001"
@@ -284,16 +284,16 @@ def test_collect_knowledge_paths_records_warning_on_integration_failure(
 ) -> None:
     refs_repo = tmp_path / "refs" / "emses-docs"
     refs_repo.mkdir(parents=True)
-    imports_file = tmp_path / ".simctl" / "knowledge" / "enabled" / "imports.md"
+    imports_file = tmp_path / ".runops" / "knowledge" / "enabled" / "imports.md"
     imports_file.parent.mkdir(parents=True, exist_ok=True)
     imports_file.write_text("@refs/emses-docs/README.md\n", encoding="utf-8")
-    facts_file = tmp_path / ".simctl" / "facts.toml"
+    facts_file = tmp_path / ".runops" / "facts.toml"
     facts_file.parent.mkdir(parents=True, exist_ok=True)
     facts_file.write_text("", encoding="utf-8")
-    candidate_dir = tmp_path / ".simctl" / "knowledge" / "candidates" / "facts"
+    candidate_dir = tmp_path / ".runops" / "knowledge" / "candidates" / "facts"
     candidate_dir.mkdir(parents=True, exist_ok=True)
     (candidate_dir / "shared.toml").write_text("", encoding="utf-8")
-    insight_dir = tmp_path / ".simctl" / "insights"
+    insight_dir = tmp_path / ".runops" / "insights"
     insight_dir.mkdir(parents=True, exist_ok=True)
     (insight_dir / "latest.md").write_text(
         "---\ncreated: 2026-04-09\ntype: result\n---\n\ncontent\n",
@@ -305,11 +305,11 @@ def test_collect_knowledge_paths_records_warning_on_integration_failure(
 
     with (
         patch(
-            "simctl.core.knowledge_source.load_knowledge_config",
+            "runops.core.knowledge_source.load_knowledge_config",
             return_value=SimpleNamespace(enabled=True),
         ),
         patch(
-            "simctl.core.knowledge_source.collect_external_knowledge",
+            "runops.core.knowledge_source.collect_external_knowledge",
             side_effect=RuntimeError("integration unavailable"),
         ),
     ):
@@ -328,9 +328,9 @@ def test_collect_knowledge_paths_records_warning_on_integration_failure(
 def test_build_project_context_marks_available_actions_as_degraded_on_error(
     tmp_path: Path,
 ) -> None:
-    _write_toml(tmp_path / "simproject.toml", {"project": {"name": "demo"}})
+    _write_toml(tmp_path / "runops.toml", {"project": {"name": "demo"}})
 
-    with patch("simctl.core.actions.list_actions", side_effect=RuntimeError("boom")):
+    with patch("runops.core.actions.list_actions", side_effect=RuntimeError("boom")):
         ctx = build_project_context(tmp_path)
 
     assert ctx["available_actions"] == []
@@ -342,17 +342,17 @@ def test_build_project_context_marks_available_actions_as_degraded_on_error(
     )
 
 
-def test_context_section_helpers_record_simctl_errors(tmp_path: Path) -> None:
+def test_context_section_helpers_record_runops_errors(tmp_path: Path) -> None:
     diagnostics: list[dict[str, str]] = []
     section_status: dict[str, str] = {}
 
-    with patch("simctl.core.project.load_project", side_effect=SimctlError("broken")):
+    with patch("runops.core.project.load_project", side_effect=SimctlError("broken")):
         project = _load_project_info(tmp_path, diagnostics, section_status)
         simulators = _load_simulator_names(tmp_path, diagnostics, section_status)
         launchers = _load_launcher_names(tmp_path, diagnostics, section_status)
 
     with patch(
-        "simctl.core.campaign.load_campaign", side_effect=SimctlError("missing")
+        "runops.core.campaign.load_campaign", side_effect=SimctlError("missing")
     ):
         campaign = _load_campaign_info(tmp_path, diagnostics, section_status)
 

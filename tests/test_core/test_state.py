@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from simctl.core.exceptions import InvalidStateTransitionError
-from simctl.core.manifest import ManifestData, write_manifest
-from simctl.core.state import (
+from runops.core.exceptions import InvalidStateTransitionError
+from runops.core.manifest import ManifestData, write_manifest
+from runops.core.state import (
     RunState,
     transition_state,
     update_state,
@@ -104,7 +104,7 @@ class TestUpdateState:
         update_state(tmp_path, RunState.SUBMITTED)
 
         # Check manifest was updated
-        from simctl.core.manifest import read_manifest
+        from runops.core.manifest import read_manifest
 
         manifest = read_manifest(tmp_path)
         assert manifest.run["status"] == "submitted"

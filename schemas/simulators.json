@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "simulators.toml",
-  "description": "Simulator adapter definitions for simctl",
+  "description": "Simulator adapter definitions for runops",
   "type": "object",
   "required": ["simulators"],
   "properties": {

@@ -1,4 +1,4 @@
-"""Tests for the ``simctl runs history`` CLI command."""
+"""Tests for the ``runops runs history`` CLI command."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ from unittest.mock import patch
 import tomli_w
 from typer.testing import CliRunner
 
-from simctl.cli.main import app
-from simctl.core.exceptions import SimctlError
+from runops.cli.main import app
+from runops.core.exceptions import SimctlError
 
 runner = CliRunner()
 
@@ -22,7 +22,7 @@ def _write_manifest(run_dir: Path, data: dict[str, Any]) -> None:
 
 
 def test_history_reports_no_runs_when_project_is_empty(tmp_path: Path) -> None:
-    (tmp_path / "simproject.toml").write_text('[project]\nname = "demo"\n')
+    (tmp_path / "runops.toml").write_text('[project]\nname = "demo"\n')
     (tmp_path / "runs").mkdir()
 
     result = runner.invoke(app, ["runs", "history", str(tmp_path)])
@@ -32,7 +32,7 @@ def test_history_reports_no_runs_when_project_is_empty(tmp_path: Path) -> None:
 
 
 def test_history_reports_no_submitted_runs(tmp_path: Path) -> None:
-    (tmp_path / "simproject.toml").write_text('[project]\nname = "demo"\n')
+    (tmp_path / "runops.toml").write_text('[project]\nname = "demo"\n')
     _write_manifest(
         tmp_path / "runs" / "R20260409-0001",
         {
@@ -48,7 +48,7 @@ def test_history_reports_no_submitted_runs(tmp_path: Path) -> None:
 
 
 def test_history_sorts_entries_and_honors_count(tmp_path: Path) -> None:
-    (tmp_path / "simproject.toml").write_text('[project]\nname = "demo"\n')
+    (tmp_path / "runops.toml").write_text('[project]\nname = "demo"\n')
     _write_manifest(
         tmp_path / "runs" / "survey_a" / "R20260409-0001",
         {
@@ -94,7 +94,7 @@ def test_history_sorts_entries_and_honors_count(tmp_path: Path) -> None:
 
 def test_history_reports_discovery_errors(tmp_path: Path) -> None:
     with patch(
-        "simctl.cli.history.discover_runs",
+        "runops.cli.history.discover_runs",
         side_effect=SimctlError("broken runs directory"),
     ):
         result = runner.invoke(app, ["runs", "history", str(tmp_path)])

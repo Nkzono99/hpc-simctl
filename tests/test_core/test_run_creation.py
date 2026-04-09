@@ -3,7 +3,7 @@
 These regression tests guard against the field-name mismatch between the
 user-facing case.toml fields (``processes/threads/cores`` for RSC sites,
 ``nodes/ntasks`` for standard sites) and the renderer-internal field names
-consumed by ``simctl.jobgen.generator._render_script``
+consumed by ``runops.jobgen.generator._render_script``
 (``ntasks/threads_per_process/cores_per_thread`` for RSC sites).
 """
 
@@ -11,10 +11,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from simctl.core.case import JobData
-from simctl.core.run_creation import _build_job_config, _build_manifest_job
-from simctl.core.site import SiteProfile
-from simctl.jobgen.generator import generate_job_script
+from runops.core.case import JobData
+from runops.core.run_creation import _build_job_config, _build_manifest_job
+from runops.core.site import SiteProfile
+from runops.jobgen.generator import generate_job_script
 
 
 def _rsc_site() -> SiteProfile:

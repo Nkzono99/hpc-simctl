@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 import pytest
 
-from simctl.adapters.generic import GenericAdapter
+from runops.adapters.generic import GenericAdapter
 
 
 @pytest.fixture()

@@ -1,4 +1,4 @@
-"""Tests for the ``simctl update`` CLI command."""
+"""Tests for the ``runops update`` CLI command."""
 
 from __future__ import annotations
 
@@ -8,9 +8,9 @@ from unittest.mock import patch
 
 from typer.testing import CliRunner
 
-from simctl.cli.main import app
-from simctl.cli.update import _collect_packages, _find_venv_pip, _get_project_simulators
-from simctl.core.exceptions import SimctlError
+from runops.cli.main import app
+from runops.cli.update import _collect_packages, _find_venv_pip, _get_project_simulators
+from runops.core.exceptions import SimctlError
 
 runner = CliRunner()
 
@@ -21,17 +21,17 @@ def test_find_venv_pip_prefers_project_virtualenv(tmp_path: Path) -> None:
     pip_path.write_text("", encoding="utf-8")
 
     with (
-        patch("simctl.cli.update.Path.cwd", return_value=tmp_path),
-        patch("simctl.cli.update.find_project_root", return_value=tmp_path),
+        patch("runops.cli.update.Path.cwd", return_value=tmp_path),
+        patch("runops.cli.update.find_project_root", return_value=tmp_path),
     ):
         assert _find_venv_pip() == str(pip_path)
 
 
 def test_find_venv_pip_returns_none_when_project_lookup_fails(tmp_path: Path) -> None:
     with (
-        patch("simctl.cli.update.Path.cwd", return_value=tmp_path),
+        patch("runops.cli.update.Path.cwd", return_value=tmp_path),
         patch(
-            "simctl.cli.update.find_project_root", side_effect=SimctlError("no project")
+            "runops.cli.update.find_project_root", side_effect=SimctlError("no project")
         ),
     ):
         assert _find_venv_pip() is None
@@ -46,7 +46,7 @@ def test_collect_packages_deduplicates_and_skips_unknown_adapters() -> None:
     )
 
     with patch(
-        "simctl.adapters.registry.get_global_registry",
+        "runops.adapters.registry.get_global_registry",
         return_value=fake_registry,
     ):
         packages = _collect_packages(["emses", "missing", "beach"])
@@ -58,9 +58,9 @@ def test_get_project_simulators_reads_loaded_project(tmp_path: Path) -> None:
     project = SimpleNamespace(simulators={"emses": {}, "beach": {}})
 
     with (
-        patch("simctl.cli.update.Path.cwd", return_value=tmp_path),
-        patch("simctl.cli.update.find_project_root", return_value=tmp_path),
-        patch("simctl.cli.update.load_project", return_value=project),
+        patch("runops.cli.update.Path.cwd", return_value=tmp_path),
+        patch("runops.cli.update.find_project_root", return_value=tmp_path),
+        patch("runops.cli.update.load_project", return_value=project),
     ):
         simulators = _get_project_simulators()
 
@@ -69,14 +69,14 @@ def test_get_project_simulators_reads_loaded_project(tmp_path: Path) -> None:
 
 def test_get_project_simulators_returns_empty_on_error(tmp_path: Path) -> None:
     with (
-        patch("simctl.cli.update.Path.cwd", return_value=tmp_path),
-        patch("simctl.cli.update.find_project_root", side_effect=SimctlError("boom")),
+        patch("runops.cli.update.Path.cwd", return_value=tmp_path),
+        patch("runops.cli.update.find_project_root", side_effect=SimctlError("boom")),
     ):
         assert _get_project_simulators() == []
 
 
 def test_update_requires_simulators_when_project_has_none() -> None:
-    with patch("simctl.cli.update._get_project_simulators", return_value=[]):
+    with patch("runops.cli.update._get_project_simulators", return_value=[]):
         result = runner.invoke(app, ["update"])
 
     assert result.exit_code == 1
@@ -85,8 +85,8 @@ def test_update_requires_simulators_when_project_has_none() -> None:
 
 def test_update_reports_when_no_packages_are_needed() -> None:
     with (
-        patch("simctl.cli.update._get_project_simulators", return_value=["emses"]),
-        patch("simctl.cli.update._collect_packages", return_value=[]),
+        patch("runops.cli.update._get_project_simulators", return_value=["emses"]),
+        patch("runops.cli.update._collect_packages", return_value=[]),
     ):
         result = runner.invoke(app, ["update"])
 
@@ -96,8 +96,8 @@ def test_update_reports_when_no_packages_are_needed() -> None:
 
 def test_update_dry_run_lists_packages(tmp_path: Path) -> None:
     with (
-        patch("simctl.cli.update._get_project_simulators", return_value=["emses"]),
-        patch("simctl.cli.update._collect_packages", return_value=["emout", "numpy"]),
+        patch("runops.cli.update._get_project_simulators", return_value=["emses"]),
+        patch("runops.cli.update._collect_packages", return_value=["emout", "numpy"]),
     ):
         result = runner.invoke(app, ["update", "--dry-run"])
 
@@ -109,9 +109,9 @@ def test_update_dry_run_lists_packages(tmp_path: Path) -> None:
 
 def test_update_requires_virtualenv_for_real_upgrade() -> None:
     with (
-        patch("simctl.cli.update._get_project_simulators", return_value=["emses"]),
-        patch("simctl.cli.update._collect_packages", return_value=["emout"]),
-        patch("simctl.cli.update._find_venv_pip", return_value=None),
+        patch("runops.cli.update._get_project_simulators", return_value=["emses"]),
+        patch("runops.cli.update._collect_packages", return_value=["emout"]),
+        patch("runops.cli.update._find_venv_pip", return_value=None),
     ):
         result = runner.invoke(app, ["update"])
 
@@ -124,9 +124,9 @@ def test_update_runs_pip_install_for_selected_simulators() -> None:
     pip_path = "/tmp/demo/.venv/bin/pip"
 
     with (
-        patch("simctl.cli.update._collect_packages", return_value=["emout", "numpy"]),
-        patch("simctl.cli.update._find_venv_pip", return_value=pip_path),
-        patch("simctl.cli.update.subprocess.run", return_value=completed) as mock_run,
+        patch("runops.cli.update._collect_packages", return_value=["emout", "numpy"]),
+        patch("runops.cli.update._find_venv_pip", return_value=pip_path),
+        patch("runops.cli.update.subprocess.run", return_value=completed) as mock_run,
     ):
         result = runner.invoke(app, ["update", "emses", "beach"])
 
@@ -147,9 +147,9 @@ def test_update_surfaces_upgrade_failures() -> None:
     pip_path = "/tmp/demo/.venv/bin/pip"
 
     with (
-        patch("simctl.cli.update._collect_packages", return_value=["emout"]),
-        patch("simctl.cli.update._find_venv_pip", return_value=pip_path),
-        patch("simctl.cli.update.subprocess.run", return_value=failed),
+        patch("runops.cli.update._collect_packages", return_value=["emout"]),
+        patch("runops.cli.update._find_venv_pip", return_value=pip_path),
+        patch("runops.cli.update.subprocess.run", return_value=failed),
     ):
         result = runner.invoke(app, ["update", "emses"])
 

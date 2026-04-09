@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from simctl.slurm.submit import (
+from runops.slurm.submit import (
     CommandResult,
     SlurmNotFoundError,
     SlurmSubmitError,

@@ -1,0 +1,22 @@
+#:schema https://raw.githubusercontent.com/Nkzono99/runops/main/schemas/survey.json
+[survey]
+name = "{{ case_name }} sweep"
+base_case = "{{ base_case_ref }}"
+simulator = "{{ simulator }}"
+launcher = "{{ launcher }}"
+
+[axes]
+# Define parameter axes for cartesian product expansion.
+# Each key is a dotted parameter path, and the value is a list.
+# Example:
+# "tmgrid.dt" = [0.5, 1.0, 2.0]
+# "species[2].ray_zenith_angle_deg" = [0, 30, 60, 90]
+
+[naming]
+# Template for run display names. Use parameter leaf names or underscore forms.
+{% raw %}# Example: display_name = "dt{{tmgrid_dt}}_angle{{ray_zenith_angle_deg}}"{% endraw %}
+display_name = ""
+
+[job]
+# Override job settings from case.toml (optional).
+{{ job_comment }}

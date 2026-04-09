@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "manifest.toml",
-  "description": "Run manifest — the source of truth for a simctl run",
+  "description": "Run manifest — the source of truth for a runops run",
   "type": "object",
   "required": ["run"],
   "properties": {

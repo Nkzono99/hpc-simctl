@@ -1,4 +1,4 @@
-"""Common test fixtures for simctl tests."""
+"""Common test fixtures for runops tests."""
 
 from __future__ import annotations
 
@@ -10,12 +10,12 @@ import pytest
 
 @pytest.fixture()
 def tmp_project(tmp_path: Path) -> Path:
-    """Create a minimal simctl project directory structure.
+    """Create a minimal runops project directory structure.
 
     Returns:
         Path to the temporary project root.
     """
-    (tmp_path / "simproject.toml").write_text('[project]\nname = "test-project"\n')
+    (tmp_path / "runops.toml").write_text('[project]\nname = "test-project"\n')
     (tmp_path / "cases").mkdir()
     (tmp_path / "runs").mkdir()
     return tmp_path

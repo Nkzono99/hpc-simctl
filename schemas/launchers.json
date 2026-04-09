@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "launchers.toml",
-  "description": "MPI launcher profile definitions for simctl",
+  "description": "MPI launcher profile definitions for runops",
   "type": "object",
   "required": ["launchers"],
   "properties": {

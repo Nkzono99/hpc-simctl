@@ -1,4 +1,4 @@
-"""Tests for simctl knowledge CLI commands."""
+"""Tests for runops knowledge CLI commands."""
 
 from __future__ import annotations
 
@@ -8,28 +8,28 @@ from unittest.mock import patch
 
 from typer.testing import CliRunner
 
-from simctl.cli.main import app
-from simctl.core.knowledge import (
+from runops.cli.main import app
+from runops.core.knowledge import (
     list_insights,
     load_candidate_facts,
     load_facts,
     query_facts,
 )
-from simctl.core.knowledge_source import load_knowledge_config
+from runops.core.knowledge_source import load_knowledge_config
 
 runner = CliRunner()
 
 
 def _create_project(tmp_path: Path, extra_toml: str = "") -> Path:
     content = f'[project]\nname = "test-project"\n{extra_toml}'
-    (tmp_path / "simproject.toml").write_text(content)
+    (tmp_path / "runops.toml").write_text(content)
     return tmp_path
 
 
 def test_add_fact_uses_structured_scope_and_evidence_fields(tmp_path: Path) -> None:
     project_root = _create_project(tmp_path)
 
-    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+    with patch("runops.cli.knowledge.Path.cwd", return_value=project_root):
         result = runner.invoke(
             app,
             [
@@ -60,7 +60,7 @@ def test_add_fact_uses_structured_scope_and_evidence_fields(tmp_path: Path) -> N
 def test_add_fact_rejects_removed_legacy_alias_options(tmp_path: Path) -> None:
     project_root = _create_project(tmp_path)
 
-    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+    with patch("runops.cli.knowledge.Path.cwd", return_value=project_root):
         result = runner.invoke(
             app,
             [
@@ -79,7 +79,7 @@ def test_add_fact_rejects_removed_legacy_alias_options(tmp_path: Path) -> None:
 def test_add_fact_supports_structured_fields_and_supersedes(tmp_path: Path) -> None:
     project_root = _create_project(tmp_path)
 
-    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+    with patch("runops.cli.knowledge.Path.cwd", return_value=project_root):
         first = runner.invoke(
             app,
             ["knowledge", "add-fact", "initial observation"],
@@ -130,7 +130,7 @@ def test_add_fact_supports_structured_fields_and_supersedes(tmp_path: Path) -> N
 def test_save_persists_insight_via_action_registry(tmp_path: Path) -> None:
     project_root = _create_project(tmp_path)
 
-    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+    with patch("runops.cli.knowledge.Path.cwd", return_value=project_root):
         result = runner.invoke(
             app,
             [
@@ -161,7 +161,7 @@ def test_save_persists_insight_via_action_registry(tmp_path: Path) -> None:
 def test_facts_supports_structured_filters_and_json_output(tmp_path: Path) -> None:
     project_root = _create_project(tmp_path)
 
-    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+    with patch("runops.cli.knowledge.Path.cwd", return_value=project_root):
         runner.invoke(
             app,
             [
@@ -228,7 +228,7 @@ path = "../shared-project"
 """,
     )
     source_root = tmp_path.parent / "shared-project"
-    facts_dir = source_root / ".simctl"
+    facts_dir = source_root / ".runops"
     facts_dir.mkdir(parents=True, exist_ok=True)
     (facts_dir / "facts.toml").write_text(
         "[[facts]]\n"
@@ -240,7 +240,7 @@ path = "../shared-project"
         encoding="utf-8",
     )
 
-    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+    with patch("runops.cli.knowledge.Path.cwd", return_value=project_root):
         result = runner.invoke(app, ["knowledge", "source", "sync"])
 
     assert result.exit_code == 0
@@ -264,7 +264,7 @@ path = "../shared-project"
 """,
     )
     source_root = tmp_path.parent / "shared-project"
-    facts_dir = source_root / ".simctl"
+    facts_dir = source_root / ".runops"
     facts_dir.mkdir(parents=True, exist_ok=True)
     (facts_dir / "facts.toml").write_text(
         "[[facts]]\n"
@@ -276,7 +276,7 @@ path = "../shared-project"
         encoding="utf-8",
     )
 
-    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+    with patch("runops.cli.knowledge.Path.cwd", return_value=project_root):
         sync_result = runner.invoke(app, ["knowledge", "source", "sync"])
         promote_result = runner.invoke(
             app,
@@ -326,7 +326,7 @@ def test_attach_path_source(tmp_path: Path) -> None:
     (kb_dir / "profiles").mkdir()
     (kb_dir / "profiles" / "common.md").write_text("# Common\n")
 
-    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+    with patch("runops.cli.knowledge.Path.cwd", return_value=project_root):
         result = runner.invoke(
             app,
             [
@@ -354,9 +354,9 @@ def test_attach_path_source(tmp_path: Path) -> None:
 def test_attach_path_project_source(tmp_path: Path) -> None:
     project_root = _create_project(tmp_path)
     upstream = tmp_path / "other-project"
-    (upstream / ".simctl" / "insights").mkdir(parents=True)
+    (upstream / ".runops" / "insights").mkdir(parents=True)
 
-    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+    with patch("runops.cli.knowledge.Path.cwd", return_value=project_root):
         result = runner.invoke(
             app,
             [
@@ -384,7 +384,7 @@ def test_attach_path_project_source(tmp_path: Path) -> None:
 def test_attach_git_source_with_profiles(tmp_path: Path) -> None:
     project_root = _create_project(tmp_path)
 
-    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+    with patch("runops.cli.knowledge.Path.cwd", return_value=project_root):
         result = runner.invoke(
             app,
             [
@@ -410,7 +410,7 @@ def test_attach_git_source_with_profiles(tmp_path: Path) -> None:
 def test_attach_invalid_type(tmp_path: Path) -> None:
     project_root = _create_project(tmp_path)
 
-    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+    with patch("runops.cli.knowledge.Path.cwd", return_value=project_root):
         result = runner.invoke(
             app,
             [
@@ -431,7 +431,7 @@ def test_attach_invalid_type(tmp_path: Path) -> None:
 def test_attach_rejects_profiles_for_project_source(tmp_path: Path) -> None:
     project_root = _create_project(tmp_path)
 
-    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+    with patch("runops.cli.knowledge.Path.cwd", return_value=project_root):
         result = runner.invoke(
             app,
             [
@@ -466,7 +466,7 @@ mount = "refs/knowledge/test-kb"
 """
     project_root = _create_project(tmp_path, toml)
 
-    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+    with patch("runops.cli.knowledge.Path.cwd", return_value=project_root):
         result = runner.invoke(
             app,
             ["knowledge", "source", "detach", "test-kb", "--keep-files"],
@@ -482,7 +482,7 @@ mount = "refs/knowledge/test-kb"
 def test_detach_not_found(tmp_path: Path) -> None:
     project_root = _create_project(tmp_path, "\n[knowledge]\nsources = []\n")
 
-    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+    with patch("runops.cli.knowledge.Path.cwd", return_value=project_root):
         result = runner.invoke(
             app,
             ["knowledge", "source", "detach", "nonexistent"],
@@ -512,13 +512,13 @@ profiles = ["common"]
     mount.mkdir(parents=True)
     (mount / "common.md").write_text("# Common\n")
 
-    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+    with patch("runops.cli.knowledge.Path.cwd", return_value=project_root):
         result = runner.invoke(app, ["knowledge", "source", "render"])
 
     assert result.exit_code == 0
     assert "Rendered:" in result.output
 
-    imports = project_root / ".simctl" / "knowledge" / "enabled" / "imports.md"
+    imports = project_root / ".runops" / "knowledge" / "enabled" / "imports.md"
     assert imports.is_file()
     assert "@refs/knowledge/kb/profiles/common.md" in imports.read_text()
 
@@ -548,11 +548,11 @@ profiles = ["common"]
         encoding="utf-8",
     )
 
-    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+    with patch("runops.cli.knowledge.Path.cwd", return_value=project_root):
         result = runner.invoke(app, ["knowledge", "source", "render"])
 
     assert result.exit_code == 0
-    imports = project_root / ".simctl" / "knowledge" / "enabled" / "imports.md"
+    imports = project_root / ".runops" / "knowledge" / "enabled" / "imports.md"
     content = imports.read_text(encoding="utf-8")
     assert "@refs/knowledge/kb/profiles/common.md" in content
     assert "@refs/knowledge/kb/docs/agent-guide.md" in content
@@ -561,7 +561,7 @@ profiles = ["common"]
 def test_render_no_knowledge_section(tmp_path: Path) -> None:
     project_root = _create_project(tmp_path)
 
-    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+    with patch("runops.cli.knowledge.Path.cwd", return_value=project_root):
         result = runner.invoke(app, ["knowledge", "source", "render"])
 
     assert result.exit_code == 1
@@ -571,7 +571,7 @@ def test_render_no_knowledge_section(tmp_path: Path) -> None:
 def test_status_no_config(tmp_path: Path) -> None:
     project_root = _create_project(tmp_path)
 
-    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+    with patch("runops.cli.knowledge.Path.cwd", return_value=project_root):
         result = runner.invoke(app, ["knowledge", "source", "status"])
 
     assert result.exit_code == 0
@@ -593,7 +593,7 @@ profiles = ["common"]
 """
     project_root = _create_project(tmp_path, toml)
 
-    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+    with patch("runops.cli.knowledge.Path.cwd", return_value=project_root):
         result = runner.invoke(app, ["knowledge", "source", "status"])
 
     assert result.exit_code == 0
@@ -615,7 +615,7 @@ mount = "refs/knowledge/kb"
 """
     project_root = _create_project(tmp_path, toml)
 
-    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+    with patch("runops.cli.knowledge.Path.cwd", return_value=project_root):
         result = runner.invoke(app, ["knowledge", "source", "list"])
 
     assert result.exit_code == 0
@@ -645,7 +645,7 @@ path = "../legacy-project"
     linked_project = tmp_path.parent / "legacy-project"
     linked_project.mkdir(parents=True, exist_ok=True)
 
-    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+    with patch("runops.cli.knowledge.Path.cwd", return_value=project_root):
         result = runner.invoke(app, ["knowledge", "source", "list"])
 
     assert result.exit_code == 0
@@ -657,7 +657,7 @@ path = "../legacy-project"
 def test_source_list_no_config(tmp_path: Path) -> None:
     project_root = _create_project(tmp_path)
 
-    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+    with patch("runops.cli.knowledge.Path.cwd", return_value=project_root):
         result = runner.invoke(app, ["knowledge", "source", "list"])
 
     assert result.exit_code == 0
@@ -678,7 +678,7 @@ mount = "refs/knowledge/kb"
 """
     project_root = _create_project(tmp_path, toml)
 
-    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+    with patch("runops.cli.knowledge.Path.cwd", return_value=project_root):
         result = runner.invoke(app, ["knowledge", "source", "list"])
 
     assert result.exit_code == 0
@@ -693,7 +693,7 @@ def test_sync_supports_named_project_source(tmp_path: Path) -> None:
         (linked_a, "alpha-note"),
         (linked_b, "beta-note"),
     ):
-        insights_dir = linked_root / ".simctl" / "insights"
+        insights_dir = linked_root / ".runops" / "insights"
         insights_dir.mkdir(parents=True, exist_ok=True)
         (insights_dir / f"{insight_name}.md").write_text(
             "---\n"
@@ -725,15 +725,15 @@ path = "../linked-b"
 """,
     )
 
-    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+    with patch("runops.cli.knowledge.Path.cwd", return_value=project_root):
         result = runner.invoke(app, ["knowledge", "source", "sync", "alpha"])
 
     assert result.exit_code == 0
     assert "Importing transported knowledge from external sources" in result.output
     assert "alpha" in result.output
     assert "beta" not in result.output
-    assert (project_root / ".simctl" / "insights" / "alpha__alpha-note.md").is_file()
-    assert not (project_root / ".simctl" / "insights" / "beta__beta-note.md").exists()
+    assert (project_root / ".runops" / "insights" / "alpha__alpha-note.md").is_file()
+    assert not (project_root / ".runops" / "insights" / "beta__beta-note.md").exists()
 
 
 def test_profile_enable_and_disable_updates_rendered_imports(tmp_path: Path) -> None:
@@ -757,7 +757,7 @@ profiles = ["common"]
     (mount / "common.md").write_text("# Common\n", encoding="utf-8")
     (mount / "emses.md").write_text("# EMSES\n", encoding="utf-8")
 
-    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_root):
+    with patch("runops.cli.knowledge.Path.cwd", return_value=project_root):
         enable = runner.invoke(
             app,
             ["knowledge", "profile", "enable", "kb", "emses"],
@@ -774,7 +774,7 @@ profiles = ["common"]
     assert config is not None
     assert config.sources[0].profiles == ["emses"]
     imports = (
-        project_root / ".simctl" / "knowledge" / "enabled" / "imports.md"
+        project_root / ".runops" / "knowledge" / "enabled" / "imports.md"
     ).read_text(encoding="utf-8")
     assert "@refs/knowledge/kb/profiles/emses.md" in imports
     assert "@refs/knowledge/kb/profiles/common.md" not in imports

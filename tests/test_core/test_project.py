@@ -7,8 +7,8 @@ from pathlib import Path
 import pytest
 import tomli_w
 
-from simctl.core.exceptions import ProjectConfigError, ProjectNotFoundError
-from simctl.core.project import find_project_root, load_project
+from runops.core.exceptions import ProjectConfigError, ProjectNotFoundError
+from runops.core.project import find_project_root, load_project
 
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 
@@ -17,7 +17,7 @@ class TestLoadProject:
     """Tests for load_project()."""
 
     def test_load_minimal_project(self, tmp_path: Path) -> None:
-        (tmp_path / "simproject.toml").write_text('[project]\nname = "my-project"\n')
+        (tmp_path / "runops.toml").write_text('[project]\nname = "my-project"\n')
         config = load_project(tmp_path)
         assert config.name == "my-project"
         assert config.description == ""
@@ -26,14 +26,14 @@ class TestLoadProject:
         assert config.launchers == {}
 
     def test_load_with_description(self, tmp_path: Path) -> None:
-        (tmp_path / "simproject.toml").write_text(
+        (tmp_path / "runops.toml").write_text(
             '[project]\nname = "proj"\ndescription = "A test"\n'
         )
         config = load_project(tmp_path)
         assert config.description == "A test"
 
     def test_load_with_simulators_and_launchers(self, tmp_path: Path) -> None:
-        (tmp_path / "simproject.toml").write_text('[project]\nname = "proj"\n')
+        (tmp_path / "runops.toml").write_text('[project]\nname = "proj"\n')
         (tmp_path / "simulators.toml").write_bytes(
             tomli_w.dumps({"simulators": {"sim1": {"adapter": "a1"}}}).encode()
         )
@@ -55,7 +55,7 @@ class TestLoadProject:
         with tempfile.TemporaryDirectory() as td:
             tmp = Path(td)
             src = FIXTURES_DIR
-            shutil.copy(src / "sample_simproject.toml", tmp / "simproject.toml")
+            shutil.copy(src / "sample_runops.toml", tmp / "runops.toml")
             shutil.copy(src / "sample_simulators.toml", tmp / "simulators.toml")
             shutil.copy(src / "sample_launchers.toml", tmp / "launchers.toml")
             config = load_project(tmp)
@@ -68,22 +68,22 @@ class TestLoadProject:
             load_project(tmp_path)
 
     def test_missing_project_section(self, tmp_path: Path) -> None:
-        (tmp_path / "simproject.toml").write_text("key = 1\n")
+        (tmp_path / "runops.toml").write_text("key = 1\n")
         with pytest.raises(ProjectConfigError, match="\\[project\\] section"):
             load_project(tmp_path)
 
     def test_missing_project_name(self, tmp_path: Path) -> None:
-        (tmp_path / "simproject.toml").write_text("[project]\n")
+        (tmp_path / "runops.toml").write_text("[project]\n")
         with pytest.raises(ProjectConfigError, match=r"project\.name"):
             load_project(tmp_path)
 
     def test_invalid_toml(self, tmp_path: Path) -> None:
-        (tmp_path / "simproject.toml").write_text("not valid toml [[[")
+        (tmp_path / "runops.toml").write_text("not valid toml [[[")
         with pytest.raises(ProjectConfigError, match="Invalid TOML"):
             load_project(tmp_path)
 
     def test_frozen_dataclass(self, tmp_path: Path) -> None:
-        (tmp_path / "simproject.toml").write_text('[project]\nname = "proj"\n')
+        (tmp_path / "runops.toml").write_text('[project]\nname = "proj"\n')
         config = load_project(tmp_path)
         with pytest.raises(AttributeError):
             config.name = "other"  # type: ignore[misc]
@@ -93,11 +93,11 @@ class TestFindProjectRoot:
     """Tests for find_project_root()."""
 
     def test_find_in_current_dir(self, tmp_path: Path) -> None:
-        (tmp_path / "simproject.toml").touch()
+        (tmp_path / "runops.toml").touch()
         assert find_project_root(tmp_path) == tmp_path.resolve()
 
     def test_find_in_parent_dir(self, tmp_path: Path) -> None:
-        (tmp_path / "simproject.toml").touch()
+        (tmp_path / "runops.toml").touch()
         child = tmp_path / "runs" / "survey1"
         child.mkdir(parents=True)
         assert find_project_root(child) == tmp_path.resolve()
@@ -107,7 +107,7 @@ class TestFindProjectRoot:
             find_project_root(tmp_path)
 
     def test_start_from_file(self, tmp_path: Path) -> None:
-        (tmp_path / "simproject.toml").touch()
+        (tmp_path / "runops.toml").touch()
         some_file = tmp_path / "notes.txt"
         some_file.touch()
         assert find_project_root(some_file) == tmp_path.resolve()

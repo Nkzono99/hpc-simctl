@@ -1,4 +1,4 @@
-"""Tests for the ``simctl update-refs`` CLI command and helpers."""
+"""Tests for the ``runops update-refs`` CLI command and helpers."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ from unittest.mock import patch
 
 from typer.testing import CliRunner
 
-from simctl.cli.main import app
-from simctl.cli.update_refs import (
+from runops.cli.main import app
+from runops.cli.update_refs import (
     _collect_knowledge_files,
     _detect_remote_ref,
     _generate_knowledge_md,
@@ -75,13 +75,13 @@ def test_detect_remote_ref_falls_back_to_origin_main_then_fetch_head() -> None:
     found = SimpleNamespace(returncode=0, stdout="ok\n", stderr="")
 
     with patch(
-        "simctl.cli.update_refs.subprocess.run",
+        "runops.cli.update_refs.subprocess.run",
         side_effect=[missing, found],
     ):
         assert _detect_remote_ref(Path("/tmp/repo")) == "origin/main"
 
     with patch(
-        "simctl.cli.update_refs.subprocess.run",
+        "runops.cli.update_refs.subprocess.run",
         side_effect=[missing, missing, missing],
     ):
         assert _detect_remote_ref(Path("/tmp/repo")) == "FETCH_HEAD"
@@ -91,8 +91,8 @@ def test_pull_shallow_handles_fetch_failure() -> None:
     failed_fetch = SimpleNamespace(returncode=1, stdout="", stderr="network down")
 
     with (
-        patch("simctl.cli.update_refs._get_commit_hash", return_value="aaaaaaaa"),
-        patch("simctl.cli.update_refs.subprocess.run", return_value=failed_fetch),
+        patch("runops.cli.update_refs._get_commit_hash", return_value="aaaaaaaa"),
+        patch("runops.cli.update_refs.subprocess.run", return_value=failed_fetch),
     ):
         old_hash, new_hash, message = _pull_shallow(Path("/tmp/repo"))
 
@@ -105,11 +105,11 @@ def test_pull_shallow_reports_updated_repo() -> None:
 
     with (
         patch(
-            "simctl.cli.update_refs._get_commit_hash",
+            "runops.cli.update_refs._get_commit_hash",
             side_effect=["aaaaaaaa", "bbbbbbbb"],
         ),
-        patch("simctl.cli.update_refs._detect_remote_ref", return_value="origin/main"),
-        patch("simctl.cli.update_refs.subprocess.run", side_effect=[ok, ok]),
+        patch("runops.cli.update_refs._detect_remote_ref", return_value="origin/main"),
+        patch("runops.cli.update_refs.subprocess.run", side_effect=[ok, ok]),
     ):
         old_hash, new_hash, message = _pull_shallow(Path("/tmp/repo"))
 
@@ -130,17 +130,17 @@ def test_update_refs_dry_run_reports_repos_and_indexes(tmp_path: Path) -> None:
 
     with (
         patch(
-            "simctl.cli.update_refs._get_project_simulators",
+            "runops.cli.update_refs._get_project_simulators",
             return_value=(tmp_path, {"emses": "emses"}),
         ),
-        patch("simctl.cli.update_refs._get_adapter_class", return_value=FakeAdapter),
+        patch("runops.cli.update_refs._get_adapter_class", return_value=FakeAdapter),
     ):
         result = runner.invoke(app, ["update-refs", "--dry-run"])
 
     assert result.exit_code == 0, result.output
     assert "Would update the following repos:" in result.output
     assert "refs/emses-docs/ (exists)" in result.output
-    assert ".simctl/knowledge/emses.md" in result.output
+    assert ".runops/knowledge/emses.md" in result.output
 
 
 def test_update_refs_generates_knowledge_indexes(tmp_path: Path) -> None:
@@ -160,12 +160,12 @@ def test_update_refs_generates_knowledge_indexes(tmp_path: Path) -> None:
 
     with (
         patch(
-            "simctl.cli.update_refs._get_project_simulators",
+            "runops.cli.update_refs._get_project_simulators",
             return_value=(tmp_path, {"emses": "emses"}),
         ),
-        patch("simctl.cli.update_refs._get_adapter_class", return_value=FakeAdapter),
+        patch("runops.cli.update_refs._get_adapter_class", return_value=FakeAdapter),
         patch(
-            "simctl.cli.update_refs._pull_shallow",
+            "runops.cli.update_refs._pull_shallow",
             return_value=("aaaaaaaa", "bbbbbbbb", "updated"),
         ),
     ):
@@ -173,10 +173,10 @@ def test_update_refs_generates_knowledge_indexes(tmp_path: Path) -> None:
 
     assert result.exit_code == 0, result.output
     assert "refs/emses-docs/ — updated (aaaaaaaa -> bbbbbbbb)" in result.output
-    assert ".simctl/knowledge/emses.md — 2 files indexed" in result.output
+    assert ".runops/knowledge/emses.md — 2 files indexed" in result.output
     assert "Done." in result.output
 
-    knowledge_file = tmp_path / ".simctl" / "knowledge" / "emses.md"
+    knowledge_file = tmp_path / ".runops" / "knowledge" / "emses.md"
     content = knowledge_file.read_text(encoding="utf-8")
     assert "refs/emses-docs/README.md" in content
     assert "refs/emses-docs/docs/guide.md" in content
@@ -186,10 +186,10 @@ def test_update_refs_generates_knowledge_indexes(tmp_path: Path) -> None:
 def test_update_refs_warns_when_adapter_is_missing(tmp_path: Path) -> None:
     with (
         patch(
-            "simctl.cli.update_refs._get_project_simulators",
+            "runops.cli.update_refs._get_project_simulators",
             return_value=(tmp_path, {"emses": "emses"}),
         ),
-        patch("simctl.cli.update_refs._get_adapter_class", return_value=None),
+        patch("runops.cli.update_refs._get_adapter_class", return_value=None),
     ):
         result = runner.invoke(app, ["update-refs"])
 

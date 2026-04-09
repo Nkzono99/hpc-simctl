@@ -1,4 +1,4 @@
-"""Tests for simctl runs create and runs sweep CLI commands."""
+"""Tests for runops runs create and runs sweep CLI commands."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from simctl.cli.main import app
+from runops.cli.main import app
 
 runner = CliRunner()
 
@@ -18,7 +18,7 @@ runner = CliRunner()
 
 def _make_project(tmp_path: Path) -> Path:
     """Create a minimal project structure with simulators and launchers."""
-    (tmp_path / "simproject.toml").write_text('[project]\nname = "test-project"\n')
+    (tmp_path / "runops.toml").write_text('[project]\nname = "test-project"\n')
     (tmp_path / "simulators.toml").write_text(
         "[simulators.test_sim]\n"
         'adapter = "generic"\n'
@@ -96,7 +96,7 @@ def _make_survey(
 
 
 class TestCreate:
-    """Tests for the ``simctl runs create`` command."""
+    """Tests for the ``runops runs create`` command."""
 
     def test_create_success(self, tmp_path: Path) -> None:
         """A valid create invocation produces a run directory with manifest."""
@@ -141,7 +141,7 @@ class TestCreate:
         assert "Error" in result.output
 
     def test_create_no_project(self, tmp_path: Path) -> None:
-        """Create fails gracefully when no simproject.toml exists."""
+        """Create fails gracefully when no runops.toml exists."""
         dest = tmp_path / "no_project" / "survey"
         dest.mkdir(parents=True)
 
@@ -193,7 +193,7 @@ class TestCreate:
 
 
 class TestSweep:
-    """Tests for the ``simctl runs sweep`` command."""
+    """Tests for the ``runops runs sweep`` command."""
 
     def test_sweep_success(self, tmp_path: Path) -> None:
         """A valid sweep creates the correct number of runs."""

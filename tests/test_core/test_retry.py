@@ -6,7 +6,7 @@ from pathlib import Path
 
 import tomli_w
 
-from simctl.core.retry import (
+from runops.core.retry import (
     get_attempt_count,
     suggest_retry,
     suggest_retry_for_run,

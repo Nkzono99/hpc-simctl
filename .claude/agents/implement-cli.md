@@ -1,6 +1,6 @@
 ---
 name: implement-cli
-description: "Use this agent when implementing or modifying CLI command entry points in the simctl project. This includes adding new subcommands, modifying existing ones, or wiring up CLI layers to core domain logic.\\n\\nExamples:\\n\\n- user: \"simctl submit コマンドを実装して。RUN パスを受け取って sbatch で投入する。\"\\n  assistant: \"Let me use the implement-cli agent to implement the submit subcommand.\"\\n  <Agent tool call to implement-cli>\\n\\n- user: \"simctl list コマンドに --format json オプションを追加して\"\\n  assistant: \"I'll use the implement-cli agent to add the --format option to the list command.\"\\n  <Agent tool call to implement-cli>\\n\\n- user: \"simctl sweep サブコマンドを新規作成してほしい。survey.toml を読んで全 run を一括生成する。\"\\n  assistant: \"I'll launch the implement-cli agent to implement the sweep subcommand.\"\\n  <Agent tool call to implement-cli>\\n\\n- user: \"CLI のエントリポイント main.py にサブコマンドを登録して\"\\n  assistant: \"Let me use the implement-cli agent to wire up the subcommand registration.\"\\n  <Agent tool call to implement-cli>"
+description: "Use this agent when implementing or modifying CLI command entry points in the runops project. This includes adding new subcommands, modifying existing ones, or wiring up CLI layers to core domain logic.\\n\\nExamples:\\n\\n- user: \"runops submit コマンドを実装して。RUN パスを受け取って sbatch で投入する。\"\\n  assistant: \"Let me use the implement-cli agent to implement the submit subcommand.\"\\n  <Agent tool call to implement-cli>\\n\\n- user: \"runops list コマンドに --format json オプションを追加して\"\\n  assistant: \"I'll use the implement-cli agent to add the --format option to the list command.\"\\n  <Agent tool call to implement-cli>\\n\\n- user: \"runops sweep サブコマンドを新規作成してほしい。survey.toml を読んで全 run を一括生成する。\"\\n  assistant: \"I'll launch the implement-cli agent to implement the sweep subcommand.\"\\n  <Agent tool call to implement-cli>\\n\\n- user: \"CLI のエントリポイント main.py にサブコマンドを登録して\"\\n  assistant: \"Let me use the implement-cli agent to wire up the subcommand registration.\"\\n  <Agent tool call to implement-cli>"
 model: opus
 ---
 
@@ -8,48 +8,48 @@ You are an expert Python CLI developer specializing in typer-based command-line 
 
 ## Project Context
 
-You are working on `hpc-simctl`, an HPC simulation management CLI tool. The CLI uses **typer** and lives under `src/simctl/cli/`. Each subcommand has its own module, and `main.py` is the app entry point that registers all subcommands.
+You are working on `runops`, an HPC simulation management CLI tool. The CLI uses **typer** and lives under `src/runops/cli/`. Each subcommand has its own module, and `main.py` is the app entry point that registers all subcommands.
 
 ### Key Architecture Rules
 
-- **CLI is a thin layer**: CLI modules handle argument parsing, validation, output formatting, and error display. Domain logic lives in `src/simctl/core/` — never put business logic in CLI modules.
+- **CLI is a thin layer**: CLI modules handle argument parsing, validation, output formatting, and error display. Domain logic lives in `src/runops/core/` — never put business logic in CLI modules.
 - **manifest.toml is the source of truth**: All run state/provenance is in manifest.toml.
 - **run directory is the primary unit**: All operations take a run_id or run directory path as the base reference.
 
 ### Directory Structure
 
 ```
-src/simctl/cli/
+src/runops/cli/
   __init__.py
   main.py         # typer.Typer() app, registers subcommands
-  init.py         # simctl init / doctor
-  create.py       # simctl create / sweep
-  submit.py       # simctl submit
-  status.py       # simctl status / sync
-  list.py         # simctl list
-  clone.py        # simctl clone
-  analyze.py      # simctl summarize / collect
-  manage.py       # simctl archive / purge-work
+  init.py         # runops init / doctor
+  create.py       # runops create / sweep
+  submit.py       # runops submit
+  status.py       # runops status / sync
+  list.py         # runops list
+  clone.py        # runops clone
+  analyze.py      # runops summarize / collect
+  manage.py       # runops archive / purge-work
 ```
 
 ### Available Subcommands
 
 | Command | Description |
 |---------|-------------|
-| `simctl init` | Project initialization (generate simproject.toml) |
-| `simctl doctor` | Environment check |
-| `simctl create CASE --dest DIR` | Generate single run from Case |
-| `simctl sweep DIR` | Batch generate all runs from survey.toml |
-| `simctl submit RUN` | Submit job via sbatch |
-| `simctl submit --all DIR` | Submit all runs in survey |
-| `simctl status RUN` | Check run status |
-| `simctl sync RUN` | Sync Slurm state to manifest |
-| `simctl list [PATH]` | List runs |
-| `simctl clone RUN --dest DIR` | Clone/derive run |
-| `simctl summarize RUN` | Generate run analysis summary |
-| `simctl collect DIR` | Aggregate survey results |
-| `simctl archive RUN` | Archive run |
-| `simctl purge-work RUN` | Delete unnecessary files in work/ |
+| `runops init` | Project initialization (generate runops.toml) |
+| `runops doctor` | Environment check |
+| `runops create CASE --dest DIR` | Generate single run from Case |
+| `runops sweep DIR` | Batch generate all runs from survey.toml |
+| `runops submit RUN` | Submit job via sbatch |
+| `runops submit --all DIR` | Submit all runs in survey |
+| `runops status RUN` | Check run status |
+| `runops sync RUN` | Sync Slurm state to manifest |
+| `runops list [PATH]` | List runs |
+| `runops clone RUN --dest DIR` | Clone/derive run |
+| `runops summarize RUN` | Generate run analysis summary |
+| `runops collect DIR` | Aggregate survey results |
+| `runops archive RUN` | Archive run |
+| `runops purge-work RUN` | Delete unnecessary files in work/ |
 
 ### State Transitions
 
@@ -107,11 +107,11 @@ completed → archived → purged
 ## Workflow
 
 1. **Read existing code first**: Check `main.py` and relevant module files before making changes. Understand the current registration pattern and coding style.
-2. **Check core module interfaces**: Look at `src/simctl/core/` to understand what functions are available to call from the CLI layer.
+2. **Check core module interfaces**: Look at `src/runops/core/` to understand what functions are available to call from the CLI layer.
 3. **Implement the command**: Write the typer command function with proper type hints, help text, and error handling.
 4. **Register in main.py**: Ensure the command is properly registered.
 5. **Write or update tests**: Add CLI tests using CliRunner.
-6. **Verify**: Run `uv run ruff check src/simctl/cli/` and `uv run mypy src/simctl/cli/` to catch issues.
+6. **Verify**: Run `uv run ruff check src/runops/cli/` and `uv run mypy src/runops/cli/` to catch issues.
 
 ## Quality Checks
 

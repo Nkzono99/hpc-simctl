@@ -56,7 +56,7 @@ CONCEPT_ROWS: tuple[tuple[str, str, str], ...] = (
         "Agent が simulator 固有知識や cookbook を参照する入口。",
     ),
     (
-        "`.simctl/insights/` と `facts.toml`",
+        "`.runops/insights/` と `facts.toml`",
         "学習結果の蓄積",
         "解析後に得られた知見を次の設計へ戻すための project memory。",
     ),
@@ -76,7 +76,7 @@ def _concept_table() -> str:
 def _build_init_world(figure_dir: str) -> str:
     base = prepare_figure_dir(figure_dir) / "init-world"
     with make_diagram(
-        name="simctl init 後の project と Agent の見る世界",
+        name="runops init 後の project と Agent の見る世界",
         filename=base,
         direction="LR",
         graph_attr={"nodesep": "0.8", "ranksep": "1.0"},
@@ -85,13 +85,13 @@ def _build_init_world(figure_dir: str) -> str:
             "研究者 / user\n研究テーマ・仮説\n・ベース入力の方針",
             **node_attrs("human"),
         )
-        init = Rack("simctl init / simctl setup", **node_attrs("runtime"))
-        context = Python("simctl context --json\nAgent の最初の入口", **node_attrs("agent"))
+        init = Rack("runops init / runops setup", **node_attrs("runtime"))
+        context = Python("runops context --json\nAgent の最初の入口", **node_attrs("agent"))
         agent = Python("AI Agent\n設計、実行、解析、\n学習を支援", **node_attrs("agent"))
 
         with Cluster("生成された project root"):
             config = Storage(
-                "simproject.toml\nsimulators.toml\nlaunchers.toml\nsite.toml",
+                "runops.toml\nsimulators.toml\nlaunchers.toml\nsite.toml",
                 **node_attrs("config"),
             )
             campaign = Storage("campaign.toml\n研究意図", **node_attrs("config"))
@@ -102,7 +102,7 @@ def _build_init_world(figure_dir: str) -> str:
                 **node_attrs("artifact"),
             )
             memory = Storage(
-                ".simctl/\nenvironment / insights / facts / knowledge",
+                ".runops/\nenvironment / insights / facts / knowledge",
                 **node_attrs("artifact"),
             )
             agent_boot = Rack(
@@ -121,7 +121,7 @@ def _build_init_world(figure_dir: str) -> str:
         agent_boot >> Edge(label="作業ルール") >> agent
         context >> Edge(label="最初の俯瞰") >> agent
 
-    return markdown_image(DOC_PATH, png_path(base), "simctl init 後の project と Agent の見る世界")
+    return markdown_image(DOC_PATH, png_path(base), "runops init 後の project と Agent の見る世界")
 
 
 def _build_operation_loop(figure_dir: str) -> str:
@@ -134,16 +134,16 @@ def _build_operation_loop(figure_dir: str) -> str:
     ):
         intent = User("1. 研究意図を確認\ncampaign.toml を更新", **node_attrs("human"))
         understand = Python(
-            "2. Agent が project を把握\nsimctl context --json / refs / .simctl",
+            "2. Agent が project を把握\nrunops context --json / refs / .runops",
             **node_attrs("agent"),
         )
         design = Python(
             "3. 実験設計\ncase.toml / survey.toml を整備",
             **node_attrs("agent"),
         )
-        create = Rack("4. run 生成\nsimctl runs create / sweep", **node_attrs("runtime"))
+        create = Rack("4. run 生成\nrunops runs create / sweep", **node_attrs("runtime"))
         submit = Rack(
-            "5. 実行\nsimctl runs submit / submit --all",
+            "5. 実行\nrunops runs submit / submit --all",
             **node_attrs("runtime"),
         )
         observe = Rack("6. 観測\nstatus / sync / log", **node_attrs("runtime"))
@@ -223,17 +223,17 @@ def _build_document() -> str:
         "> このファイルは `python scripts/generate_agent_project_flow.py` で生成しています。",
         "> 標準の再生成手順は `python scripts/render_diagrams_in_docker.py` です。",
         "",
-        "このガイドは、`simctl init` で生成された project を人間と AI Agent がどう運用していくかを",
+        "このガイドは、`runops init` で生成された project を人間と AI Agent がどう運用していくかを",
         "概念図としてまとめたものです。",
         "",
-        "ポイントは、simctl の project を単なる directory 群ではなく、",
+        "ポイントは、runops の project を単なる directory 群ではなく、",
         "`研究意図`、`再利用テンプレート`、`実行記録`、`学習結果` を持つ運用系として捉えることです。",
         "",
         "## 概念の対応表",
         "",
         _concept_table(),
         "",
-        "## `simctl init` 後の project と Agent の見る世界",
+        "## `runops init` 後の project と Agent の見る世界",
         "",
         init_world,
         "",
@@ -247,10 +247,10 @@ def _build_document() -> str:
         "",
         "## 読み方の要点",
         "",
-        "- `simctl init` 後の project は、Agent にとっての作業場であると同時に memory でもあります。",
+        "- `runops init` 後の project は、Agent にとっての作業場であると同時に memory でもあります。",
         "- `campaign.toml` は研究意図、`case.toml` は再利用可能な基底条件、`survey.toml` は探索計画です。",
         "- `manifest.toml` は各 run の正本で、ここに state と provenance が残ります。",
-        "- 解析後の結果は `insight` や `fact` として `.simctl/` に戻すことで、次の設計に再利用できます。",
+        "- 解析後の結果は `insight` や `fact` として `.runops/` に戻すことで、次の設計に再利用できます。",
         "- つまり日常運用は `設計 -> 実行 -> 観測 -> 解析 -> 学習 -> 設計` のループです。",
         "",
         "## 実務上のおすすめ",

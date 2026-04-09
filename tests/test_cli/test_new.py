@@ -1,4 +1,4 @@
-"""Tests for `simctl case new` (including --minimal and emu auto-run)."""
+"""Tests for `runops case new` (including --minimal and emu auto-run)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from typer.testing import CliRunner
 
-from simctl.cli.main import app
+from runops.cli.main import app
 
 if TYPE_CHECKING:
     import pytest
@@ -17,7 +17,7 @@ runner = CliRunner()
 
 def _make_emses_project(tmp_path: Path) -> Path:
     """Create a minimal EMSES project so ``case new`` can resolve launchers."""
-    (tmp_path / "simproject.toml").write_text('[project]\nname = "test-project"\n')
+    (tmp_path / "runops.toml").write_text('[project]\nname = "test-project"\n')
     (tmp_path / "simulators.toml").write_text(
         "[simulators.emses]\n"
         'adapter = "emses"\n'
@@ -108,7 +108,7 @@ class TestCaseNewEmuAutoRun:
         project_root = _make_emses_project(tmp_path)
 
         # Force shutil.which to report emu as missing.
-        from simctl.cli import new as new_cli
+        from runops.cli import new as new_cli
 
         monkeypatch.setattr(
             new_cli.__dict__.get("shutil", None) or __import__("shutil"),
@@ -127,7 +127,7 @@ class TestCaseNewEmuAutoRun:
         """When ``emu`` is on PATH, ``emu generate -u`` is invoked."""
         project_root = _make_emses_project(tmp_path)
 
-        from simctl.cli import new as new_cli
+        from runops.cli import new as new_cli
 
         # Pretend emu exists.
         monkeypatch.setattr(__import__("shutil"), "which", lambda name: "/fake/bin/emu")

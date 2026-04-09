@@ -1,4 +1,4 @@
-"""Generate the src/simctl structure guide using Python Diagrams."""
+"""Generate the src/runops structure guide using Python Diagrams."""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ from diagram_utils import (
 )
 
 
-SRC_ROOT = Path(__file__).resolve().parent.parent / "src" / "simctl"
+SRC_ROOT = Path(__file__).resolve().parent.parent / "src" / "runops"
 DOC_PATH = DOCS_ROOT / "src-structure.md"
 
 DIRECTORY_LABELS: dict[str, str] = {
@@ -39,40 +39,40 @@ DIRECTORY_LABELS: dict[str, str] = {
     "launchers": "MPI 起動ラッパーと launcher factory",
     "jobgen": "job、launcher、site から job.sh を組み立てる層",
     "slurm": "sbatch / squeue / sacct の薄いラッパー",
-    "sites": "simctl init だけが読む bundled site preset",
+    "sites": "runops init だけが読む bundled site preset",
     "templates": "project / case / survey にコピーされる静的テンプレート",
 }
 
 KEY_FILES: tuple[tuple[str, str], ...] = (
-    ("src/simctl/cli/main.py", "最上位のコマンド登録。"),
-    ("src/simctl/core/actions.py", "CLI と agent が使う薄い action facade。"),
+    ("src/runops/cli/main.py", "最上位のコマンド登録。"),
+    ("src/runops/core/actions.py", "CLI と agent が使う薄い action facade。"),
     (
-        "src/simctl/core/run_creation.py",
+        "src/runops/core/run_creation.py",
         "case -> adapter -> launcher -> site -> job.sh をつなぐ実行時の中心。",
     ),
     (
-        "src/simctl/core/site.py",
+        "src/runops/core/site.py",
         "runtime の site 解決。site.toml、legacy launcher fallback、STANDARD_SITE を扱う。",
     ),
     (
-        "src/simctl/adapters/registry.py",
+        "src/runops/adapters/registry.py",
         "simulator adapter の registry と import-by-name 解決。",
     ),
     (
-        "src/simctl/launchers/base.py",
+        "src/runops/launchers/base.py",
         "Launcher.from_config() による launcher factory と profile 読み込み。",
     ),
     (
-        "src/simctl/jobgen/generator.py",
+        "src/runops/jobgen/generator.py",
         "site 固有の module / directive を含む最終的な Slurm job script 生成。",
     ),
     (
-        "src/simctl/slurm/query.py",
-        "Slurm state の問い合わせと simctl RunState への写像。",
+        "src/runops/slurm/query.py",
+        "Slurm state の問い合わせと runops RunState への写像。",
     ),
     (
-        "src/simctl/cli/init.py",
-        "init 時に src/simctl/sites/*.toml を読み、project 側の site.toml を書く。",
+        "src/runops/cli/init.py",
+        "init 時に src/runops/sites/*.toml を読み、project 側の site.toml を書く。",
     ),
 )
 
@@ -117,17 +117,17 @@ def _build_directory_table() -> str:
 def _build_overview(figure_dir: str) -> str:
     base = prepare_figure_dir(figure_dir) / "overview"
     with make_diagram(
-        name="src/simctl の全体構造",
+        name="src/runops の全体構造",
         filename=base,
         direction="LR",
         graph_attr={"nodesep": "0.8", "ranksep": "1.0"},
     ):
         project_files = Storage(
-            "project files\nsimproject / simulators \n / launchers / site / \n case / survey",
+            "project files\nrunops / simulators \n / launchers / site / \n case / survey",
             **node_attrs("artifact"),
         )
 
-        with Cluster("src/simctl"):
+        with Cluster("src/runops"):
             cli = User("cli/\nTyper command \nと command grouping", **node_attrs("human"))
             core = Python(
                 "core/\nProject / Case / Survey / Run /\nActions / State / Knowledge",
@@ -167,7 +167,7 @@ def _build_overview(figure_dir: str) -> str:
         site_core >> Edge(label="module/env/sbatch option") >> jobgen
         slurm >> Edge(label="Slurm state を RunState へ戻す") >> core
 
-    return markdown_image(DOC_PATH, png_path(base), "src/simctl の全体構造")
+    return markdown_image(DOC_PATH, png_path(base), "src/runops の全体構造")
 
 
 def _build_run_creation(figure_dir: str) -> str:
@@ -188,7 +188,7 @@ def _build_run_creation(figure_dir: str) -> str:
         )
         with Cluster("入力"):
             project = Storage(
-                "project config\nsimproject / simulators /\nlaunchers",
+                "project config\nrunops / simulators /\nlaunchers",
                 **node_attrs("config"),
             )
             case = Storage(
@@ -252,10 +252,10 @@ def _build_site_resolution(figure_dir: str) -> str:
         graph_attr={"nodesep": "0.85", "ranksep": "1.0", "splines": "spline"},
     ):
         bundled = Git(
-            "bundled preset\nsrc/simctl/sites/*.toml\n+ *.md",
+            "bundled preset\nsrc/runops/sites/*.toml\n+ *.md",
             **node_attrs("config"),
         )
-        init_cli = User("simctl init\ncli/init.py", **node_attrs("human"))
+        init_cli = User("runops init\ncli/init.py", **node_attrs("human"))
         project_site = Storage(
             "project site.toml\nruntime source of truth",
             **node_attrs("config"),
@@ -265,7 +265,7 @@ def _build_site_resolution(figure_dir: str) -> str:
             **node_attrs("config"),
         )
         case_new = User(
-            "simctl case new\nresource_style を参照",
+            "runops case new\nresource_style を参照",
             **node_attrs("human"),
         )
         runtime = Python("core/site.py\nload_site_profile()", **node_attrs("agent"))
@@ -296,12 +296,12 @@ def _build_document() -> str:
     key_files_lines = [f"- `{path}`: {description}" for path, description in KEY_FILES]
 
     lines = [
-        "# src/simctl 構成ガイド",
+        "# src/runops 構成ガイド",
         "",
         "> このファイルは `python scripts/generate_architecture_diagrams.py` で生成しています。",
         "> 標準の再生成手順は `python scripts/render_diagrams_in_docker.py` です。",
         "",
-        "simctl の `src/` は、まず次の 3 つを分けて考えると読みやすくなります。",
+        "runops の `src/` は、まず次の 3 つを分けて考えると読みやすくなります。",
         "",
         "- `cli/` は人間や agent が直接叩く Typer ベースの入り口です。",
         "- `core/` は domain model だけでなく、project 設定から adapter / launcher / site / Slurm をつなぐ orchestration module も持っています。",
@@ -310,9 +310,9 @@ def _build_document() -> str:
         "",
         "いまの実装で特に混乱しやすいのは `site` まわりです。",
         "",
-        "- `src/simctl/sites/` は project の runtime site 設定そのものではありません。",
-        "- ここは `simctl init` が一度だけ読む bundled preset 集です。",
-        "- 実行時に使われる site の本体は project root の `site.toml` で、解決ロジックは `src/simctl/core/site.py` にあります。",
+        "- `src/runops/sites/` は project の runtime site 設定そのものではありません。",
+        "- ここは `runops init` が一度だけ読む bundled preset 集です。",
+        "- 実行時に使われる site の本体は project root の `site.toml` で、解決ロジックは `src/runops/core/site.py` にあります。",
         "",
         "## top-level directory 一覧",
         "",
@@ -338,7 +338,7 @@ def _build_document() -> str:
         "- `core/run_creation.py` が project、case、必要なら survey override を読みます。",
         "- simulator entry は `project.simulators` から引かれます。",
         "- `load_adapter_for_simulator()` がその entry から adapter 名を取り出します。",
-        "- `AdapterRegistry.load_from_config()` は `simctl.adapters.contrib.<adapter>` を先に、次に `simctl.adapters.<adapter>` を import しようとします。",
+        "- `AdapterRegistry.load_from_config()` は `runops.adapters.contrib.<adapter>` を先に、次に `runops.adapters.<adapter>` を import しようとします。",
         "- import に成功すると registry から adapter class を取り出し、instance 化します。",
         "- launcher 側はより単純で、`load_launchers()` が `launchers.toml` をたどり、`Launcher.from_config()` が `type` / `kind` に応じて `SrunLauncher`、`MpirunLauncher`、`MpiexecLauncher` を選びます。",
         "- `core/site.load_site_profile()` は launcher と独立に site を解決し、最後に `jobgen.generate_job_script()` が launcher 出力と site 固有の module、environment variable、stdout/stderr format、追加 `#SBATCH` directive を合成します。",

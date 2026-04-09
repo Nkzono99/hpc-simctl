@@ -1,4 +1,4 @@
-"""Tests for the ``simctl runs extend`` CLI command."""
+"""Tests for the ``runops runs extend`` CLI command."""
 
 from __future__ import annotations
 
@@ -10,9 +10,9 @@ from unittest.mock import patch
 import tomli_w
 from typer.testing import CliRunner
 
-from simctl.cli.main import app
-from simctl.core.exceptions import SimctlError
-from simctl.core.run import RunInfo
+from runops.cli.main import app
+from runops.core.exceptions import SimctlError
+from runops.core.run import RunInfo
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -28,7 +28,7 @@ def _create_source_run(
     status: str = "completed",
     include_adapter: bool = True,
 ) -> Path:
-    (project_root / "simproject.toml").write_text('[project]\nname = "demo"\n')
+    (project_root / "runops.toml").write_text('[project]\nname = "demo"\n')
     source_dir = project_root / "runs" / "R20260409-0001"
     (source_dir / "input").mkdir(parents=True, exist_ok=True)
     (source_dir / "submit").mkdir(parents=True, exist_ok=True)
@@ -95,15 +95,15 @@ def test_extend_creates_continuation_run_and_copies_artifacts(tmp_path: Path) ->
             return {"restart": "linked"}
 
     with (
-        patch("simctl.cli.extend.load_project", return_value=project),
-        patch("simctl.adapters.registry.load_from_config"),
-        patch("simctl.adapters.registry.get", return_value=FakeAdapter),
+        patch("runops.cli.extend.load_project", return_value=project),
+        patch("runops.adapters.registry.load_from_config"),
+        patch("runops.adapters.registry.get", return_value=FakeAdapter),
         patch(
-            "simctl.cli.extend.collect_existing_run_ids",
+            "runops.cli.extend.collect_existing_run_ids",
             return_value={"R20260409-0001"},
         ),
         patch(
-            "simctl.cli.extend.create_run",
+            "runops.cli.extend.create_run",
             return_value=RunInfo(
                 run_id="R20260409-0002",
                 run_dir=new_dir,
@@ -157,15 +157,15 @@ def test_extend_warns_for_non_completed_source_and_surfaces_auto_submit_failure(
             return {}
 
     with (
-        patch("simctl.cli.extend.load_project", return_value=project),
-        patch("simctl.adapters.registry.load_from_config"),
-        patch("simctl.adapters.registry.get", return_value=FakeAdapter),
+        patch("runops.cli.extend.load_project", return_value=project),
+        patch("runops.adapters.registry.load_from_config"),
+        patch("runops.adapters.registry.get", return_value=FakeAdapter),
         patch(
-            "simctl.cli.extend.collect_existing_run_ids",
+            "runops.cli.extend.collect_existing_run_ids",
             return_value={"R20260409-0001"},
         ),
         patch(
-            "simctl.cli.extend.create_run",
+            "runops.cli.extend.create_run",
             return_value=RunInfo(
                 run_id="R20260409-0002",
                 run_dir=new_dir,
@@ -174,7 +174,7 @@ def test_extend_warns_for_non_completed_source_and_surfaces_auto_submit_failure(
                 params={"nstep": 1000, "dt": 0.1},
             ),
         ),
-        patch("simctl.cli.submit._submit_single_run", return_value=None),
+        patch("runops.cli.submit._submit_single_run", return_value=None),
     ):
         result = runner.invoke(app, ["runs", "extend", "--run", str(source_dir)])
 
@@ -185,9 +185,9 @@ def test_extend_warns_for_non_completed_source_and_surfaces_auto_submit_failure(
 
 def test_extend_surfaces_manifest_read_errors(tmp_path: Path) -> None:
     with (
-        patch("simctl.cli.extend.resolve_run_or_cwd", return_value=tmp_path),
+        patch("runops.cli.extend.resolve_run_or_cwd", return_value=tmp_path),
         patch(
-            "simctl.cli.extend.read_manifest",
+            "runops.cli.extend.read_manifest",
             side_effect=SimctlError("missing manifest"),
         ),
     ):
@@ -201,7 +201,7 @@ def test_extend_surfaces_project_lookup_errors(tmp_path: Path) -> None:
     source_dir = _create_source_run(tmp_path)
 
     with patch(
-        "simctl.cli.extend.load_project",
+        "runops.cli.extend.load_project",
         side_effect=SimctlError("project config is broken"),
     ):
         result = runner.invoke(app, ["runs", "extend", str(source_dir)])
@@ -215,10 +215,10 @@ def test_extend_surfaces_adapter_loading_errors(tmp_path: Path) -> None:
     project = SimpleNamespace(simulators={"emses": {}})
 
     with (
-        patch("simctl.cli.extend.load_project", return_value=project),
-        patch("simctl.adapters.registry.load_from_config"),
+        patch("runops.cli.extend.load_project", return_value=project),
+        patch("runops.adapters.registry.load_from_config"),
         patch(
-            "simctl.adapters.registry.get",
+            "runops.adapters.registry.get",
             side_effect=KeyError("emses adapter missing"),
         ),
     ):
@@ -246,15 +246,15 @@ def test_extend_falls_back_to_simulator_name_when_adapter_is_missing(
             return {}
 
     with (
-        patch("simctl.cli.extend.load_project", return_value=project),
-        patch("simctl.adapters.registry.load_from_config"),
-        patch("simctl.adapters.registry.get", return_value=FakeAdapter) as mock_get,
+        patch("runops.cli.extend.load_project", return_value=project),
+        patch("runops.adapters.registry.load_from_config"),
+        patch("runops.adapters.registry.get", return_value=FakeAdapter) as mock_get,
         patch(
-            "simctl.cli.extend.collect_existing_run_ids",
+            "runops.cli.extend.collect_existing_run_ids",
             return_value={"R20260409-0001"},
         ),
         patch(
-            "simctl.cli.extend.create_run",
+            "runops.cli.extend.create_run",
             return_value=RunInfo(
                 run_id="R20260409-0002",
                 run_dir=new_dir,
@@ -278,15 +278,15 @@ def test_extend_surfaces_run_creation_errors(tmp_path: Path) -> None:
         pass
 
     with (
-        patch("simctl.cli.extend.load_project", return_value=project),
-        patch("simctl.adapters.registry.load_from_config"),
-        patch("simctl.adapters.registry.get", return_value=FakeAdapter),
+        patch("runops.cli.extend.load_project", return_value=project),
+        patch("runops.adapters.registry.load_from_config"),
+        patch("runops.adapters.registry.get", return_value=FakeAdapter),
         patch(
-            "simctl.cli.extend.collect_existing_run_ids",
+            "runops.cli.extend.collect_existing_run_ids",
             return_value={"R20260409-0001"},
         ),
         patch(
-            "simctl.cli.extend.create_run",
+            "runops.cli.extend.create_run",
             side_effect=SimctlError("run id collision"),
         ),
     ):
@@ -312,15 +312,15 @@ def test_extend_surfaces_adapter_continuation_errors(tmp_path: Path) -> None:
             raise RuntimeError("snapshot missing")
 
     with (
-        patch("simctl.cli.extend.load_project", return_value=project),
-        patch("simctl.adapters.registry.load_from_config"),
-        patch("simctl.adapters.registry.get", return_value=FakeAdapter),
+        patch("runops.cli.extend.load_project", return_value=project),
+        patch("runops.adapters.registry.load_from_config"),
+        patch("runops.adapters.registry.get", return_value=FakeAdapter),
         patch(
-            "simctl.cli.extend.collect_existing_run_ids",
+            "runops.cli.extend.collect_existing_run_ids",
             return_value={"R20260409-0001"},
         ),
         patch(
-            "simctl.cli.extend.create_run",
+            "runops.cli.extend.create_run",
             return_value=RunInfo(
                 run_id="R20260409-0002",
                 run_dir=new_dir,

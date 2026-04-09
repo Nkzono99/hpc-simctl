@@ -6,10 +6,10 @@ from typing import Any
 
 import pytest
 
-from simctl.launchers.base import Launcher, LauncherConfigError, load_launchers
-from simctl.launchers.mpiexec import MpiexecLauncher
-from simctl.launchers.mpirun import MpirunLauncher
-from simctl.launchers.srun import SrunLauncher
+from runops.launchers.base import Launcher, LauncherConfigError, load_launchers
+from runops.launchers.mpiexec import MpiexecLauncher
+from runops.launchers.mpirun import MpirunLauncher
+from runops.launchers.srun import SrunLauncher
 
 # ---------------------------------------------------------------------------
 # Contract tests: all concrete launchers satisfy the ABC interface

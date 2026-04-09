@@ -1,4 +1,4 @@
-"""Tests for simctl setup CLI command."""
+"""Tests for runops setup CLI command."""
 
 from __future__ import annotations
 
@@ -7,14 +7,14 @@ from unittest.mock import patch
 
 from typer.testing import CliRunner
 
-from simctl.cli.main import app
+from runops.cli.main import app
 
 runner = CliRunner()
 
 
 def _make_existing_project(project_dir: Path) -> None:
     project_dir.mkdir(parents=True, exist_ok=True)
-    (project_dir / "simproject.toml").write_text(
+    (project_dir / "runops.toml").write_text(
         '[project]\nname = "setup-project"\n',
         encoding="utf-8",
     )
@@ -32,29 +32,29 @@ def test_setup_renders_imports_for_bootstrapped_tool_docs(
     def _fake_bootstrap(
         root: Path,
         _sim_names: list[str],
-        _simctl_repo: str,
+        _runops_repo: str,
         created: list[str],
         _skipped: list[str],
     ) -> None:
-        (root / "tools" / "hpc-simctl").mkdir(parents=True, exist_ok=True)
-        (root / "tools" / "hpc-simctl" / "entrypoints.toml").write_text(
+        (root / "tools" / "runops").mkdir(parents=True, exist_ok=True)
+        (root / "tools" / "runops" / "entrypoints.toml").write_text(
             'imports = ["docs/agent-user-guide.md"]\n',
             encoding="utf-8",
         )
-        docs_dir = root / "tools" / "hpc-simctl" / "docs"
+        docs_dir = root / "tools" / "runops" / "docs"
         docs_dir.mkdir(parents=True, exist_ok=True)
         (docs_dir / "agent-user-guide.md").write_text("# Agent guide\n")
-        created.append("tools/hpc-simctl")
+        created.append("tools/runops")
 
-    monkeypatch.setattr("simctl.cli.init._bootstrap_environment", _fake_bootstrap)
+    monkeypatch.setattr("runops.cli.init._bootstrap_environment", _fake_bootstrap)
 
     result = runner.invoke(app, ["setup", "--path", str(project_dir)])
 
     assert result.exit_code == 0
-    imports_path = project_dir / ".simctl" / "knowledge" / "enabled" / "imports.md"
+    imports_path = project_dir / ".runops" / "knowledge" / "enabled" / "imports.md"
     assert imports_path.is_file()
     imports = imports_path.read_text(encoding="utf-8")
-    assert "@tools/hpc-simctl/docs/agent-user-guide.md" in imports
+    assert "@tools/runops/docs/agent-user-guide.md" in imports
 
 
 def test_setup_smoke_with_knowledge_attach_render_and_doctor(
@@ -66,21 +66,21 @@ def test_setup_smoke_with_knowledge_attach_render_and_doctor(
     def _fake_bootstrap(
         root: Path,
         _sim_names: list[str],
-        _simctl_repo: str,
+        _runops_repo: str,
         created: list[str],
         _skipped: list[str],
     ) -> None:
-        (root / "tools" / "hpc-simctl").mkdir(parents=True, exist_ok=True)
-        (root / "tools" / "hpc-simctl" / "entrypoints.toml").write_text(
+        (root / "tools" / "runops").mkdir(parents=True, exist_ok=True)
+        (root / "tools" / "runops" / "entrypoints.toml").write_text(
             'imports = ["docs/agent-user-guide.md"]\n',
             encoding="utf-8",
         )
-        docs_dir = root / "tools" / "hpc-simctl" / "docs"
+        docs_dir = root / "tools" / "runops" / "docs"
         docs_dir.mkdir(parents=True, exist_ok=True)
         (docs_dir / "agent-user-guide.md").write_text("# Agent guide\n")
-        created.append("tools/hpc-simctl")
+        created.append("tools/runops")
 
-    monkeypatch.setattr("simctl.cli.init._bootstrap_environment", _fake_bootstrap)
+    monkeypatch.setattr("runops.cli.init._bootstrap_environment", _fake_bootstrap)
 
     init_result = runner.invoke(app, ["init", "-y", "--path", str(project_dir)])
     assert init_result.exit_code == 0
@@ -94,7 +94,7 @@ def test_setup_smoke_with_knowledge_attach_render_and_doctor(
         encoding="utf-8",
     )
 
-    with patch("simctl.cli.knowledge.Path.cwd", return_value=project_dir):
+    with patch("runops.cli.knowledge.Path.cwd", return_value=project_dir):
         attach_result = runner.invoke(
             app,
             [
@@ -116,12 +116,12 @@ def test_setup_smoke_with_knowledge_attach_render_and_doctor(
     setup_result = runner.invoke(app, ["setup", "--path", str(project_dir)])
     assert setup_result.exit_code == 0
 
-    with patch("simctl.cli.init.shutil.which", return_value="/usr/bin/sbatch"):
+    with patch("runops.cli.init.shutil.which", return_value="/usr/bin/sbatch"):
         doctor_result = runner.invoke(app, ["doctor", str(project_dir)])
 
     assert doctor_result.exit_code == 0
     imports = (
-        project_dir / ".simctl" / "knowledge" / "enabled" / "imports.md"
+        project_dir / ".runops" / "knowledge" / "enabled" / "imports.md"
     ).read_text(encoding="utf-8")
-    assert "@tools/hpc-simctl/docs/agent-user-guide.md" in imports
+    assert "@tools/runops/docs/agent-user-guide.md" in imports
     assert "@refs/knowledge/shared-kb/profiles/common.md" in imports

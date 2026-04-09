@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from simctl.jobgen.generator import (
+from runops.jobgen.generator import (
     JobScriptError,
     generate_job_script,
     write_job_script,
@@ -92,7 +92,7 @@ class TestGenerateJobScript:
     ) -> None:
         path = generate_job_script(run_dir, job_config, "srun ./solver")
         content = path.read_text()
-        assert "#SBATCH -J simctl-job" in content
+        assert "#SBATCH -J runops-job" in content
 
     def test_output_and_error_paths(
         self, run_dir: Path, job_config: dict[str, object]

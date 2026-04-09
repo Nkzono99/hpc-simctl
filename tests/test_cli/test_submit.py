@@ -1,4 +1,4 @@
-"""Tests for simctl runs submit CLI command."""
+"""Tests for runops runs submit CLI command."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from unittest.mock import patch
 import tomli_w
 from typer.testing import CliRunner
 
-from simctl.cli.main import app
+from runops.cli.main import app
 
 runner = CliRunner()
 
@@ -69,21 +69,21 @@ def test_submit_no_args() -> None:
 def test_submit_run_not_found(tmp_path: Path) -> None:
     """Submit a non-existent run should error."""
     # Create a project so project lookup works
-    (tmp_path / "simproject.toml").write_text('[project]\nname = "test"\n')
+    (tmp_path / "runops.toml").write_text('[project]\nname = "test"\n')
     (tmp_path / "runs").mkdir()
 
-    with patch("simctl.cli.submit.Path.cwd", return_value=tmp_path):
+    with patch("runops.cli.submit.Path.cwd", return_value=tmp_path):
         result = runner.invoke(app, ["runs", "submit", "nonexistent"])
     assert result.exit_code != 0
 
 
 def test_submit_already_submitted(tmp_path: Path) -> None:
     """Submit a run that is already submitted should report an error."""
-    (tmp_path / "simproject.toml").write_text('[project]\nname = "test"\n')
+    (tmp_path / "runops.toml").write_text('[project]\nname = "test"\n')
     run_dir = tmp_path / "runs" / "R20260327-0001"
     _create_run(run_dir, status="submitted", job_id="12345")
 
-    with patch("simctl.cli.submit.Path.cwd", return_value=tmp_path):
+    with patch("runops.cli.submit.Path.cwd", return_value=tmp_path):
         result = runner.invoke(app, ["runs", "submit", str(run_dir)])
     assert result.exit_code != 0
     assert "submitted" in result.output
@@ -91,7 +91,7 @@ def test_submit_already_submitted(tmp_path: Path) -> None:
 
 def test_submit_missing_job_script(tmp_path: Path) -> None:
     """Submit a run with no job.sh should error."""
-    (tmp_path / "simproject.toml").write_text('[project]\nname = "test"\n')
+    (tmp_path / "runops.toml").write_text('[project]\nname = "test"\n')
     run_dir = tmp_path / "runs" / "R20260327-0001"
     _write_manifest(
         run_dir,
@@ -102,7 +102,7 @@ def test_submit_missing_job_script(tmp_path: Path) -> None:
     )
     # No submit/job.sh created
 
-    with patch("simctl.cli.submit.Path.cwd", return_value=tmp_path):
+    with patch("runops.cli.submit.Path.cwd", return_value=tmp_path):
         result = runner.invoke(app, ["runs", "submit", str(run_dir)])
     assert result.exit_code != 0
     assert "Job script not found" in result.output
@@ -110,14 +110,14 @@ def test_submit_missing_job_script(tmp_path: Path) -> None:
 
 def test_submit_success(tmp_path: Path) -> None:
     """Successful submission should print job_id and update manifest."""
-    (tmp_path / "simproject.toml").write_text('[project]\nname = "test"\n')
+    (tmp_path / "runops.toml").write_text('[project]\nname = "test"\n')
     run_dir = tmp_path / "runs" / "R20260327-0001"
     _create_run(run_dir)
 
     with (
-        patch("simctl.cli.submit.Path.cwd", return_value=tmp_path),
+        patch("runops.cli.submit.Path.cwd", return_value=tmp_path),
         patch(
-            "simctl.slurm.submit.sbatch_submit",
+            "runops.slurm.submit.sbatch_submit",
             return_value="99999",
         ),
     ):
@@ -128,7 +128,7 @@ def test_submit_success(tmp_path: Path) -> None:
     assert "Submitted" in result.output
 
     # Verify manifest was updated
-    from simctl.core.manifest import read_manifest
+    from runops.core.manifest import read_manifest
 
     updated = read_manifest(run_dir)
     assert updated.job.get("job_id") == "99999"
@@ -140,11 +140,11 @@ def test_submit_success(tmp_path: Path) -> None:
 
 def test_submit_dry_run(tmp_path: Path) -> None:
     """Dry-run should show info without actually submitting."""
-    (tmp_path / "simproject.toml").write_text('[project]\nname = "test"\n')
+    (tmp_path / "runops.toml").write_text('[project]\nname = "test"\n')
     run_dir = tmp_path / "runs" / "R20260327-0001"
     _create_run(run_dir)
 
-    with patch("simctl.cli.submit.Path.cwd", return_value=tmp_path):
+    with patch("runops.cli.submit.Path.cwd", return_value=tmp_path):
         result = runner.invoke(app, ["runs", "submit", "--dry-run", str(run_dir)])
 
     assert result.exit_code == 0
@@ -153,7 +153,7 @@ def test_submit_dry_run(tmp_path: Path) -> None:
 
 def test_submit_all(tmp_path: Path) -> None:
     """--all should submit all created runs and skip non-created ones."""
-    (tmp_path / "simproject.toml").write_text('[project]\nname = "test"\n')
+    (tmp_path / "runops.toml").write_text('[project]\nname = "test"\n')
     survey_dir = tmp_path / "runs" / "survey1"
 
     # Two created runs, one already submitted
@@ -167,9 +167,9 @@ def test_submit_all(tmp_path: Path) -> None:
     )
 
     with (
-        patch("simctl.cli.submit.Path.cwd", return_value=tmp_path),
+        patch("runops.cli.submit.Path.cwd", return_value=tmp_path),
         patch(
-            "simctl.slurm.submit.sbatch_submit",
+            "runops.slurm.submit.sbatch_submit",
             side_effect=["22222", "33333"],
         ),
     ):
@@ -184,7 +184,7 @@ def test_submit_all(tmp_path: Path) -> None:
 
 def test_submit_all_dry_run(tmp_path: Path) -> None:
     """--all --dry-run should list runs without submitting."""
-    (tmp_path / "simproject.toml").write_text('[project]\nname = "test"\n')
+    (tmp_path / "runops.toml").write_text('[project]\nname = "test"\n')
     survey_dir = tmp_path / "runs" / "survey1"
     _create_run(survey_dir / "R20260327-0001", run_id="R20260327-0001")
     _create_run(
@@ -194,7 +194,7 @@ def test_submit_all_dry_run(tmp_path: Path) -> None:
         job_id="11111",
     )
 
-    with patch("simctl.cli.submit.Path.cwd", return_value=tmp_path):
+    with patch("runops.cli.submit.Path.cwd", return_value=tmp_path):
         result = runner.invoke(
             app,
             ["runs", "submit", "--all", "--dry-run", str(survey_dir)],
@@ -207,7 +207,7 @@ def test_submit_all_dry_run(tmp_path: Path) -> None:
 
 def test_submit_empty_input_dir(tmp_path: Path) -> None:
     """Submit a run with empty input/ should error."""
-    (tmp_path / "simproject.toml").write_text('[project]\nname = "test"\n')
+    (tmp_path / "runops.toml").write_text('[project]\nname = "test"\n')
     run_dir = tmp_path / "runs" / "R20260327-0001"
     # Create run but remove input files
     _create_run(run_dir)
@@ -216,9 +216,9 @@ def test_submit_empty_input_dir(tmp_path: Path) -> None:
         f.unlink()
 
     with (
-        patch("simctl.cli.submit.Path.cwd", return_value=tmp_path),
+        patch("runops.cli.submit.Path.cwd", return_value=tmp_path),
         patch(
-            "simctl.slurm.submit.sbatch_submit",
+            "runops.slurm.submit.sbatch_submit",
             return_value="99999",
         ),
     ):
@@ -230,16 +230,16 @@ def test_submit_empty_input_dir(tmp_path: Path) -> None:
 
 def test_submit_sbatch_failure(tmp_path: Path) -> None:
     """sbatch failure should produce a user-friendly error."""
-    (tmp_path / "simproject.toml").write_text('[project]\nname = "test"\n')
+    (tmp_path / "runops.toml").write_text('[project]\nname = "test"\n')
     run_dir = tmp_path / "runs" / "R20260327-0001"
     _create_run(run_dir)
 
-    from simctl.slurm.submit import SlurmSubmitError
+    from runops.slurm.submit import SlurmSubmitError
 
     with (
-        patch("simctl.cli.submit.Path.cwd", return_value=tmp_path),
+        patch("runops.cli.submit.Path.cwd", return_value=tmp_path),
         patch(
-            "simctl.slurm.submit.sbatch_submit",
+            "runops.slurm.submit.sbatch_submit",
             side_effect=SlurmSubmitError("sbatch failed (exit 1):\nPermission denied"),
         ),
     ):

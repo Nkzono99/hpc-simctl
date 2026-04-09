@@ -12,7 +12,7 @@ from unittest.mock import patch
 import pytest
 import tomli_w
 
-from simctl.adapters.contrib.emses import EmseAdapter
+from runops.adapters.contrib.emses import EmseAdapter
 
 SAMPLE_PLASMA_CONFIG: dict[str, Any] = {
     "meta": {

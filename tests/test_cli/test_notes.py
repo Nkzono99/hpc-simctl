@@ -1,4 +1,4 @@
-"""Tests for the ``simctl notes`` lab-notebook commands."""
+"""Tests for the ``runops notes`` lab-notebook commands."""
 
 from __future__ import annotations
 
@@ -8,15 +8,15 @@ from unittest.mock import patch
 
 from typer.testing import CliRunner
 
-from simctl.cli import notes as notes_module
-from simctl.cli.main import app
+from runops.cli import notes as notes_module
+from runops.cli.main import app
 
 runner = CliRunner()
 
 
 def _make_project(tmp_path: Path) -> Path:
-    """Create the minimum project skeleton ``simctl notes`` cares about."""
-    (tmp_path / "simproject.toml").write_text(
+    """Create the minimum project skeleton ``runops notes`` cares about."""
+    (tmp_path / "runops.toml").write_text(
         '[project]\nname = "test"\n', encoding="utf-8"
     )
     return tmp_path
@@ -33,8 +33,8 @@ def test_append_creates_dated_file_with_header(tmp_path: Path) -> None:
     fixed_now = datetime(2026, 4, 8, 14, 32, 0, tzinfo=notes_module.JST)
 
     with (
-        patch("simctl.cli.notes.Path.cwd", return_value=project),
-        patch("simctl.cli.notes.datetime") as dt_mock,
+        patch("runops.cli.notes.Path.cwd", return_value=project),
+        patch("runops.cli.notes.datetime") as dt_mock,
     ):
         dt_mock.now.return_value = fixed_now
         # Real strptime / date for show() helpers
@@ -65,8 +65,8 @@ def test_append_second_entry_appends_without_duplicate_header(tmp_path: Path) ->
     fixed_now = datetime(2026, 4, 8, 18, 5, 0, tzinfo=notes_module.JST)
 
     with (
-        patch("simctl.cli.notes.Path.cwd", return_value=project),
-        patch("simctl.cli.notes.datetime") as dt_mock,
+        patch("runops.cli.notes.Path.cwd", return_value=project),
+        patch("runops.cli.notes.datetime") as dt_mock,
     ):
         dt_mock.now.return_value = fixed_now
         dt_mock.strptime.side_effect = lambda *a, **k: datetime.strptime(*a, **k)
@@ -87,8 +87,8 @@ def test_append_body_from_stdin(tmp_path: Path) -> None:
     fixed_now = datetime(2026, 4, 8, 10, 0, 0, tzinfo=notes_module.JST)
 
     with (
-        patch("simctl.cli.notes.Path.cwd", return_value=project),
-        patch("simctl.cli.notes.datetime") as dt_mock,
+        patch("runops.cli.notes.Path.cwd", return_value=project),
+        patch("runops.cli.notes.datetime") as dt_mock,
     ):
         dt_mock.now.return_value = fixed_now
         dt_mock.strptime.side_effect = lambda *a, **k: datetime.strptime(*a, **k)
@@ -110,8 +110,8 @@ def test_append_dash_body_reads_stdin(tmp_path: Path) -> None:
     fixed_now = datetime(2026, 4, 8, 12, 0, 0, tzinfo=notes_module.JST)
 
     with (
-        patch("simctl.cli.notes.Path.cwd", return_value=project),
-        patch("simctl.cli.notes.datetime") as dt_mock,
+        patch("runops.cli.notes.Path.cwd", return_value=project),
+        patch("runops.cli.notes.datetime") as dt_mock,
     ):
         dt_mock.now.return_value = fixed_now
         dt_mock.strptime.side_effect = lambda *a, **k: datetime.strptime(*a, **k)
@@ -130,7 +130,7 @@ def test_append_dash_body_reads_stdin(tmp_path: Path) -> None:
 def test_append_empty_body_errors(tmp_path: Path) -> None:
     """An empty body (no args, empty stdin) is an error."""
     project = _make_project(tmp_path)
-    with patch("simctl.cli.notes.Path.cwd", return_value=project):
+    with patch("runops.cli.notes.Path.cwd", return_value=project):
         result = runner.invoke(app, ["notes", "append", "title"], input="")
     assert result.exit_code == 2
     assert "body is empty" in result.output
@@ -139,18 +139,18 @@ def test_append_empty_body_errors(tmp_path: Path) -> None:
 def test_append_empty_title_errors(tmp_path: Path) -> None:
     """A whitespace-only title is rejected."""
     project = _make_project(tmp_path)
-    with patch("simctl.cli.notes.Path.cwd", return_value=project):
+    with patch("runops.cli.notes.Path.cwd", return_value=project):
         result = runner.invoke(app, ["notes", "append", "   ", "body"])
     assert result.exit_code == 2
     assert "title must be non-empty" in result.output
 
 
 def test_append_outside_project_uses_cwd(tmp_path: Path) -> None:
-    """Without simproject.toml the command falls back to ``<cwd>/notes``."""
+    """Without runops.toml the command falls back to ``<cwd>/notes``."""
     fixed_now = datetime(2026, 4, 8, 8, 30, 0, tzinfo=notes_module.JST)
     with (
-        patch("simctl.cli.notes.Path.cwd", return_value=tmp_path),
-        patch("simctl.cli.notes.datetime") as dt_mock,
+        patch("runops.cli.notes.Path.cwd", return_value=tmp_path),
+        patch("runops.cli.notes.datetime") as dt_mock,
     ):
         dt_mock.now.return_value = fixed_now
         dt_mock.strptime.side_effect = lambda *a, **k: datetime.strptime(*a, **k)
@@ -166,8 +166,8 @@ def test_append_explicit_notes_dir(tmp_path: Path) -> None:
     custom = tmp_path / "alt-notes"
     fixed_now = datetime(2026, 4, 8, 9, 0, 0, tzinfo=notes_module.JST)
     with (
-        patch("simctl.cli.notes.Path.cwd", return_value=project),
-        patch("simctl.cli.notes.datetime") as dt_mock,
+        patch("runops.cli.notes.Path.cwd", return_value=project),
+        patch("runops.cli.notes.datetime") as dt_mock,
     ):
         dt_mock.now.return_value = fixed_now
         dt_mock.strptime.side_effect = lambda *a, **k: datetime.strptime(*a, **k)
@@ -190,7 +190,7 @@ def test_append_explicit_notes_dir(tmp_path: Path) -> None:
 def test_list_empty(tmp_path: Path) -> None:
     """List with no notes/ directory is graceful."""
     project = _make_project(tmp_path)
-    with patch("simctl.cli.notes.Path.cwd", return_value=project):
+    with patch("runops.cli.notes.Path.cwd", return_value=project):
         result = runner.invoke(app, ["notes", "list"])
     assert result.exit_code == 0
     assert "No notes" in result.output
@@ -211,7 +211,7 @@ def test_list_shows_recent_days_with_entry_count(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    with patch("simctl.cli.notes.Path.cwd", return_value=project):
+    with patch("runops.cli.notes.Path.cwd", return_value=project):
         result = runner.invoke(app, ["notes", "list"])
 
     assert result.exit_code == 0, result.output
@@ -241,8 +241,8 @@ def test_show_today(tmp_path: Path) -> None:
     fixed_now = datetime(2026, 4, 8, 12, 0, 0, tzinfo=notes_module.JST)
 
     with (
-        patch("simctl.cli.notes.Path.cwd", return_value=project),
-        patch("simctl.cli.notes.datetime") as dt_mock,
+        patch("runops.cli.notes.Path.cwd", return_value=project),
+        patch("runops.cli.notes.datetime") as dt_mock,
     ):
         dt_mock.now.return_value = fixed_now
         dt_mock.strptime.side_effect = lambda *a, **k: datetime.strptime(*a, **k)
@@ -260,7 +260,7 @@ def test_show_latest(tmp_path: Path) -> None:
     (notes_dir / "2026-04-06.md").write_text("old\n", encoding="utf-8")
     (notes_dir / "2026-04-07.md").write_text("newer\n", encoding="utf-8")
 
-    with patch("simctl.cli.notes.Path.cwd", return_value=project):
+    with patch("runops.cli.notes.Path.cwd", return_value=project):
         result = runner.invoke(app, ["notes", "show", "latest"])
 
     assert result.exit_code == 0
@@ -275,7 +275,7 @@ def test_show_explicit_date(tmp_path: Path) -> None:
     notes_dir.mkdir()
     (notes_dir / "2026-04-07.md").write_text("seven\n", encoding="utf-8")
 
-    with patch("simctl.cli.notes.Path.cwd", return_value=project):
+    with patch("runops.cli.notes.Path.cwd", return_value=project):
         result = runner.invoke(app, ["notes", "show", "2026-04-07"])
 
     assert result.exit_code == 0
@@ -286,7 +286,7 @@ def test_show_invalid_date(tmp_path: Path) -> None:
     """A malformed date errors out."""
     project = _make_project(tmp_path)
     (project / "notes").mkdir()
-    with patch("simctl.cli.notes.Path.cwd", return_value=project):
+    with patch("runops.cli.notes.Path.cwd", return_value=project):
         result = runner.invoke(app, ["notes", "show", "not-a-date"])
     assert result.exit_code == 2
     assert "invalid date" in result.output
@@ -296,7 +296,7 @@ def test_show_missing_file(tmp_path: Path) -> None:
     """Asking for a date with no file errors with a clear message."""
     project = _make_project(tmp_path)
     (project / "notes").mkdir()
-    with patch("simctl.cli.notes.Path.cwd", return_value=project):
+    with patch("runops.cli.notes.Path.cwd", return_value=project):
         result = runner.invoke(app, ["notes", "show", "2026-04-07"])
     assert result.exit_code == 1
     assert "No notes for 2026-04-07" in result.output

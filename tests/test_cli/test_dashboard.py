@@ -1,4 +1,4 @@
-"""Tests for `simctl runs dashboard`."""
+"""Tests for `runops runs dashboard`."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 import tomli_w
 from typer.testing import CliRunner
 
-from simctl.cli.main import app
+from runops.cli.main import app
 
 if TYPE_CHECKING:
     import pytest
@@ -17,7 +17,7 @@ runner = CliRunner()
 
 
 def _make_project(tmp_path: Path) -> Path:
-    (tmp_path / "simproject.toml").write_text('[project]\nname = "test-project"\n')
+    (tmp_path / "runops.toml").write_text('[project]\nname = "test-project"\n')
     (tmp_path / "cases").mkdir()
     (tmp_path / "runs").mkdir()
     return tmp_path
@@ -129,7 +129,7 @@ class TestDashboardWatch:
     def test_watch_refreshes_then_stops(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from simctl.cli import dashboard as dashboard_cli
+        from runops.cli import dashboard as dashboard_cli
 
         project_dir = _make_project(tmp_path)
         survey = project_dir / "runs" / "series_x"

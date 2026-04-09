@@ -1,4 +1,4 @@
-"""Tests for `simctl runs jobs` (including the new --watch loop)."""
+"""Tests for `runops runs jobs` (including the new --watch loop)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 import tomli_w
 from typer.testing import CliRunner
 
-from simctl.cli.main import app
+from runops.cli.main import app
 
 if TYPE_CHECKING:
     import pytest
@@ -17,7 +17,7 @@ runner = CliRunner()
 
 
 def _make_project(tmp_path: Path) -> Path:
-    (tmp_path / "simproject.toml").write_text('[project]\nname = "test-project"\n')
+    (tmp_path / "runops.toml").write_text('[project]\nname = "test-project"\n')
     (tmp_path / "cases").mkdir()
     (tmp_path / "runs").mkdir()
     return tmp_path
@@ -105,7 +105,7 @@ class TestWatchLoop:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """The watch loop refreshes until KeyboardInterrupt, then exits cleanly."""
-        from simctl.cli import jobs as jobs_cli
+        from runops.cli import jobs as jobs_cli
 
         project_dir = _make_project(tmp_path)
         _create_run(
@@ -141,7 +141,7 @@ class TestWatchLoop:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """``-w`` is an accepted short alias for --watch."""
-        from simctl.cli import jobs as jobs_cli
+        from runops.cli import jobs as jobs_cli
 
         project_dir = _make_project(tmp_path)
         _create_run(

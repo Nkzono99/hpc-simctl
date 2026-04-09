@@ -1,4 +1,4 @@
-"""Tests for simctl runs status and runs sync CLI commands."""
+"""Tests for runops runs status and runs sync CLI commands."""
 
 from __future__ import annotations
 
@@ -9,9 +9,9 @@ from unittest.mock import patch
 import tomli_w
 from typer.testing import CliRunner
 
-from simctl.cli.main import app
-from simctl.core.state import RunState
-from simctl.slurm.query import JobStatus
+from runops.cli.main import app
+from runops.core.state import RunState
+from runops.slurm.query import JobStatus
 
 runner = CliRunner()
 
@@ -54,14 +54,14 @@ def _create_run(
 
 def test_status_shows_run_info(tmp_path: Path) -> None:
     """status should display run_id, state, and job_id."""
-    (tmp_path / "simproject.toml").write_text('[project]\nname = "test"\n')
+    (tmp_path / "runops.toml").write_text('[project]\nname = "test"\n')
     run_dir = tmp_path / "runs" / "R20260327-0001"
     _create_run(run_dir)
 
     with (
-        patch("simctl.cli.status.Path.cwd", return_value=tmp_path),
+        patch("runops.cli.status.Path.cwd", return_value=tmp_path),
         patch(
-            "simctl.cli.status.query_job_status",
+            "runops.cli.status.query_job_status",
             return_value=JobStatus(run_state=RunState.RUNNING, slurm_state="RUNNING"),
         ),
     ):
@@ -76,11 +76,11 @@ def test_status_shows_run_info(tmp_path: Path) -> None:
 
 def test_status_no_job_id(tmp_path: Path) -> None:
     """status with no job_id should show 'not submitted'."""
-    (tmp_path / "simproject.toml").write_text('[project]\nname = "test"\n')
+    (tmp_path / "runops.toml").write_text('[project]\nname = "test"\n')
     run_dir = tmp_path / "runs" / "R20260327-0001"
     _create_run(run_dir, status="created", job_id="")
 
-    with patch("simctl.cli.status.Path.cwd", return_value=tmp_path):
+    with patch("runops.cli.status.Path.cwd", return_value=tmp_path):
         result = runner.invoke(app, ["runs", "status", str(run_dir)])
 
     assert result.exit_code == 0
@@ -89,16 +89,16 @@ def test_status_no_job_id(tmp_path: Path) -> None:
 
 def test_status_slurm_unavailable(tmp_path: Path) -> None:
     """status should gracefully handle missing Slurm commands."""
-    (tmp_path / "simproject.toml").write_text('[project]\nname = "test"\n')
+    (tmp_path / "runops.toml").write_text('[project]\nname = "test"\n')
     run_dir = tmp_path / "runs" / "R20260327-0001"
     _create_run(run_dir)
 
-    from simctl.slurm.submit import SlurmNotFoundError
+    from runops.slurm.submit import SlurmNotFoundError
 
     with (
-        patch("simctl.cli.status.Path.cwd", return_value=tmp_path),
+        patch("runops.cli.status.Path.cwd", return_value=tmp_path),
         patch(
-            "simctl.cli.status.query_job_status",
+            "runops.cli.status.query_job_status",
             side_effect=SlurmNotFoundError("squeue not found"),
         ),
     ):
@@ -110,10 +110,10 @@ def test_status_slurm_unavailable(tmp_path: Path) -> None:
 
 def test_status_run_not_found(tmp_path: Path) -> None:
     """status for a non-existent run should error."""
-    (tmp_path / "simproject.toml").write_text('[project]\nname = "test"\n')
+    (tmp_path / "runops.toml").write_text('[project]\nname = "test"\n')
     (tmp_path / "runs").mkdir()
 
-    with patch("simctl.cli.status.Path.cwd", return_value=tmp_path):
+    with patch("runops.cli.status.Path.cwd", return_value=tmp_path):
         result = runner.invoke(app, ["runs", "status", "nonexistent"])
     assert result.exit_code != 0
 
@@ -125,14 +125,14 @@ def test_status_run_not_found(tmp_path: Path) -> None:
 
 def test_sync_updates_state(tmp_path: Path) -> None:
     """sync should transition state and show old -> new."""
-    (tmp_path / "simproject.toml").write_text('[project]\nname = "test"\n')
+    (tmp_path / "runops.toml").write_text('[project]\nname = "test"\n')
     run_dir = tmp_path / "runs" / "R20260327-0001"
     _create_run(run_dir, status="submitted", job_id="12345")
 
     with (
-        patch("simctl.cli.status.Path.cwd", return_value=tmp_path),
+        patch("runops.cli.status.Path.cwd", return_value=tmp_path),
         patch(
-            "simctl.slurm.query.query_job_status",
+            "runops.slurm.query.query_job_status",
             return_value=JobStatus(run_state=RunState.RUNNING, slurm_state="RUNNING"),
         ),
     ):
@@ -144,7 +144,7 @@ def test_sync_updates_state(tmp_path: Path) -> None:
     assert "->" in result.output
 
     # Verify manifest was actually updated
-    from simctl.core.manifest import read_manifest
+    from runops.core.manifest import read_manifest
 
     updated = read_manifest(run_dir)
     assert updated.run["status"] == "running"
@@ -156,14 +156,14 @@ def test_sync_updates_state(tmp_path: Path) -> None:
 
 def test_sync_no_change(tmp_path: Path) -> None:
     """sync should report no change when states match."""
-    (tmp_path / "simproject.toml").write_text('[project]\nname = "test"\n')
+    (tmp_path / "runops.toml").write_text('[project]\nname = "test"\n')
     run_dir = tmp_path / "runs" / "R20260327-0001"
     _create_run(run_dir, status="running", job_id="12345")
 
     with (
-        patch("simctl.cli.status.Path.cwd", return_value=tmp_path),
+        patch("runops.cli.status.Path.cwd", return_value=tmp_path),
         patch(
-            "simctl.slurm.query.query_job_status",
+            "runops.slurm.query.query_job_status",
             return_value=JobStatus(run_state=RunState.RUNNING, slurm_state="RUNNING"),
         ),
     ):
@@ -175,11 +175,11 @@ def test_sync_no_change(tmp_path: Path) -> None:
 
 def test_sync_no_job_id(tmp_path: Path) -> None:
     """sync without a job_id should error."""
-    (tmp_path / "simproject.toml").write_text('[project]\nname = "test"\n')
+    (tmp_path / "runops.toml").write_text('[project]\nname = "test"\n')
     run_dir = tmp_path / "runs" / "R20260327-0001"
     _create_run(run_dir, status="created", job_id="")
 
-    with patch("simctl.cli.status.Path.cwd", return_value=tmp_path):
+    with patch("runops.cli.status.Path.cwd", return_value=tmp_path):
         result = runner.invoke(app, ["runs", "sync", str(run_dir)])
 
     assert result.exit_code != 0
@@ -188,16 +188,16 @@ def test_sync_no_job_id(tmp_path: Path) -> None:
 
 def test_sync_slurm_query_failure(tmp_path: Path) -> None:
     """sync should handle Slurm query failures gracefully."""
-    (tmp_path / "simproject.toml").write_text('[project]\nname = "test"\n')
+    (tmp_path / "runops.toml").write_text('[project]\nname = "test"\n')
     run_dir = tmp_path / "runs" / "R20260327-0001"
     _create_run(run_dir, status="submitted", job_id="12345")
 
-    from simctl.slurm.query import SlurmQueryError
+    from runops.slurm.query import SlurmQueryError
 
     with (
-        patch("simctl.cli.status.Path.cwd", return_value=tmp_path),
+        patch("runops.cli.status.Path.cwd", return_value=tmp_path),
         patch(
-            "simctl.slurm.query.query_job_status",
+            "runops.slurm.query.query_job_status",
             side_effect=SlurmQueryError("Job not found"),
         ),
     ):
@@ -209,14 +209,14 @@ def test_sync_slurm_query_failure(tmp_path: Path) -> None:
 
 def test_sync_completed(tmp_path: Path) -> None:
     """sync should transition running -> completed."""
-    (tmp_path / "simproject.toml").write_text('[project]\nname = "test"\n')
+    (tmp_path / "runops.toml").write_text('[project]\nname = "test"\n')
     run_dir = tmp_path / "runs" / "R20260327-0001"
     _create_run(run_dir, status="running", job_id="12345")
 
     with (
-        patch("simctl.cli.status.Path.cwd", return_value=tmp_path),
+        patch("runops.cli.status.Path.cwd", return_value=tmp_path),
         patch(
-            "simctl.slurm.query.query_job_status",
+            "runops.slurm.query.query_job_status",
             return_value=JobStatus(
                 run_state=RunState.COMPLETED, slurm_state="COMPLETED"
             ),
@@ -228,7 +228,7 @@ def test_sync_completed(tmp_path: Path) -> None:
     assert "running" in result.output
     assert "completed" in result.output
 
-    from simctl.core.manifest import read_manifest
+    from runops.core.manifest import read_manifest
 
     updated = read_manifest(run_dir)
     assert updated.run["status"] == "completed"
@@ -241,7 +241,7 @@ def test_sync_completed(tmp_path: Path) -> None:
 
 def test_sync_survey_dir_processes_all_runs(tmp_path: Path) -> None:
     """Passing a survey directory syncs every run inside it."""
-    (tmp_path / "simproject.toml").write_text('[project]\nname = "test"\n')
+    (tmp_path / "runops.toml").write_text('[project]\nname = "test"\n')
     survey = tmp_path / "runs" / "series_x"
     _create_run(
         survey / "R20260327-0001",
@@ -263,8 +263,8 @@ def test_sync_survey_dir_processes_all_runs(tmp_path: Path) -> None:
         return JobStatus(run_state=RunState.COMPLETED, slurm_state="COMPLETED")
 
     with (
-        patch("simctl.cli.status.Path.cwd", return_value=tmp_path),
-        patch("simctl.slurm.query.query_job_status", side_effect=fake_query),
+        patch("runops.cli.status.Path.cwd", return_value=tmp_path),
+        patch("runops.slurm.query.query_job_status", side_effect=fake_query),
     ):
         result = runner.invoke(app, ["runs", "sync", str(survey)])
 
@@ -276,7 +276,7 @@ def test_sync_survey_dir_processes_all_runs(tmp_path: Path) -> None:
 
 def test_sync_bulk_skips_runs_without_job_id(tmp_path: Path) -> None:
     """In multi-target mode, runs without job_id are silently skipped."""
-    (tmp_path / "simproject.toml").write_text('[project]\nname = "test"\n')
+    (tmp_path / "runops.toml").write_text('[project]\nname = "test"\n')
     survey = tmp_path / "runs" / "series_x"
     _create_run(
         survey / "R20260327-0001",
@@ -292,9 +292,9 @@ def test_sync_bulk_skips_runs_without_job_id(tmp_path: Path) -> None:
     )
 
     with (
-        patch("simctl.cli.status.Path.cwd", return_value=tmp_path),
+        patch("runops.cli.status.Path.cwd", return_value=tmp_path),
         patch(
-            "simctl.slurm.query.query_job_status",
+            "runops.slurm.query.query_job_status",
             return_value=JobStatus(
                 run_state=RunState.COMPLETED, slurm_state="COMPLETED"
             ),
@@ -313,16 +313,16 @@ def test_sync_bulk_skips_runs_without_job_id(tmp_path: Path) -> None:
 
 def test_sync_multi_run_arguments(tmp_path: Path) -> None:
     """Passing multiple run paths processes each one."""
-    (tmp_path / "simproject.toml").write_text('[project]\nname = "test"\n')
+    (tmp_path / "runops.toml").write_text('[project]\nname = "test"\n')
     run1 = tmp_path / "runs" / "R20260327-0001"
     run2 = tmp_path / "runs" / "R20260327-0002"
     _create_run(run1, run_id="R20260327-0001", status="running", job_id="11111")
     _create_run(run2, run_id="R20260327-0002", status="running", job_id="22222")
 
     with (
-        patch("simctl.cli.status.Path.cwd", return_value=tmp_path),
+        patch("runops.cli.status.Path.cwd", return_value=tmp_path),
         patch(
-            "simctl.slurm.query.query_job_status",
+            "runops.slurm.query.query_job_status",
             return_value=JobStatus(
                 run_state=RunState.COMPLETED, slurm_state="COMPLETED"
             ),
@@ -340,11 +340,11 @@ def test_sync_bulk_skips_terminal_states(tmp_path: Path) -> None:
 
     Without this skip, ``sync_run_action`` raises a precondition_failed
     error for terminal states (it only accepts submitted/running) and
-    ``simctl runs sync runs/`` would error out the moment any run in the
+    ``runops runs sync runs/`` would error out the moment any run in the
     survey has finished — exactly the wrong behaviour for monitoring a
     long survey.
     """
-    (tmp_path / "simproject.toml").write_text('[project]\nname = "test"\n')
+    (tmp_path / "runops.toml").write_text('[project]\nname = "test"\n')
     survey = tmp_path / "runs" / "series_x"
     _create_run(
         survey / "R20260327-0001",
@@ -366,9 +366,9 @@ def test_sync_bulk_skips_terminal_states(tmp_path: Path) -> None:
     )
 
     with (
-        patch("simctl.cli.status.Path.cwd", return_value=tmp_path),
+        patch("runops.cli.status.Path.cwd", return_value=tmp_path),
         patch(
-            "simctl.slurm.query.query_job_status",
+            "runops.slurm.query.query_job_status",
             return_value=JobStatus(
                 run_state=RunState.COMPLETED, slurm_state="COMPLETED"
             ),
@@ -387,11 +387,11 @@ def test_sync_bulk_skips_terminal_states(tmp_path: Path) -> None:
 
 def test_sync_single_terminal_run_reports_skip(tmp_path: Path) -> None:
     """Single-target sync of a terminal run prints a skip notice (no error)."""
-    (tmp_path / "simproject.toml").write_text('[project]\nname = "test"\n')
+    (tmp_path / "runops.toml").write_text('[project]\nname = "test"\n')
     run_dir = tmp_path / "runs" / "R20260327-0001"
     _create_run(run_dir, status="completed", job_id="11111")
 
-    with patch("simctl.cli.status.Path.cwd", return_value=tmp_path):
+    with patch("runops.cli.status.Path.cwd", return_value=tmp_path):
         result = runner.invoke(app, ["runs", "sync", str(run_dir)])
 
     assert result.exit_code == 0
@@ -401,16 +401,16 @@ def test_sync_single_terminal_run_reports_skip(tmp_path: Path) -> None:
 
 def test_status_multi_run_arguments(tmp_path: Path) -> None:
     """Status accepts multiple targets and prints each."""
-    (tmp_path / "simproject.toml").write_text('[project]\nname = "test"\n')
+    (tmp_path / "runops.toml").write_text('[project]\nname = "test"\n')
     run1 = tmp_path / "runs" / "R20260327-0001"
     run2 = tmp_path / "runs" / "R20260327-0002"
     _create_run(run1, run_id="R20260327-0001", status="running", job_id="11111")
     _create_run(run2, run_id="R20260327-0002", status="running", job_id="22222")
 
     with (
-        patch("simctl.cli.status.Path.cwd", return_value=tmp_path),
+        patch("runops.cli.status.Path.cwd", return_value=tmp_path),
         patch(
-            "simctl.cli.status.query_job_status",
+            "runops.cli.status.query_job_status",
             return_value=JobStatus(run_state=RunState.RUNNING, slurm_state="RUNNING"),
         ),
     ):

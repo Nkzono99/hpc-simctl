@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from simctl.core.exceptions import SurveyConfigError
-from simctl.core.survey import (
+from runops.core.exceptions import SurveyConfigError
+from runops.core.survey import (
     expand_axes,
     expand_survey,
     generate_display_name,

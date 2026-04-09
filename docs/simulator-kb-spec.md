@@ -565,5 +565,5 @@ example の場合:
 
 ## 仕様
 
-この cookbook は [Simulator Cookbook Spec v0.2](https://github.com/Nkzono99/hpc-simctl/blob/main/docs/simulator-kb-spec.md) に準拠する。
+この cookbook は [Simulator Cookbook Spec v0.2](https://github.com/Nkzono99/runops/blob/main/docs/simulator-kb-spec.md) に準拠する。
 ````

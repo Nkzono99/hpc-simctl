@@ -7,8 +7,8 @@ from typing import Any
 
 import pytest
 
-from simctl.adapters.base import SimulatorAdapter
-from simctl.adapters.registry import AdapterRegistry
+from runops.adapters.base import SimulatorAdapter
+from runops.adapters.registry import AdapterRegistry
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -163,14 +163,14 @@ def test_load_from_config_skips_already_registered(
 
 def test_global_registry_has_generic() -> None:
     """Importing the adapters package registers GenericAdapter globally."""
-    from simctl.adapters import list_adapters
+    from runops.adapters import list_adapters
 
     assert "generic" in list_adapters()
 
 
 def test_global_get_generic() -> None:
     """Global get() returns GenericAdapter for 'generic'."""
-    from simctl.adapters import get
-    from simctl.adapters.generic import GenericAdapter
+    from runops.adapters import get
+    from runops.adapters.generic import GenericAdapter
 
     assert get("generic") is GenericAdapter

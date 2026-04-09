@@ -1,4 +1,4 @@
-"""Tests for simctl analyze summarize/collect/plot commands."""
+"""Tests for runops analyze summarize/collect/plot commands."""
 
 from __future__ import annotations
 
@@ -11,8 +11,8 @@ from unittest.mock import MagicMock, patch
 import tomli_w
 from typer.testing import CliRunner
 
-from simctl.cli.main import app
-from simctl.core.analysis import ResolvedSurveyPlotRecipe, SurveyPlotRecipe
+from runops.cli.main import app
+from runops.core.analysis import ResolvedSurveyPlotRecipe, SurveyPlotRecipe
 
 runner = CliRunner()
 
@@ -58,7 +58,7 @@ class TestSummarize:
 
         mock_adapter_cls = MagicMock(return_value=mock_adapter)
 
-        with patch("simctl.core.analysis.get_adapter", return_value=mock_adapter_cls):
+        with patch("runops.core.analysis.get_adapter", return_value=mock_adapter_cls):
             result = runner.invoke(app, ["analyze", "summarize", str(run_dir)])
 
         assert result.exit_code == 0
@@ -75,7 +75,7 @@ class TestSummarize:
         run_dir = _create_run(tmp_path, "R20260327-0001")
 
         with patch(
-            "simctl.core.analysis.get_adapter",
+            "runops.core.analysis.get_adapter",
             side_effect=KeyError("not found"),
         ):
             result = runner.invoke(app, ["analyze", "summarize", str(run_dir)])
@@ -106,8 +106,8 @@ class TestSummarize:
 
     def test_summarize_with_case_script(self, tmp_path: Path) -> None:
         """Case-level summarize.py extends the adapter summary."""
-        # Project root with simproject.toml
-        with open(tmp_path / "simproject.toml", "wb") as f:
+        # Project root with runops.toml
+        with open(tmp_path / "runops.toml", "wb") as f:
             tomli_w.dump(_PROJECT_TOML, f)
 
         # Case script
@@ -139,7 +139,7 @@ class TestSummarize:
         mock_adapter.summarize.return_value = {"energy": 42.0}
         mock_adapter_cls = MagicMock(return_value=mock_adapter)
 
-        with patch("simctl.core.analysis.get_adapter", return_value=mock_adapter_cls):
+        with patch("runops.core.analysis.get_adapter", return_value=mock_adapter_cls):
             result = runner.invoke(app, ["analyze", "summarize", str(run_dir)])
 
         assert result.exit_code == 0
@@ -152,7 +152,7 @@ class TestSummarize:
 
     def test_summarize_with_project_script(self, tmp_path: Path) -> None:
         """Project-wide scripts/summarize.py is used when no case script."""
-        with open(tmp_path / "simproject.toml", "wb") as f:
+        with open(tmp_path / "runops.toml", "wb") as f:
             tomli_w.dump(_PROJECT_TOML, f)
 
         scripts_dir = tmp_path / "scripts"
@@ -173,7 +173,7 @@ class TestSummarize:
         mock_adapter.summarize.return_value = {"steps": 100}
         mock_adapter_cls = MagicMock(return_value=mock_adapter)
 
-        with patch("simctl.core.analysis.get_adapter", return_value=mock_adapter_cls):
+        with patch("runops.core.analysis.get_adapter", return_value=mock_adapter_cls):
             result = runner.invoke(app, ["analyze", "summarize", str(run_dir)])
 
         assert result.exit_code == 0
@@ -183,7 +183,7 @@ class TestSummarize:
 
     def test_summarize_case_script_takes_priority(self, tmp_path: Path) -> None:
         """Case script takes priority over project script."""
-        with open(tmp_path / "simproject.toml", "wb") as f:
+        with open(tmp_path / "runops.toml", "wb") as f:
             tomli_w.dump(_PROJECT_TOML, f)
 
         # Both case and project scripts
@@ -222,7 +222,7 @@ class TestSummarize:
         mock_adapter.summarize.return_value = {}
         mock_adapter_cls = MagicMock(return_value=mock_adapter)
 
-        with patch("simctl.core.analysis.get_adapter", return_value=mock_adapter_cls):
+        with patch("runops.core.analysis.get_adapter", return_value=mock_adapter_cls):
             result = runner.invoke(app, ["analyze", "summarize", str(run_dir)])
 
         assert result.exit_code == 0
@@ -232,7 +232,7 @@ class TestSummarize:
 
     def test_summarize_script_failure_is_warning(self, tmp_path: Path) -> None:
         """A broken script produces a warning, not a fatal error."""
-        with open(tmp_path / "simproject.toml", "wb") as f:
+        with open(tmp_path / "runops.toml", "wb") as f:
             tomli_w.dump(_PROJECT_TOML, f)
 
         scripts_dir = tmp_path / "scripts"
@@ -252,7 +252,7 @@ class TestSummarize:
         mock_adapter.summarize.return_value = {"ok": True}
         mock_adapter_cls = MagicMock(return_value=mock_adapter)
 
-        with patch("simctl.core.analysis.get_adapter", return_value=mock_adapter_cls):
+        with patch("runops.core.analysis.get_adapter", return_value=mock_adapter_cls):
             result = runner.invoke(app, ["analyze", "summarize", str(run_dir)])
 
         # Should succeed with adapter summary (script failure is warning)
@@ -264,7 +264,7 @@ class TestSummarize:
 
     def test_summarize_with_figures(self, tmp_path: Path) -> None:
         """Script can add figures to the summary."""
-        with open(tmp_path / "simproject.toml", "wb") as f:
+        with open(tmp_path / "runops.toml", "wb") as f:
             tomli_w.dump(_PROJECT_TOML, f)
 
         case_dir = tmp_path / "cases" / "mycase"
@@ -302,7 +302,7 @@ class TestSummarize:
         mock_adapter.summarize.return_value = {}
         mock_adapter_cls = MagicMock(return_value=mock_adapter)
 
-        with patch("simctl.core.analysis.get_adapter", return_value=mock_adapter_cls):
+        with patch("runops.core.analysis.get_adapter", return_value=mock_adapter_cls):
             result = runner.invoke(app, ["analyze", "summarize", str(run_dir)])
 
         assert result.exit_code == 0
@@ -314,7 +314,7 @@ class TestSummarize:
 
     def test_summarize_with_multisim_case_script(self, tmp_path: Path) -> None:
         """Case scripts under cases/<simulator>/<case>/ are discovered."""
-        with open(tmp_path / "simproject.toml", "wb") as f:
+        with open(tmp_path / "runops.toml", "wb") as f:
             tomli_w.dump(_PROJECT_TOML, f)
 
         case_dir = tmp_path / "cases" / "emses" / "mycase"
@@ -342,7 +342,7 @@ class TestSummarize:
         mock_adapter.summarize.return_value = {}
         mock_adapter_cls = MagicMock(return_value=mock_adapter)
 
-        with patch("simctl.core.analysis.get_adapter", return_value=mock_adapter_cls):
+        with patch("runops.core.analysis.get_adapter", return_value=mock_adapter_cls):
             result = runner.invoke(app, ["analyze", "summarize", str(run_dir)])
 
         assert result.exit_code == 0
@@ -409,7 +409,7 @@ class TestCollect:
         mock_adapter.summarize.return_value = {"energy": 12.5}
         mock_adapter_cls = MagicMock(return_value=mock_adapter)
 
-        with patch("simctl.core.analysis.get_adapter", return_value=mock_adapter_cls):
+        with patch("runops.core.analysis.get_adapter", return_value=mock_adapter_cls):
             result = runner.invoke(app, ["analyze", "collect", str(tmp_path)])
 
         assert result.exit_code == 0
@@ -539,7 +539,7 @@ class TestPlot:
         mock_result.points_plotted = 2
         mock_result.generated_summaries = 0
 
-        with patch("simctl.cli.analyze.render_survey_plot", return_value=mock_result):
+        with patch("runops.cli.analyze.render_survey_plot", return_value=mock_result):
             result = runner.invoke(
                 app,
                 ["analyze", "plot", str(tmp_path), "--x", "param.u", "--y", "energy"],
@@ -562,7 +562,7 @@ class TestPlot:
         )
 
         with patch(
-            "simctl.cli.analyze.list_survey_plot_recipes",
+            "runops.cli.analyze.list_survey_plot_recipes",
             return_value=(recipe,),
         ):
             result = runner.invoke(
@@ -600,11 +600,11 @@ class TestPlot:
 
         with (
             patch(
-                "simctl.cli.analyze.resolve_survey_plot_recipe",
+                "runops.cli.analyze.resolve_survey_plot_recipe",
                 return_value=resolved_recipe,
             ),
             patch(
-                "simctl.cli.analyze.render_survey_plot",
+                "runops.cli.analyze.render_survey_plot",
                 return_value=mock_result,
             ) as render_mock,
         ):

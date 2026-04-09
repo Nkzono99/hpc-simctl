@@ -1,4 +1,4 @@
-"""Tests for simctl.core.knowledge_source module."""
+"""Tests for runops.core.knowledge_source module."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from unittest.mock import patch
 
 import pytest
 
-from simctl.core.knowledge import load_candidate_facts
-from simctl.core.knowledge_source import (
+from runops.core.knowledge import load_candidate_facts
+from runops.core.knowledge_source import (
     KnowledgeConfig,
     KnowledgeSource,
     collect_external_knowledge,
@@ -28,7 +28,7 @@ from simctl.core.knowledge_source import (
 
 def _create_project(tmp_path: Path, extra_toml: str = "") -> Path:
     content = f'[project]\nname = "test-project"\n{extra_toml}'
-    (tmp_path / "simproject.toml").write_text(content)
+    (tmp_path / "runops.toml").write_text(content)
     return tmp_path
 
 
@@ -103,7 +103,7 @@ def test_load_knowledge_config_defaults(tmp_path: Path) -> None:
     assert config is not None
     assert config.enabled is True
     assert config.mount_dir == "refs/knowledge"
-    assert config.derived_dir == ".simctl/knowledge"
+    assert config.derived_dir == ".runops/knowledge"
     assert config.auto_sync_on_setup is True
     assert config.generate_claude_imports is True
     assert config.sources == []
@@ -181,7 +181,7 @@ def test_save_knowledge_source_preserves_schema_comment(tmp_path: Path) -> None:
         tmp_path,
         "\n# human note\n[knowledge]\nenabled = true\n",
     )
-    project_file = project_root / "simproject.toml"
+    project_file = project_root / "runops.toml"
     project_file.write_text(
         "#:schema https://example.test/simproject.json\n"
         "[project]\n"
@@ -309,7 +309,7 @@ def test_sync_source_path_copy_removes_deleted_files(tmp_path: Path) -> None:
 
 
 def test_sync_source_path_not_found(tmp_path: Path) -> None:
-    from simctl.core.exceptions import KnowledgeSourceError
+    from runops.core.exceptions import KnowledgeSourceError
 
     project = tmp_path / "project"
     project.mkdir()
@@ -337,7 +337,7 @@ def test_sync_source_git_clone(tmp_path: Path) -> None:
         mount="refs/knowledge/git-kb",
     )
 
-    with patch("simctl.core.knowledge_source.subprocess.run") as mock_run:
+    with patch("runops.core.knowledge_source.subprocess.run") as mock_run:
         mock_run.return_value.returncode = 0
         status = sync_source(project, source)
 
@@ -363,7 +363,7 @@ def test_sync_source_git_pull(tmp_path: Path) -> None:
         mount="refs/knowledge/git-kb",
     )
 
-    with patch("simctl.core.knowledge_source.subprocess.run") as mock_run:
+    with patch("runops.core.knowledge_source.subprocess.run") as mock_run:
         mock_run.return_value.returncode = 0
         status = sync_source(project, source)
 
@@ -484,7 +484,7 @@ def test_collect_external_knowledge_includes_project_and_profile_sources(
     kb_dir = _create_knowledge_source(tmp_path, "kb")
     other_project = tmp_path / "other-project"
     other_project.mkdir()
-    (other_project / ".simctl" / "insights").mkdir(parents=True)
+    (other_project / ".runops" / "insights").mkdir(parents=True)
     project = tmp_path / "project"
     project.mkdir()
     _create_project(
@@ -649,7 +649,7 @@ def test_import_external_insights_namespaces_by_source(tmp_path: Path) -> None:
     source_a = tmp_path / "alpha-project"
     source_b = tmp_path / "beta-project"
     for source_root in (source_a, source_b):
-        insights_dir = source_root / ".simctl" / "insights"
+        insights_dir = source_root / ".runops" / "insights"
         insights_dir.mkdir(parents=True, exist_ok=True)
         (insights_dir / "stability.md").write_text(
             "---\n"
@@ -681,8 +681,8 @@ def test_import_external_insights_namespaces_by_source(tmp_path: Path) -> None:
 
     assert imported == 2
     assert skipped == 0
-    assert (project / ".simctl" / "insights" / "alpha__stability.md").is_file()
-    assert (project / ".simctl" / "insights" / "beta__stability.md").is_file()
+    assert (project / ".runops" / "insights" / "alpha__stability.md").is_file()
+    assert (project / ".runops" / "insights" / "beta__stability.md").is_file()
 
 
 def test_import_external_insights_skips_existing_namespaced_file(
@@ -692,7 +692,7 @@ def test_import_external_insights_skips_existing_namespaced_file(
     project.mkdir()
     _create_project(project)
     source_root = tmp_path / "alpha-project"
-    insights_dir = source_root / ".simctl" / "insights"
+    insights_dir = source_root / ".runops" / "insights"
     insights_dir.mkdir(parents=True, exist_ok=True)
     (insights_dir / "stability.md").write_text(
         "---\n"
@@ -722,7 +722,7 @@ def test_import_external_facts_syncs_candidates_by_source(tmp_path: Path) -> Non
     project.mkdir()
     _create_project(project)
     source_root = tmp_path / "alpha-project"
-    facts_dir = source_root / ".simctl"
+    facts_dir = source_root / ".runops"
     facts_dir.mkdir(parents=True, exist_ok=True)
     (facts_dir / "facts.toml").write_text(
         "[[facts]]\n"

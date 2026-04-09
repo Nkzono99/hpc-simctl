@@ -1,4 +1,4 @@
-"""Tests for simctl runs list command."""
+"""Tests for runops runs list command."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from typing import Any
 import tomli_w
 from typer.testing import CliRunner
 
-from simctl.cli.main import app
+from runops.cli.main import app
 
 runner = CliRunner()
 

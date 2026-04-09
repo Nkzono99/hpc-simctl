@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from simctl.core.case import load_case, resolve_case
-from simctl.core.exceptions import CaseConfigError, CaseNotFoundError
+from runops.core.case import load_case, resolve_case
+from runops.core.exceptions import CaseConfigError, CaseNotFoundError
 
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 

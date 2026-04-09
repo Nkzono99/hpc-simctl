@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from simctl.launchers.mpiexec import MpiexecLauncher
+from runops.launchers.mpiexec import MpiexecLauncher
 
 
 class TestBuildLaunchCommand:

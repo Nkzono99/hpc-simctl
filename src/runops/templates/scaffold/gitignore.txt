@@ -1,0 +1,30 @@
+# Python venv
+.venv/
+
+# runops tool (cloned by runops init)
+tools/
+
+# Reference repos (cloned by runops init)
+refs/
+
+# Auto-generated knowledge indexes (insights/ and facts.toml are tracked)
+.runops/knowledge/
+.runops/environment.toml
+
+# Run work directory (simulator outputs, restart, logs, status snapshots)
+# Everything under work/ is regenerable from input/, so we exclude it whole
+# rather than trying to enumerate per-simulator output filenames.
+runs/**/work/
+runs/**/status/
+
+# Preprocessor-generated input files (created by EMSES preinp from plasma.toml)
+runs/**/input/plasma.inp
+
+# analysis cache / scratch (curated outputs in analysis/ remain tracked)
+runs/**/analysis/cache/
+runs/**/analysis/scratch/
+runs/**/analysis/.ipynb_checkpoints/
+
+# Personal agent overrides (not shared)
+CLAUDE.local.md
+.claude/settings.local.json

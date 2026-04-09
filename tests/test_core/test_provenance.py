@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from simctl.core.exceptions import ProvenanceError
-from simctl.core.provenance import (
+from runops.core.exceptions import ProvenanceError
+from runops.core.provenance import (
     ProvenanceInfo,
     collect_git_provenance,
     compute_executable_hash,

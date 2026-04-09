@@ -7,14 +7,14 @@ from pathlib import Path
 import pytest
 import tomli_w
 
-from simctl.core.discovery import (
+from runops.core.discovery import (
     check_run_id_uniqueness,
     collect_existing_run_ids,
     discover_runs,
     resolve_run,
     validate_uniqueness,
 )
-from simctl.core.exceptions import DuplicateRunIdError, RunNotFoundError
+from runops.core.exceptions import DuplicateRunIdError, RunNotFoundError
 
 
 def _make_run(runs_dir: Path, *path_parts: str, run_id: str = "R20260327-0001") -> Path:

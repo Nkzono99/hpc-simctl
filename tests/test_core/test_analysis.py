@@ -10,12 +10,12 @@ from unittest.mock import MagicMock, patch
 import pytest
 import tomli_w
 
-from simctl.core.analysis import (
+from runops.core.analysis import (
     list_survey_plot_recipes,
     prepare_survey_plot_data,
     resolve_survey_plot_recipe,
 )
-from simctl.core.exceptions import SimctlError
+from runops.core.exceptions import SimctlError
 
 
 def _create_run(
@@ -137,7 +137,7 @@ def test_list_survey_plot_recipes_reads_adapter_recipes(tmp_path: Path) -> None:
         }
     }
 
-    with patch("simctl.core.analysis.get_adapter", return_value=mock_adapter_cls):
+    with patch("runops.core.analysis.get_adapter", return_value=mock_adapter_cls):
         recipes = list_survey_plot_recipes(tmp_path)
 
     assert len(recipes) == 1
@@ -175,7 +175,7 @@ def test_resolve_survey_plot_recipe_uses_first_available_candidates(
         }
     }
 
-    with patch("simctl.core.analysis.get_adapter", return_value=mock_adapter_cls):
+    with patch("runops.core.analysis.get_adapter", return_value=mock_adapter_cls):
         resolved = resolve_survey_plot_recipe(tmp_path, "energy-vs-u")
 
     assert resolved.x == "param.u"

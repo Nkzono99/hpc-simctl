@@ -28,10 +28,10 @@ run の状態・由来・provenance はすべて `manifest.toml` に記録され
 
 ## ハーネス二重構造
 
-simctl は **2 種類のハーネス** を持つ:
+runops は **2 種類のハーネス** を持つ:
 
-1. **このリポジトリ自身の `.claude/`** — simctl 開発者向け
-2. **`src/simctl/templates/` → `simctl init` が生成するプロジェクト側ハーネス** — simctl ユーザーのプロジェクト向け
+1. **このリポジトリ自身の `.claude/`** — runops 開発者向け
+2. **`src/runops/templates/` → `runops init` が生成するプロジェクト側ハーネス** — runops ユーザーのプロジェクト向け
 
 `harness/builder.py` がプロジェクト側のハーネス生成を担う。
 `update-harness` が既存プロジェクトへの反映を担う。

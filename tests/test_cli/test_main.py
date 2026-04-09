@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typer.testing import CliRunner
 
-from simctl.cli.main import app
+from runops.cli.main import app
 
 runner = CliRunner()
 

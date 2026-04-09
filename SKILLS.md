@@ -1,4 +1,4 @@
-# SKILLS.md — hpc-simctl Agent Skills Reference
+# SKILLS.md — runops Agent Skills Reference
 
 AI エージェントが実行可能なスキル（操作手順）の定義。
 各スキルは action registry の action を組み合わせた高レベル手順。
@@ -11,7 +11,7 @@ AI エージェントが実行可能なスキル（操作手順）の定義。
 
 ### 手順
 
-1. `simctl context` で現在の project 状態を確認
+1. `runops context` で現在の project 状態を確認
 2. survey.toml の内容を確認 (パラメータ軸と値)
 3. `create_run` で各パラメータ組み合わせの run を生成
 4. 各 run に対して `submit_run` で Slurm に投入
@@ -56,13 +56,13 @@ AI エージェントが実行可能なスキル（操作手順）の定義。
 
 ## Skill: 知見の記録と活用 (`/learn`)
 
-**目的**: 実験結果から得られた知見を curated 層 (`.simctl/insights/`,
-`.simctl/facts.toml`) に永続化する
+**目的**: 実験結果から得られた知見を curated 層 (`.runops/insights/`,
+`.runops/facts.toml`) に永続化する
 
 ### 手順
 
-1. **`notes/` を素材として読む** — `simctl notes list` で日付一覧、
-   関連日を `simctl notes show <date>` で読んで散らばった観察・仮説・
+1. **`notes/` を素材として読む** — `runops notes list` で日付一覧、
+   関連日を `runops notes show <date>` で読んで散らばった観察・仮説・
    反例を集める
 2. completed run の結果を `summarize_run` で確認
 3. パラメータと結果の関係を分析
@@ -72,7 +72,7 @@ AI エージェントが実行可能なスキル（操作手順）の定義。
    - `scope_case`: 対象ケース
    - `param_name`: 関連パラメータ
    - `confidence`: high / medium / low
-5. `add_fact` で記録、または `simctl knowledge save` で markdown insight として保存
+5. `add_fact` で記録、または `runops knowledge save` で markdown insight として保存
 6. 既存 fact と矛盾する場合は `supersedes` で更新
 7. 出処になった `notes/<date>.md` の日付を insight 本文に書き残す
 
@@ -101,15 +101,15 @@ chain of thought を失わないようにする。
 ### 手順
 
 1. 何かしら新しい観察・意思決定・試行・議論があったら呼ぶ
-2. 1-2 行の `<title>` と本文を `simctl notes append` に渡す
+2. 1-2 行の `<title>` と本文を `runops notes append` に渡す
 3. 当該日付ファイルが無ければヘッダ付きで新規作成、あれば末尾に追記
 
 ```bash
 # inline
-simctl notes append "<title>" "<body>"
+runops notes append "<title>" "<body>"
 
 # stdin / heredoc
-simctl notes append "<title>" - <<'EOF'
+runops notes append "<title>" - <<'EOF'
 - A
 - B
 EOF
@@ -140,7 +140,7 @@ EOF
 - 1 entry = 1 トピック (混ぜない)
 - curated 層に直接書こうとしない (まず `/note`, あとで `/learn`)
 - 価値が出てきたら `notes/reports/<topic>.md` に refined version を書き、
-  さらに `simctl knowledge save` / `add-fact` で curated 化
+  さらに `runops knowledge save` / `add-fact` で curated 化
 
 ---
 
@@ -150,7 +150,7 @@ EOF
 
 ### 手順
 
-1. `simctl context --json` を実行
+1. `runops context --json` を実行
 2. 返却された JSON から以下を確認:
    - `runs.failed`: 失敗 run の数
    - `runs.running`: 実行中 run の数
@@ -176,7 +176,7 @@ EOF
 ### 手順
 
 1. 元 run が completed であることを確認
-2. `simctl extend` で継続 run を生成
+2. `runops extend` で継続 run を生成
 3. 新 run の manifest に `origin.parent_run` が設定されていることを確認
 4. 必要に応じてパラメータを調整
 5. `submit_run` で投入
@@ -186,7 +186,7 @@ EOF
 ## Action Quick Reference
 
 ```python
-from simctl.core.actions import execute_action
+from runops.core.actions import execute_action
 
 # Run 生成
 result = execute_action("create_run", project_root=root, case_name="scan")
@@ -230,7 +230,7 @@ result = execute_action("add_fact", project_root=root,
 ## Retry Suggestion Quick Reference
 
 ```python
-from simctl.core.retry import suggest_retry_for_run
+from runops.core.retry import suggest_retry_for_run
 
 suggestions = suggest_retry_for_run(run_dir)
 for s in suggestions:
@@ -240,7 +240,7 @@ for s in suggestions:
 ## Context Bundle Quick Reference
 
 ```python
-from simctl.core.context import build_project_context
+from runops.core.context import build_project_context
 
 ctx = build_project_context(project_root)
 print(ctx["runs"])              # state counts

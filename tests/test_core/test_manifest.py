@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from simctl.core.exceptions import ManifestError, ManifestNotFoundError
-from simctl.core.manifest import (
+from runops.core.exceptions import ManifestError, ManifestNotFoundError
+from runops.core.manifest import (
     ManifestData,
     read_manifest,
     update_manifest,

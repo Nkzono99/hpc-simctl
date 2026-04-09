@@ -8,8 +8,8 @@ from typing import Any
 
 import pytest
 
-from simctl.core import actions
-from simctl.core.actions import ActionStatus
+from runops.core import actions
+from runops.core.actions import ActionStatus
 
 
 def _signature_params(

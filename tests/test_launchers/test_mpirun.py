@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from simctl.launchers.mpirun import MpirunLauncher
+from runops.launchers.mpirun import MpirunLauncher
 
 
 class TestBuildLaunchCommand:

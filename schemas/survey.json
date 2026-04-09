@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "survey.toml",
-  "description": "Parameter survey definition for simctl (Cartesian product and co-varying expansion). See SPEC section 11 and docs/toml-reference.md.",
+  "description": "Parameter survey definition for runops (Cartesian product and co-varying expansion). See SPEC section 11 and docs/toml-reference.md.",
   "type": "object",
   "required": ["survey"],
   "properties": {
