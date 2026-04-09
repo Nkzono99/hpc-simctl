@@ -6,7 +6,11 @@ from pathlib import Path
 
 import tomli_w
 
-from simctl.core.retry import get_attempt_count, suggest_retry_for_run
+from simctl.core.retry import (
+    get_attempt_count,
+    suggest_retry,
+    suggest_retry_for_run,
+)
 
 
 def _create_failed_run(
@@ -67,3 +71,38 @@ def test_suggest_retry_for_run_respects_max_attempts_from_attempts_list(
     assert len(suggestions) == 1
     assert suggestions[0].action == "show_log"
     assert "Max attempts" in suggestions[0].rationale
+
+
+def test_get_attempt_count_handles_scalar_and_job_metadata_fallbacks() -> None:
+    assert get_attempt_count({"attempt": "2"}) == 2
+    assert get_attempt_count({"attempt": "abc"}) == 0
+    assert get_attempt_count({"job_id": "12345"}) == 1
+    assert get_attempt_count({}) == 0
+
+
+def test_suggest_retry_returns_known_and_unknown_reason_actions() -> None:
+    timeout = suggest_retry("timeout", attempt=1)
+    unknown = suggest_retry("mystery_failure", attempt=1)
+
+    assert timeout[0].action == "retry_run"
+    assert timeout[0].adjustments == {"walltime_factor": 1.5}
+    assert unknown[0].action == "show_log"
+    assert "Unknown failure reason" in unknown[0].rationale
+
+
+def test_suggest_retry_for_run_returns_empty_for_non_failed_run(tmp_path: Path) -> None:
+    run_dir = tmp_path / "R20260330-0002"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    with open(run_dir / "manifest.toml", "wb") as f:
+        tomli_w.dump(
+            {
+                "run": {
+                    "id": "R20260330-0002",
+                    "status": "completed",
+                },
+                "job": {},
+            },
+            f,
+        )
+
+    assert suggest_retry_for_run(run_dir) == []

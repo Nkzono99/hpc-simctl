@@ -3,10 +3,23 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import tomli_w
 
-from simctl.core.context import build_project_context
+from simctl.core.context import (
+    _collect_facts_summary,
+    _collect_knowledge_paths,
+    _collect_recent_failures,
+    _collect_run_stats,
+    _load_campaign_info,
+    _load_launcher_names,
+    _load_project_info,
+    _load_simulator_names,
+    build_project_context,
+)
+from simctl.core.exceptions import SimctlError
 
 
 def _write_toml(path: Path, data: dict) -> None:
@@ -153,3 +166,201 @@ def test_context_reports_diagnostics_for_broken_sections(tmp_path: Path) -> None
     assert ctx["facts"] == []
     assert ctx["section_status"]["facts"] == "error"
     assert any(diagnostic["section"] == "facts" for diagnostic in ctx["diagnostics"])
+
+
+def test_collect_run_stats_counts_states_and_broken_manifests(tmp_path: Path) -> None:
+    runs_dir = tmp_path / "runs"
+    _write_toml(
+        runs_dir / "R20260409-0001" / "manifest.toml",
+        {"run": {"id": "R20260409-0001", "status": "running"}},
+    )
+    _write_toml(
+        runs_dir / "R20260409-0002" / "manifest.toml",
+        {"run": {"id": "R20260409-0002", "status": "failed"}},
+    )
+    broken_run = runs_dir / "R20260409-0003"
+    broken_run.mkdir(parents=True, exist_ok=True)
+    (broken_run / "manifest.toml").write_text("not valid toml", encoding="utf-8")
+
+    diagnostics: list[dict[str, str]] = []
+    section_status: dict[str, str] = {}
+
+    stats = _collect_run_stats(tmp_path, diagnostics, section_status)
+
+    assert stats["running"] == 1
+    assert stats["failed"] == 1
+    assert stats["unknown"] == 1
+    assert stats["total"] == 3
+    assert diagnostics == []
+
+
+def test_collect_recent_failures_returns_only_failed_runs(tmp_path: Path) -> None:
+    runs_dir = tmp_path / "runs"
+    _write_toml(
+        runs_dir / "R20260409-0001" / "manifest.toml",
+        {
+            "run": {
+                "id": "R20260409-0001",
+                "status": "failed",
+                "failure_reason": "timeout",
+                "display_name": "first",
+            }
+        },
+    )
+    _write_toml(
+        runs_dir / "R20260409-0002" / "manifest.toml",
+        {
+            "run": {
+                "id": "R20260409-0002",
+                "status": "completed",
+                "display_name": "second",
+            }
+        },
+    )
+    _write_toml(
+        runs_dir / "R20260409-0003" / "manifest.toml",
+        {
+            "run": {
+                "id": "R20260409-0003",
+                "status": "failed",
+                "failure_reason": "oom",
+                "display_name": "third",
+            }
+        },
+    )
+
+    failures = _collect_recent_failures(tmp_path, [], {}, limit=1)
+
+    assert failures == [
+        {
+            "run_id": "R20260409-0001",
+            "reason": "timeout",
+            "display_name": "first",
+        }
+    ]
+
+
+def test_collect_facts_summary_serializes_local_and_candidate_fields(
+    tmp_path: Path,
+) -> None:
+    diagnostics: list[dict[str, str]] = []
+    section_status: dict[str, str] = {}
+    facts = [
+        SimpleNamespace(
+            id="f001",
+            claim="keep dt small",
+            confidence="high",
+            fact_type="constraint",
+            simulator="emses",
+            source_run="R20260409-0001",
+            evidence_ref="run:R20260409-0001",
+            storage="local",
+            transport_source="",
+        ),
+        SimpleNamespace(
+            id="cand:shared:f002",
+            claim="candidate fact",
+            confidence="medium",
+            fact_type="observation",
+            simulator="beach",
+            source_run="",
+            evidence_ref="fact:shared:f002",
+            storage="candidate",
+            transport_source="shared",
+        ),
+    ]
+
+    with patch("simctl.core.knowledge.query_facts", return_value=facts):
+        summary = _collect_facts_summary(tmp_path, diagnostics, section_status)
+
+    assert summary[0]["id"] == "f001"
+    assert summary[0]["storage"] == "local"
+    assert summary[1]["id"] == "cand:shared:f002"
+    assert summary[1]["transport_source"] == "shared"
+
+
+def test_collect_knowledge_paths_records_warning_on_integration_failure(
+    tmp_path: Path,
+) -> None:
+    refs_repo = tmp_path / "refs" / "emses-docs"
+    refs_repo.mkdir(parents=True)
+    imports_file = tmp_path / ".simctl" / "knowledge" / "enabled" / "imports.md"
+    imports_file.parent.mkdir(parents=True, exist_ok=True)
+    imports_file.write_text("@refs/emses-docs/README.md\n", encoding="utf-8")
+    facts_file = tmp_path / ".simctl" / "facts.toml"
+    facts_file.parent.mkdir(parents=True, exist_ok=True)
+    facts_file.write_text("", encoding="utf-8")
+    candidate_dir = tmp_path / ".simctl" / "knowledge" / "candidates" / "facts"
+    candidate_dir.mkdir(parents=True, exist_ok=True)
+    (candidate_dir / "shared.toml").write_text("", encoding="utf-8")
+    insight_dir = tmp_path / ".simctl" / "insights"
+    insight_dir.mkdir(parents=True, exist_ok=True)
+    (insight_dir / "latest.md").write_text(
+        "---\ncreated: 2026-04-09\ntype: result\n---\n\ncontent\n",
+        encoding="utf-8",
+    )
+
+    diagnostics: list[dict[str, str]] = []
+    section_status: dict[str, str] = {}
+
+    with (
+        patch(
+            "simctl.core.knowledge_source.load_knowledge_config",
+            return_value=SimpleNamespace(enabled=True),
+        ),
+        patch(
+            "simctl.core.knowledge_source.collect_external_knowledge",
+            side_effect=RuntimeError("integration unavailable"),
+        ),
+    ):
+        knowledge = _collect_knowledge_paths(tmp_path, diagnostics, section_status)
+
+    assert knowledge["refs_repos"] == ["emses-docs"]
+    assert knowledge["imports_ready"] is True
+    assert knowledge["facts_file"] == str(facts_file)
+    assert knowledge["candidate_fact_sources"] == 1
+    assert knowledge["knowledge_enabled"] is True
+    assert knowledge["insights_count"] == 1
+    assert section_status["knowledge"] == "warning"
+    assert diagnostics[0]["section"] == "knowledge"
+
+
+def test_build_project_context_marks_available_actions_as_degraded_on_error(
+    tmp_path: Path,
+) -> None:
+    _write_toml(tmp_path / "simproject.toml", {"project": {"name": "demo"}})
+
+    with patch("simctl.core.actions.list_actions", side_effect=RuntimeError("boom")):
+        ctx = build_project_context(tmp_path)
+
+    assert ctx["available_actions"] == []
+    assert ctx["status"] == "degraded"
+    assert ctx["section_status"]["available_actions"] == "error"
+    assert any(
+        diagnostic["section"] == "available_actions"
+        for diagnostic in ctx["diagnostics"]
+    )
+
+
+def test_context_section_helpers_record_simctl_errors(tmp_path: Path) -> None:
+    diagnostics: list[dict[str, str]] = []
+    section_status: dict[str, str] = {}
+
+    with patch("simctl.core.project.load_project", side_effect=SimctlError("broken")):
+        project = _load_project_info(tmp_path, diagnostics, section_status)
+        simulators = _load_simulator_names(tmp_path, diagnostics, section_status)
+        launchers = _load_launcher_names(tmp_path, diagnostics, section_status)
+
+    with patch(
+        "simctl.core.campaign.load_campaign", side_effect=SimctlError("missing")
+    ):
+        campaign = _load_campaign_info(tmp_path, diagnostics, section_status)
+
+    assert project == {"name": "", "root": str(tmp_path)}
+    assert simulators == []
+    assert launchers == []
+    assert campaign == {}
+    assert section_status["project"] == "error"
+    assert section_status["campaign"] == "error"
+    assert section_status["simulators"] == "error"
+    assert section_status["launchers"] == "error"

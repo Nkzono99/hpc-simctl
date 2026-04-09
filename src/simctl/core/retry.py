@@ -151,12 +151,14 @@ def get_attempt_count(job_data: dict[str, Any]) -> int:
     if isinstance(attempts, list) and attempts:
         return len(attempts)
 
-    raw_attempt = job_data.get("attempt", 0)
-    if isinstance(raw_attempt, int):
+    raw_attempt = job_data.get("attempt")
+    if isinstance(raw_attempt, int) and raw_attempt > 0:
         return raw_attempt
     if isinstance(raw_attempt, str):
         try:
-            return int(raw_attempt)
+            parsed = int(raw_attempt)
+            if parsed > 0:
+                return parsed
         except ValueError:
             pass
 
