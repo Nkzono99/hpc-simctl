@@ -71,6 +71,7 @@ hpc-simctl/
         knowledge.py    # simctl knowledge / knowledge source
         config.py       # simctl config
         update.py       # simctl update
+        update_harness.py # simctl update-harness
         update_refs.py  # simctl update-refs
         run_lookup.py   # run path / id lookup helper
       core/             # ドメインロジック
@@ -155,6 +156,7 @@ hpc-simctl/
 | `simctl config show` | 設定表示 |
 | `simctl config add-simulator` | シミュレータ追加 (対話型) |
 | `simctl config add-launcher` | ランチャー追加 (対話型) |
+| `simctl update-harness` | ハーネスファイル再生成 (CLAUDE.md, rules, skills 等) |
 | `simctl update-refs` | refs/ リポジトリ更新 + ナレッジインデックス再生成 |
 | `simctl knowledge save` | 知見を .simctl/insights/ に保存 |
 | `simctl knowledge add-fact` | 構造化 fact を .simctl/facts.toml に追加 |

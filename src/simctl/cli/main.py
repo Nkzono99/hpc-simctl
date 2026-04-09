@@ -26,6 +26,7 @@ from simctl.cli.setup import setup
 from simctl.cli.status import status, sync
 from simctl.cli.submit import run_cmd
 from simctl.cli.update import update
+from simctl.cli.update_harness import update_harness
 from simctl.cli.update_refs import update_refs
 
 case_app = typer.Typer(
@@ -88,6 +89,7 @@ app.add_typer(runs_app, name="runs")
 app.add_typer(analyze_app, name="analyze")
 app.add_typer(notes_app, name="notes")
 app.command("update")(update)
+app.command("update-harness")(update_harness)
 app.command("update-refs")(update_refs)
 
 if __name__ == "__main__":

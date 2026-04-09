@@ -16,7 +16,7 @@ import typer
 from simctl.core.discovery import validate_uniqueness
 from simctl.core.exceptions import DuplicateRunIdError, ProjectConfigError
 from simctl.core.project import load_project
-from simctl.harness import build_claude_settings
+from simctl.harness.builder import _collect_doc_repos, _collect_pip_packages
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -192,46 +192,6 @@ def _build_simulators_toml(simulator_names: list[str]) -> str:
     return buf.getvalue().decode("utf-8")
 
 
-def _collect_pip_packages(simulator_names: list[str]) -> list[str]:
-    """Collect unique pip packages from adapters."""
-    import simctl.adapters  # noqa: F401
-    from simctl.adapters.registry import get_global_registry
-
-    registry = get_global_registry()
-    seen: set[str] = set()
-    packages: list[str] = []
-    for sim_name in simulator_names:
-        try:
-            adapter_cls = registry.get(sim_name)
-            for pkg in adapter_cls.pip_packages():
-                if pkg not in seen:
-                    seen.add(pkg)
-                    packages.append(pkg)
-        except KeyError:
-            pass
-    return packages
-
-
-def _collect_doc_repos(simulator_names: list[str]) -> list[tuple[str, str]]:
-    """Collect unique doc repos from adapters."""
-    import simctl.adapters  # noqa: F401
-    from simctl.adapters.registry import get_global_registry
-
-    registry = get_global_registry()
-    seen: set[str] = set()
-    repos: list[tuple[str, str]] = []
-    for sim_name in simulator_names:
-        try:
-            adapter_cls = registry.get(sim_name)
-            for url, dest in adapter_cls.doc_repos():
-                if dest not in seen:
-                    seen.add(dest)
-                    repos.append((url, dest))
-        except KeyError:
-            pass
-    return repos
-
-
 def _clone_doc_repos(
     project_dir: Path, simulator_names: list[str]
 ) -> tuple[list[str], list[str]]:
@@ -271,29 +231,6 @@ def _clone_doc_repos(
             )
 
     return created, skipped
-
-
-def _build_simulator_guides(simulator_names: list[str]) -> str:
-    """Collect agent_guide() from adapters for the given simulators."""
-    import simctl.adapters  # noqa: F401
-    from simctl.adapters.registry import get_global_registry
-
-    registry = get_global_registry()
-    parts: list[str] = []
-    for sim_name in simulator_names:
-        try:
-            adapter_cls = registry.get(sim_name)
-            parts.append(adapter_cls.agent_guide())
-        except KeyError:
-            pass
-    return "\n".join(parts)
-
-
-def _build_cookbook_rule() -> str:
-    """Load the cookbook rule template for .claude/rules/."""
-    from simctl.templates import load_static
-
-    return load_static("rules/cookbook.md")
 
 
 def _discover_agent_docs(
@@ -378,94 +315,6 @@ def _prepare_knowledge_imports(
             knowledge_imports_path = f"{render_config.derived_dir}/enabled/imports.md"
 
     return knowledge_imports_path
-
-
-def _build_agent_md(
-    doc_name: str,
-    project_name: str,
-    simulator_names: list[str],
-    *,
-    knowledge_imports_path: str = "",
-) -> str:
-    """Build shared agent instructions for CLAUDE.md / AGENTS.md."""
-    doc_repos = _collect_doc_repos(simulator_names) if simulator_names else []
-
-    from simctl.templates import get_jinja_env
-
-    env = get_jinja_env()
-    template = env.get_template("agent.md")
-    return template.render(
-        doc_name=doc_name,
-        project_name=project_name,
-        doc_repos=doc_repos,
-        knowledge_imports_path=knowledge_imports_path,
-    )
-
-
-def _build_claude_md(
-    project_name: str,
-    simulator_names: list[str],
-    *,
-    knowledge_imports_path: str = "",
-) -> str:
-    """Build CLAUDE.md content."""
-    return _build_agent_md(
-        "CLAUDE.md",
-        project_name,
-        simulator_names,
-        knowledge_imports_path=knowledge_imports_path,
-    )
-
-
-def _build_agents_md(
-    project_name: str,
-    simulator_names: list[str],
-    *,
-    knowledge_imports_path: str = "",
-) -> str:
-    """Build AGENTS.md content."""
-    return _build_agent_md(
-        "AGENTS.md",
-        project_name,
-        simulator_names,
-        knowledge_imports_path=knowledge_imports_path,
-    )
-
-
-def _build_skills(project_name: str, simulator_names: list[str]) -> dict[str, str]:
-    """Build individual SKILL.md contents for .claude/skills/.
-
-    Returns:
-        Mapping of ``<skill-name>/SKILL.md`` relative path to rendered content.
-    """
-    pip_pkgs = _collect_pip_packages(simulator_names) if simulator_names else []
-    if pip_pkgs:
-        pip_install_line = f"uv pip install {' '.join(pip_pkgs)}"
-    else:
-        pip_install_line = "# uv pip install <必要なパッケージ>"
-
-    skills_dir = Path(__file__).resolve().parent.parent / "templates" / "skills"
-    results: dict[str, str] = {}
-    for skill_path in sorted(skills_dir.iterdir()):
-        if not skill_path.is_dir():
-            continue
-        skill_md = skill_path / "SKILL.md"
-        if not skill_md.exists():
-            continue
-        content = skill_md.read_text(encoding="utf-8")
-        # Apply Jinja2 substitutions only if template variables are present
-        if "{{" in content:
-            from simctl.templates import get_jinja_env
-
-            env = get_jinja_env()
-            template = env.from_string(content)
-            content = template.render(
-                project_name=project_name,
-                pip_install_line=pip_install_line,
-            )
-        rel = f"{skill_path.name}/SKILL.md"
-        results[rel] = content
-    return results
 
 
 def _get_data_path() -> Path:
@@ -1092,37 +941,6 @@ def _bootstrap_environment(
     typer.echo("  Then: simctl doctor")
 
 
-def _create_subdirectory_claude_md(
-    project_dir: Path,
-    sim_names: list[str],
-    created: list[str],
-    skipped: list[str],
-) -> None:
-    """Create context-specific CLAUDE.md in cases/ and runs/ subdirectories.
-
-    These are lazily loaded by Claude Code when the agent navigates into
-    the subdirectory, providing focused context without bloating the root
-    CLAUDE.md.
-    """
-    from simctl.templates import load_static
-
-    # cases/CLAUDE.md
-    cases_md = project_dir / "cases" / "CLAUDE.md"
-    if cases_md.parent.exists():
-        if _write_if_missing(cases_md, load_static("scaffold/cases_claude.md")):
-            created.append("cases/CLAUDE.md")
-        else:
-            skipped.append("cases/CLAUDE.md")
-
-    # runs/CLAUDE.md
-    runs_md = project_dir / "runs" / "CLAUDE.md"
-    if runs_md.parent.exists():
-        if _write_if_missing(runs_md, load_static("scaffold/runs_claude.md")):
-            created.append("runs/CLAUDE.md")
-        else:
-            skipped.append("runs/CLAUDE.md")
-
-
 def init(
     simulators: Annotated[
         Optional[list[str]],
@@ -1139,6 +957,13 @@ def init(
     yes: Annotated[
         bool,
         typer.Option("--yes", "-y", help="Skip interactive prompts, use defaults."),
+    ] = False,
+    no_upstream_feedback: Annotated[
+        bool,
+        typer.Option(
+            "--no-upstream-feedback",
+            help="Do not include the upstream-feedback rule for the AI agent.",
+        ),
     ] = False,
     simctl_repo: Annotated[
         str,
@@ -1174,10 +999,15 @@ def init(
     created: list[str] = []
     skipped: list[str] = []
 
+    upstream_feedback = not no_upstream_feedback
+
     # simproject.toml
+    harness_line = (
+        f"\n[harness]\nupstream_feedback = {'true' if upstream_feedback else 'false'}\n"
+    )
     simproject_content = (
         f"#:schema {_SCHEMA_BASE_URL}/simproject.json\n"
-        f'[project]\nname = "{project_name}"\ndescription = ""\n'
+        f'[project]\nname = "{project_name}"\ndescription = ""\n' + harness_line
     )
     if _write_if_missing(project_dir / _SIMPROJECT_FILE, simproject_content):
         created.append(_SIMPROJECT_FILE)
@@ -1340,75 +1170,27 @@ def init(
         sync_sources=True,
     )
 
-    # CLAUDE.md (use sim_names from earlier — may come from args or interactive)
-    claude_content = _build_claude_md(
+    # Build all harness files (CLAUDE.md, AGENTS.md, skills, rules,
+    # settings.json, subdirectory CLAUDE.md) via the shared builder so that
+    # `simctl update-harness` can re-render the same set later.
+    from simctl.harness.builder import build_harness_bundle, save_harness_lock
+
+    harness = build_harness_bundle(
         project_name,
         sim_names,
+        upstream_feedback=upstream_feedback,
         knowledge_imports_path=knowledge_imports_path,
     )
-    if _write_if_missing(project_dir / _CLAUDE_MD, claude_content):
-        created.append(_CLAUDE_MD)
-    else:
-        skipped.append(_CLAUDE_MD)
-
-    # AGENTS.md
-    agents_content = _build_agents_md(
-        project_name,
-        sim_names,
-        knowledge_imports_path=knowledge_imports_path,
-    )
-    if _write_if_missing(project_dir / _AGENTS_MD, agents_content):
-        created.append(_AGENTS_MD)
-    else:
-        skipped.append(_AGENTS_MD)
-
-    # .claude/skills/<name>/SKILL.md
-    skills = _build_skills(project_name, sim_names)
-    skills_base = project_dir / _SKILLS_DIR
-    skills_base.mkdir(parents=True, exist_ok=True)
-    for rel_path, content in skills.items():
-        skill_file = skills_base / rel_path
-        skill_file.parent.mkdir(parents=True, exist_ok=True)
-        display = f"{_SKILLS_DIR}/{rel_path}"
-        if _write_if_missing(skill_file, content):
-            created.append(display)
+    for rel_path, content in sorted(harness.files.items()):
+        full_path = project_dir / rel_path
+        full_path.parent.mkdir(parents=True, exist_ok=True)
+        if _write_if_missing(full_path, content):
+            created.append(rel_path)
         else:
-            skipped.append(display)
+            skipped.append(rel_path)
 
-    # .claude/settings.json (team-shared permissions)
-    # Note: PreToolUse hooks are intentionally NOT scaffolded.  Behavioural
-    # expectations (submit approval, run-directory protection, Bash write
-    # guards) live in .claude/rules/simctl-workflow.md instead so the agent
-    # reads them without forcing per-action shell hooks on the user.
-    claude_settings_path = project_dir / _CLAUDE_SETTINGS
-    claude_settings_path.parent.mkdir(parents=True, exist_ok=True)
-    if _write_if_missing(claude_settings_path, build_claude_settings()):
-        created.append(_CLAUDE_SETTINGS)
-    else:
-        skipped.append(_CLAUDE_SETTINGS)
-
-    # .claude/rules/ (project-wide rules, split from CLAUDE.md)
-    rules_base = project_dir / _RULES_DIR
-    rules_base.mkdir(parents=True, exist_ok=True)
-    rules_to_write: list[tuple[str, str]] = [
-        ("simctl-workflow.md", load_static("scaffold/rules/simctl-workflow.md")),
-        ("plan-before-act.md", load_static("scaffold/rules/plan-before-act.md")),
-    ]
-    # Add cookbook rule if any simulator has a cookbook
-    doc_repos = _collect_doc_repos(sim_names) if sim_names else []
-    if doc_repos:
-        cookbook_rule = _build_cookbook_rule()
-        rules_to_write.append(("cookbook.md", cookbook_rule))
-    for rule_name, rule_content in rules_to_write:
-        rule_path = rules_base / rule_name
-        display = f"{_RULES_DIR}/{rule_name}"
-        if _write_if_missing(rule_path, rule_content):
-            created.append(display)
-        else:
-            skipped.append(display)
-
-    # Subdirectory CLAUDE.md files (lazy-loaded context)
-    _create_subdirectory_claude_md(project_dir, sim_names, created, skipped)
+    # Persist template hashes so update-harness can detect user edits.
+    save_harness_lock(project_dir, harness.hashes())
 
     # .vscode/settings.json
     vscode_dir = project_dir / _VSCODE_DIR

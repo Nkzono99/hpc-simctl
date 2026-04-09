@@ -46,6 +46,7 @@ _ALLOW_BASH: Final[tuple[str, ...]] = (
     "Bash(simctl knowledge source render*)",
     # Refs / config additions (mutates the corresponding TOML, which is
     # itself ask-listed below — the resulting prompt happens once, not twice)
+    "Bash(simctl update-harness*)",
     "Bash(simctl update-refs*)",
     "Bash(simctl config add-simulator*)",
     "Bash(simctl config add-launcher*)",
