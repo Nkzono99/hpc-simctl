@@ -6,10 +6,63 @@ on:
       - "v*"
 
 permissions:
+  contents: read
   id-token: write  # trusted publishing
 
 jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Validate tag matches package version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python - <<'PY'
+          import os
+          import pathlib
+          import tomllib
+
+          tag = os.environ["RELEASE_TAG"]
+          if not tag.startswith("v"):
+              raise SystemExit(f"Release tag must start with 'v': {tag!r}")
+
+          version = tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"]
+          expected = f"v{version}"
+          if tag != expected:
+              raise SystemExit(
+                  f"Release tag {tag!r} does not match pyproject version {version!r} "
+                  f"(expected {expected!r})"
+              )
+
+          print(f"Validated release tag {tag} matches package version {version}")
+          PY
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Ruff format check
+        run: uv run ruff format --check src/ tests/
+
+      - name: Ruff lint
+        run: uv run ruff check src/ tests/
+
+      - name: Mypy
+        run: uv run mypy src/
+
+      - name: Run tests with coverage floor
+        # Keep release verification aligned with CI's no-regression coverage gate.
+        run: uv run pytest --cov=simctl --cov-report=term-missing --cov-fail-under=74
+
   build:
+    needs: verify
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6

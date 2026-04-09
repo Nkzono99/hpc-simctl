@@ -46,5 +46,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --dev
 
-      - name: Run tests
-        run: uv run pytest --cov=simctl --cov-report=term-missing
+      - name: Run tests with coverage floor
+        # Keep a no-regression gate near the current suite total; raise this
+        # threshold as low-covered modules gain tests.
+        run: uv run pytest --cov=simctl --cov-report=term-missing --cov-fail-under=74
