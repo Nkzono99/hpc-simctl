@@ -16,24 +16,27 @@
       "Bash(python -c *)",
       "Bash(wc -l *)",
       "Bash(ls *)",
-      "Bash(find *)",
-      "Bash(head *)",
-      "Bash(tail *)",
-      "Bash(cat *)",
       "Edit(src/**)",
       "Edit(tests/**)",
+      "Edit(docs/**)",
       "Edit(CLAUDE.md)",
       "Edit(AGENTS.md)",
+      "Edit(SPEC.md)",
       "Edit(.claude/agents/**)",
       "Edit(.claude/rules/**)",
       "Edit(.claude/skills/**)",
-      "Edit(.claude/commands/**)",
       "Write(src/**)",
       "Write(tests/**)",
+      "Write(docs/**)",
       "Write(.claude/agents/**)",
       "Write(.claude/rules/**)",
-      "Write(.claude/skills/**)",
-      "Write(.claude/commands/**)"
+      "Write(.claude/skills/**)"
+    ],
+    "ask": [
+      "Edit(pyproject.toml)",
+      "Edit(.claude/settings.json)",
+      "Edit(.github/**)",
+      "Bash(git push*)"
     ],
     "deny": [
       "Bash(rm -rf *)",
@@ -42,6 +45,7 @@
       "Read(~/.ssh/**)",
       "Read(~/.aws/**)",
       "Read(~/.config/gcloud/**)"
-    ]
+    ],
+    "disableBypassPermissionsMode": "disable"
   }
 }

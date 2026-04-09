@@ -13,11 +13,14 @@ from typing import Final
 # updates, and local git commits, lives here.
 _ALLOW_BASH: Final[tuple[str, ...]] = (
     # Read-only inspection
+    "Bash(simctl --help*)",
+    "Bash(simctl --version*)",
     "Bash(simctl context*)",
     "Bash(simctl runs list*)",
     "Bash(simctl runs status*)",
     "Bash(simctl runs sync*)",
     "Bash(simctl runs jobs*)",
+    "Bash(simctl runs dashboard*)",
     "Bash(simctl runs history*)",
     "Bash(simctl runs log*)",
     "Bash(simctl doctor*)",
@@ -38,12 +41,17 @@ _ALLOW_BASH: Final[tuple[str, ...]] = (
     "Bash(simctl knowledge facts*)",
     "Bash(simctl knowledge save*)",
     "Bash(simctl knowledge add-fact*)",
+    "Bash(simctl knowledge promote-fact*)",
     "Bash(simctl knowledge source list*)",
     "Bash(simctl knowledge source status*)",
     "Bash(simctl knowledge source attach*)",
     "Bash(simctl knowledge source detach*)",
     "Bash(simctl knowledge source sync*)",
     "Bash(simctl knowledge source render*)",
+    # Notes (lab notebook, append-only by design)
+    "Bash(simctl notes append*)",
+    "Bash(simctl notes list*)",
+    "Bash(simctl notes show*)",
     # Refs / config additions (mutates the corresponding TOML, which is
     # itself ask-listed below — the resulting prompt happens once, not twice)
     "Bash(simctl update-harness*)",
@@ -91,6 +99,7 @@ _ALLOW_EDIT_PATHS: Final[tuple[str, ...]] = (
     "/surveys/**",
     "/runs/**/survey.toml",
     "/docs/**",
+    "/notes/**",
     "/README.md",
     "/tools/hpc-simctl/**",
     "/.claude/rules/**",

@@ -5,6 +5,11 @@
 campaign 設計、case / survey 編集、run 生成、投入、監視、解析、知見整理を進めます。
 現在の標準ハーネスは Claude Code / `CLAUDE.md` です。`AGENTS.md` は同じ運用ルールを共有する補助ファイルとして置いています。
 
+## コミュニケーション
+
+- **日本語で応答する**。コード・コマンド・変数名・エラーメッセージは英語のまま
+- commit message は英語 (`fix:`, `feat:`, `refactor:`, `test:`, `docs:`)
+
 ## まずやること
 
 0. **venv を activate する** — `source .venv/bin/activate` (Linux/Mac) / `.venv\Scripts\activate` (Windows)
