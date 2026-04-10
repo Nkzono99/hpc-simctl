@@ -129,7 +129,13 @@ def sync(
         RunState.PURGED.value,
     }
 
+    from collections import Counter
+
     failures = 0
+    state_counts: Counter[str] = Counter()
+    changed = 0
+    total = 0
+
     for run_dir in targets:
         try:
             manifest = read_manifest(run_dir)
@@ -138,11 +144,15 @@ def sync(
             failures += 1
             continue
 
+        total += 1
+
         # In multi-target / bulk mode, runs without a job_id are skipped
         # silently — they typically belong to ``created`` runs that haven't
         # been submitted yet.
         if not manifest.job.get("job_id", ""):
             if multi:
+                state = str(manifest.run.get("status", "created"))
+                state_counts[state] += 1
                 continue
             run_id_str = manifest.run.get("id", run_dir.name)
             typer.echo(
@@ -158,6 +168,7 @@ def sync(
         # in bulk mode so the rest of the survey still gets processed.
         current_state = str(manifest.run.get("status", ""))
         if current_state in terminal_states:
+            state_counts[current_state] += 1
             if multi:
                 continue
             run_id_str = manifest.run.get("id", run_dir.name)
@@ -174,14 +185,38 @@ def sync(
             failures += 1
             continue
 
+        after = str(result.state_after or current_state)
+        state_counts[after] += 1
+
         if result.state_before == result.state_after:
             typer.echo(f"{run_id}: state unchanged ({result.state_after})")
         else:
+            changed += 1
             msg = f"{run_id}: {result.state_before} -> {result.state_after}"
             failure_reason = str(result.data.get("failure_reason", ""))
             if failure_reason:
                 msg += f" (reason: {failure_reason})"
             typer.echo(msg)
+
+    # Print summary when multiple targets are involved
+    if multi and total > 0:
+        parts = []
+        for state in (
+            "completed",
+            "running",
+            "submitted",
+            "created",
+            "failed",
+            "cancelled",
+            "archived",
+            "purged",
+        ):
+            count = state_counts.get(state, 0)
+            if count:
+                parts.append(f"{count} {state}")
+        summary_line = ", ".join(parts)
+        typer.echo(f"\nSummary: {summary_line}  ({total} total)")
+        typer.echo(f"         {changed} state(s) changed in this sync")
 
     if failures:
         raise typer.Exit(code=1)
