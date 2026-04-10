@@ -90,6 +90,25 @@ srun ./mpiemses3D input/plasma.toml -o work/latest
 date
 ```
 
+## QOS (Quality of Service)
+
+camphor では **partition 名と QOS 名が一致** しており、partition を指定すれば
+対応する QOS が暗黙的に適用される。
+
+- `sbatch --qos=...` を **直接指定すると `forbidden option` エラー** になる
+  (Fujitsu Slurm 拡張による制限)
+- そのため `case.toml` の `qos` フィールドや `runops runs submit --qos` は
+  **camphor では使用しない**
+- partition を `-qn` で override すれば、QOS もそれに連動して変わる
+
+```bash
+# OK: partition 指定で QOS も暗黙的に決まる
+runops runs submit -qn gr10451a
+
+# NG: camphor では forbidden option エラー
+runops runs submit --qos gr10451a
+```
+
 ## 注意事項
 
 - `srun` 使用時、`--ntasks` は省略可能 (Slurm が `--rsc` の `p` 値を `SLURM_NTASKS` に自動設定)
