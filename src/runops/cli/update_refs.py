@@ -128,7 +128,7 @@ def _read_existing_changelog(knowledge_file: Path) -> list[str]:
         return []
     entries: list[str] = []
     in_changelog = False
-    for line in knowledge_file.read_text().split("\n"):
+    for line in knowledge_file.read_text(encoding="utf-8").split("\n"):
         if line.strip() == "## Change Log":
             in_changelog = True
             continue

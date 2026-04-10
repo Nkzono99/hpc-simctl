@@ -765,7 +765,9 @@ class EmseAdapter(SimulatorAdapter):
                 nstep = self._get_expected_nstep(run_dir)
                 lines = [
                     line
-                    for line in energy_file.read_text().strip().split("\n")
+                    for line in energy_file.read_text(encoding="utf-8")
+                    .strip()
+                    .split("\n")
                     if line.strip()
                 ]
                 if lines and nstep:
@@ -814,7 +816,9 @@ class EmseAdapter(SimulatorAdapter):
             try:
                 lines = [
                     line
-                    for line in energy_file.read_text().strip().split("\n")
+                    for line in energy_file.read_text(encoding="utf-8")
+                    .strip()
+                    .split("\n")
                     if line.strip()
                 ]
                 if lines:

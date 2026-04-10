@@ -702,7 +702,7 @@ class BeachAdapter(SimulatorAdapter):
             summary_file = output_dir / "summary.txt"
             if summary_file.is_file():
                 try:
-                    for line in summary_file.read_text().split("\n"):
+                    for line in summary_file.read_text(encoding="utf-8").split("\n"):
                         line = line.strip()
                         if "=" not in line:
                             continue

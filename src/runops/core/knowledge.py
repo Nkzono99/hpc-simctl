@@ -110,7 +110,7 @@ def parse_insight(path: Path) -> Insight | None:
     key-value pairs.
     """
     try:
-        text = path.read_text()
+        text = path.read_text(encoding="utf-8")
     except OSError:
         return None
 

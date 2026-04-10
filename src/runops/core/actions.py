@@ -166,7 +166,7 @@ ACTION_SPECS: dict[str, ActionSpec] = {
         name="submit_run",
         description="Submit a run to Slurm via sbatch.",
         required_params=("run_dir",),
-        optional_params=("queue_name", "afterok"),
+        optional_params=("queue_name", "qos", "afterok"),
         preconditions=("run state == created", "job.sh exists"),
         state_change="created -> submitted",
         risk_level="high",
@@ -486,6 +486,7 @@ def submit_run(
     run_dir: Path,
     *,
     queue_name: str = "",
+    qos: str = "",
     afterok: str = "",
 ) -> ActionResult:
     """Submit a run to Slurm via sbatch."""
@@ -514,7 +515,7 @@ def submit_run(
         )
 
     try:
-        job_content = job_script.read_text()
+        job_content = job_script.read_text(encoding="utf-8")
     except OSError as e:
         return _error("submit_run", f"Failed to read job script: {e}")
 
@@ -538,6 +539,8 @@ def submit_run(
     extra_args: list[str] = []
     if queue_name:
         extra_args.append(f"--partition={queue_name}")
+    if qos:
+        extra_args.append(f"--qos={qos}")
 
     try:
         job_id = sbatch_submit(
@@ -665,7 +668,7 @@ def show_log(run_dir: Path, *, lines: int = 50) -> ActionResult:
 
     log_file = log_candidates[0]
     try:
-        all_lines = log_file.read_text().splitlines()
+        all_lines = log_file.read_text(encoding="utf-8").splitlines()
         tail = all_lines[-lines:] if len(all_lines) > lines else all_lines
     except OSError as e:
         return _error("show_log", f"Failed to read log: {e}")

@@ -273,7 +273,7 @@ class GenericAdapter(SimulatorAdapter):
 
         if exit_code_path.exists():
             try:
-                code = int(exit_code_path.read_text().strip())
+                code = int(exit_code_path.read_text(encoding="utf-8").strip())
             except (ValueError, OSError):
                 return "unknown"
             return "completed" if code == 0 else "failed"
@@ -316,7 +316,9 @@ class GenericAdapter(SimulatorAdapter):
         exit_code_path = run_dir / WORK_DIR / EXIT_CODE_FILE
         if exit_code_path.exists():
             try:
-                summary["exit_code"] = int(exit_code_path.read_text().strip())
+                summary["exit_code"] = int(
+                    exit_code_path.read_text(encoding="utf-8").strip()
+                )
             except (ValueError, OSError) as exc:
                 errors.append(f"exit_code: {exc}")
 

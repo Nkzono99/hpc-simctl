@@ -265,7 +265,7 @@ def show(
         typer.echo(f"Insight not found: {name}", err=True)
         raise typer.Exit(code=1)
 
-    typer.echo(path.read_text())
+    typer.echo(path.read_text(encoding="utf-8"))
 
 
 def sync(
@@ -852,7 +852,7 @@ def render() -> None:
     rel = imports_path.relative_to(root)
     typer.echo(f"Rendered: {rel}")
 
-    content = imports_path.read_text().strip()
+    content = imports_path.read_text(encoding="utf-8").strip()
     if content:
         for line in content.split("\n"):
             if line.startswith("@"):
