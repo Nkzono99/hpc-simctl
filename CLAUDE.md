@@ -93,7 +93,7 @@ completed → archived → purged
 |---------|------|
 | `runops init` / `setup` / `doctor` | プロジェクト管理 |
 | `runops case new` / `runs create` / `runs sweep` | case / run 生成 |
-| `runops runs submit [--all]` | ジョブ投入 |
+| `runops runs submit [--all] [-qn] [--qos]` | ジョブ投入 |
 | `runops runs status` / `sync` / `log` / `dashboard` | モニタリング |
 | `runops analyze summarize` / `collect` | 解析 |
 | `runops notes append` / `knowledge save` | 知見管理 |
@@ -109,7 +109,7 @@ completed → archived → purged
 - docstring は Google style
 - テスト: Slurm はモック、TOML は fixtures、CLI は CliRunner
 - Git: 1 コミット = 1 論理変更、`--no-verify` / `--force` 禁止
-- release 時は `pyproject.toml` version を先に更新
+- release 時は `pyproject.toml` + `__init__.py` の version を同時に更新
 
 ## Adapter 実装時の注意
 

@@ -301,6 +301,7 @@ Slurm job parameters. These become `#SBATCH` directives in `job.sh`.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `partition` | string | No | Partition/queue name. Can be overridden at submit time with `runops runs submit -qn <name>` |
+| `qos` | string | No | Slurm QOS name. Emits `#SBATCH --qos=<value>`. Can be overridden with `runops runs submit --qos <name>`. Note: camphor では使用不可 (partition 経由で暗黙決定) |
 | `nodes` | integer | No | Number of nodes |
 | `ntasks` | integer | No | Number of MPI tasks |
 | `walltime` | string | Yes | Wall time limit (HH:MM:SS) |
@@ -312,6 +313,7 @@ Slurm job parameters. These become `#SBATCH` directives in `job.sh`.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `partition` | string | No | Partition/queue name |
+| `qos` | string | No | Slurm QOS name (camphor では使用不可) |
 | `processes` | integer | No | MPI プロセス数 (`--rsc p=N`) |
 | `threads` | integer | No | プロセスあたりスレッド数 (`--rsc t=T`) |
 | `cores` | integer | No | プロセスあたりコア数 (`--rsc c=C`, ≥ threads) |
