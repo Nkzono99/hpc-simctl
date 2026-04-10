@@ -37,3 +37,12 @@ CI でも同じチェックが走る。ruff format 違反は自動修正可 (`uv
 - commit message は英語推奨 (`fix:`, `feat:`, `refactor:`, `test:`, `docs:`)
 - `--no-verify` / `--force` は使わない
 - PR は main ブランチへ
+
+## リリース
+
+`/release` スキルで実施する。手順の概要:
+
+1. 品質ゲート通過を確認
+2. `pyproject.toml` と `src/runops/__init__.py` のバージョンを **同時に** 更新
+3. `git commit -m "chore: bump version to X.Y.Z"` + `git tag vX.Y.Z`
+4. `git push origin main --tags` で CI が PyPI にパブリッシュ

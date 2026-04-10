@@ -24,7 +24,7 @@ runops プロジェクトにおける Agent の作業ガイド。
 | sweep 内容を確認だけ | `runops runs sweep <survey> --dry-run` |
 | job 投入 | `runops runs submit` |
 | 全 run 一括投入 | `runops runs submit --all` |
-| キュー上書き / 依存ジョブ | `runops runs submit -qn <queue>` / `--afterok <job_id>` |
+| キュー上書き / QOS / 依存ジョブ | `runops runs submit -qn <queue>` / `--qos <qos>` / `--afterok <job_id>` |
 | 状態確認 (単一/複数/survey 一括) | `runops runs status [RUNS...]` |
 | Slurm 同期 (単一/複数/survey 一括) | `runops runs sync [RUNS...]` (bulk: created + terminal state は silent skip) |
 | ログ確認 | `runops runs log` |

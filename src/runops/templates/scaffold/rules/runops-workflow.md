@@ -45,8 +45,9 @@
 `runops runs submit` は permissions.ask で毎回確認が入る (フックは廃止
 したのでルールベース)。Agent 側で守るべき振る舞い:
 
-- 実行前に **投入内容 (コマンド・対象 run・queue・資源量) をユーザーに提示**
+- 実行前に **投入内容 (コマンド・対象 run・queue・QOS・資源量) をユーザーに提示**
   してから submit を呼ぶ
+- partition override: `-qn <name>`, QOS override: `--qos <name>`
 - `--dry-run` と `--help` は確認用なのでそのまま実行してよい
 - 承認なしに実ジョブ投入を繰り返し試行しない
 - 一度の submit で複数 run が走る (例: `--all`) ときは特に慎重に説明する
