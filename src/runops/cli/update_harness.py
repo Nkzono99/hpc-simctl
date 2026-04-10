@@ -236,9 +236,27 @@ def update_harness(
             typer.echo(f"  {p}")
     if written_new:
         n_new = len(written_new)
-        typer.echo(f"{prefix}Wrote {n_new} .new file(s) (manual merge needed):")
+        typer.echo(
+            f"\n{prefix}\u26a0 {n_new} file(s) written as .new "
+            "(user-edited originals preserved):",
+            err=True,
+        )
         for p in written_new:
-            typer.echo(f"  {p} -> {p}.new")
+            typer.echo(f"  {p}.new", err=True)
+        typer.echo("", err=True)
+        typer.echo(
+            "To accept new versions:  runops update-harness --force",
+            err=True,
+        )
+        first_new = written_new[0]
+        typer.echo(
+            f"To compare:              diff {first_new} {first_new}.new",
+            err=True,
+        )
+        typer.echo(
+            "To dismiss:              rm *.new .claude/**/*.new",
+            err=True,
+        )
     if unchanged:
         typer.echo(f"{prefix}{len(unchanged)} file(s) already up to date.")
     if not overwritten and not written_new and not adopted:
