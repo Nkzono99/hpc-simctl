@@ -42,6 +42,7 @@ def _submit_single_run(
     *,
     quiet: bool = False,
     queue_name: str = "",
+    qos: str = "",
     afterok: str | None = None,
 ) -> str | None:
     """Submit a single run and return the job_id, or None on skip/error.
@@ -59,6 +60,7 @@ def _submit_single_run(
     result = submit_run_action(
         run_dir,
         queue_name=queue_name,
+        qos=qos,
         afterok=afterok or "",
     )
 
@@ -98,6 +100,10 @@ def run_cmd(
         Optional[str],
         typer.Option("-qn", "--queue-name", help="Override partition/queue name."),
     ] = None,
+    qos: Annotated[
+        Optional[str],
+        typer.Option("--qos", help="Override Slurm QOS name."),
+    ] = None,
     afterok_id: Annotated[
         Optional[str],
         typer.Option(
@@ -112,6 +118,7 @@ def run_cmd(
       cd runs/experiment/R0001 && runops runs submit
       cd runs/mag_scan && runops runs submit --all
       runops runs submit -qn gr10451a
+      runops runs submit -qn gr10451a --qos gr10451a
       runops runs submit --afterok 12345
     """
     if all_runs:
@@ -120,12 +127,14 @@ def run_cmd(
             target,
             dry_run=dry_run,
             queue_name=queue_name or "",
+            qos=qos or "",
             afterok=afterok_id,
         )
     elif run is None:
         _submit_single_cwd(
             dry_run=dry_run,
             queue_name=queue_name or "",
+            qos=qos or "",
             afterok=afterok_id,
         )
     else:
@@ -133,6 +142,7 @@ def run_cmd(
             run,
             dry_run=dry_run,
             queue_name=queue_name or "",
+            qos=qos or "",
             afterok=afterok_id,
         )
 
@@ -141,6 +151,7 @@ def _submit_single_cwd(
     *,
     dry_run: bool = False,
     queue_name: str = "",
+    qos: str = "",
     afterok: str | None = None,
 ) -> None:
     """Submit the run in the current directory."""
@@ -170,7 +181,9 @@ def _submit_single_cwd(
         typer.echo(f"  Exists: {job_script.exists()}")
         return
 
-    result = _submit_single_run(run_dir, queue_name=queue_name, afterok=afterok)
+    result = _submit_single_run(
+        run_dir, queue_name=queue_name, qos=qos, afterok=afterok
+    )
     if result is None:
         raise typer.Exit(code=1)
 
@@ -180,12 +193,18 @@ def _submit_all_cwd(
     *,
     dry_run: bool = False,
     queue_name: str = "",
+    qos: str = "",
     afterok: str | None = None,
 ) -> None:
     """Submit all runs in the given directory or cwd."""
     target_dir = (target or Path.cwd()).resolve()
     _submit_all(
-        None, target_dir, dry_run=dry_run, queue_name=queue_name, afterok=afterok
+        None,
+        target_dir,
+        dry_run=dry_run,
+        queue_name=queue_name,
+        qos=qos,
+        afterok=afterok,
     )
 
 
@@ -194,6 +213,7 @@ def _submit_single(
     *,
     dry_run: bool = False,
     queue_name: str = "",
+    qos: str = "",
     afterok: str | None = None,
 ) -> None:
     """Handle single-run submission."""
@@ -210,7 +230,9 @@ def _submit_single(
         typer.echo(f"  Exists: {job_script.exists()}")
         return
 
-    result = _submit_single_run(run_dir, queue_name=queue_name, afterok=afterok)
+    result = _submit_single_run(
+        run_dir, queue_name=queue_name, qos=qos, afterok=afterok
+    )
     if result is None:
         raise typer.Exit(code=1)
 
@@ -221,6 +243,7 @@ def _submit_all(
     *,
     dry_run: bool = False,
     queue_name: str = "",
+    qos: str = "",
     afterok: str | None = None,
 ) -> None:
     """Handle batch submission of all runs in a directory.
@@ -280,7 +303,7 @@ def _submit_all(
             continue
 
         job_id = _submit_single_run(
-            rd, quiet=True, queue_name=queue_name, afterok=afterok
+            rd, quiet=True, queue_name=queue_name, qos=qos, afterok=afterok
         )
         if job_id is not None:
             run_id = manifest.run.get("id", rd.name)

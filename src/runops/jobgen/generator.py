@@ -202,6 +202,10 @@ def _render_script(
     if partition:
         lines.append(f"#SBATCH -p {partition}")
 
+    qos = job_config.get("qos", "")
+    if qos:
+        lines.append(f"#SBATCH --qos={qos}")
+
     if resource_style == "rsc":
         # Camphor-style: --rsc p=N:t=T:c=C[:m=MEM][:g=GPU]
         ntasks = job_config.get("ntasks", 1)

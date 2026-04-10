@@ -112,6 +112,8 @@ def _build_job_config(
         "partition": job.partition,
         "walltime": job.walltime,
     }
+    if job.qos:
+        config["qos"] = job.qos
     if _is_rsc_site(site):
         config["ntasks"] = job.processes
         config["threads_per_process"] = job.threads
