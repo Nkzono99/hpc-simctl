@@ -16,8 +16,8 @@ description: "Prepare and publish a new runops release. Bump version, sync __ini
 /release 0.3.0      # 明示的にバージョン指定
 ```
 
-引数なしで呼んだ場合は、前回リリースからの変更を一覧し、
-patch / minor / major のどれが適切か提案する。
+引数なしで呼んだ場合は、変更内容から bump レベルを自動判定し、
+確認 → リリースまで一気通貫で実行する。
 
 ## 手順
 
@@ -53,8 +53,12 @@ commit message から以下を分類する:
 
 ### 3. バージョンを決定する
 
-引数で指定されていればそれを使う。なければ変更内容から提案し、
-ユーザーに確認する。
+引数で指定されていればそれを使う。なければ以下のルールで自動判定する:
+
+- `feat!:` or `BREAKING CHANGE` あり → **major**
+- `feat:` あり → **minor**
+- `fix:` のみ → **patch**
+- `docs:` / `chore:` のみ → **patch**
 
 ### 4. バージョンを更新する
 
@@ -91,26 +95,10 @@ gh run list --workflow=publish.yml --limit 1
 
 ## 引数なしの場合
 
-前回タグからの変更一覧を表示し、推奨 bump レベルを提案する:
+変更内容を分類し、bump レベルを自動判定して、リリースまで実行する。
+具体的には:
 
-```
-## リリース候補
-
-現在: v0.2.1
-前回リリースからの変更:
-
-### New features (3)
-- feat: add --qos option to runs submit
-- feat: show overall summary after runs sync
-- feat: add /feedback skill
-
-### Bug fixes (2)
-- fix: add explicit encoding="utf-8" to all read_text() calls
-- fix: show actionable warning for leftover .new files
-
-### Other (1)
-- docs: add QOS section to camphor site documentation
-
-→ 推奨: minor bump (0.2.1 → 0.3.0)
-→ `/release minor` で実行できます
-```
+1. 前回タグからのコミットを分類 (breaking / feat / fix / other)
+2. bump レベルを自動判定
+3. 変更サマリとバージョンをユーザーに提示して確認
+4. 確認が取れたら手順 4〜7 を順に実行 (バージョン更新 → コミット → タグ → push)
