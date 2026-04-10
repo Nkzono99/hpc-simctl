@@ -1,6 +1,6 @@
 ---
 name: feedback
-description: Send feedback (bug report, feature request, improvement suggestion) to the runops upstream repository. Trigger when the user says "/feedback" or when the agent notices a runops bug/limitation worth reporting.
+description: Send feedback (bug report, feature request, improvement suggestion) to the runops upstream repository. Without arguments, list feedback candidates found during the session. With arguments, file a specific issue.
 ---
 
 # runops へフィードバックを送る
@@ -9,7 +9,36 @@ description: Send feedback (bug report, feature request, improvement suggestion)
 GitHub issue として起票するスキル。現在の作業を止めずにサイドチャネルとして
 フィードバックを送れる。
 
-## 手順
+## 引数なしの場合: フィードバック候補をリストアップ
+
+引数なしで `/feedback` を呼んだ場合、**今のセッション中に気づいた
+フィードバック候補** を洗い出して一覧表示する。
+
+以下の観点で候補を探す:
+
+- セッション中にエラー・warning が出た runops コマンド
+- workaround が必要だった箇所
+- ドキュメントやヘルプが不足していると感じた場面
+- 「こうなっていれば便利だった」と思った機能
+- `tools/runops/` のコードを読んで気づいたバグ・改善点
+
+出力フォーマット:
+
+```
+## フィードバック候補
+
+1. [bug] `runops runs sync` — <具体的な問題>
+2. [feature] `runops runs submit` — <欲しい機能>
+3. [improvement] `update-harness` — <改善提案>
+
+→ 起票するものがあれば `/feedback <番号 or 内容>` で issue 化できます
+```
+
+候補がなければ「現時点でフィードバック候補はありません」と報告する。
+
+---
+
+## 引数ありの場合: issue を起票する
 
 ### 1. フィードバック内容を整理する
 
