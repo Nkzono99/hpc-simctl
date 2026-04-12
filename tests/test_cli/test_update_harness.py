@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import pytest
+import typer
 from typer.testing import CliRunner
 
+import runops.cli.update_harness as update_harness_module
 from runops.cli.main import app
 from runops.harness.builder import (
     HARNESS_LOCK_PATH,
@@ -247,3 +250,70 @@ class TestHarnessLock:
         assert result.exit_code == 0
         # CLAUDE.md should get a .new since it's edited and lock is missing
         assert (tmp_path / "CLAUDE.md.new").exists()
+
+
+class TestUpdateHarnessReexec:
+    """Tests for re-execing after tools/runops is updated."""
+
+    def test_restart_with_skip_pull_reexecs_current_command(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Re-exec runs the same CLI command once with --skip-pull appended."""
+        captured: dict[str, object] = {}
+
+        def fake_exec(executable: str, argv: list[str], env: dict[str, str]) -> None:
+            captured["executable"] = executable
+            captured["argv"] = argv
+            captured["env"] = env
+            raise RuntimeError("exec called")
+
+        monkeypatch.setattr(
+            sys, "argv", ["runops", "update-harness", "/tmp/p", "--force"]
+        )
+        monkeypatch.setattr(update_harness_module.sys, "executable", "/usr/bin/python3")
+        monkeypatch.setattr(update_harness_module.os, "execvpe", fake_exec)
+
+        with pytest.raises(RuntimeError, match="exec called"):
+            update_harness_module._restart_with_skip_pull()
+
+        assert captured["executable"] == "/usr/bin/python3"
+        assert captured["argv"] == [
+            "/usr/bin/python3",
+            "-m",
+            "runops.cli.main",
+            "update-harness",
+            "/tmp/p",
+            "--force",
+            "--skip-pull",
+        ]
+        env = captured["env"]
+        assert isinstance(env, dict)
+        assert env[update_harness_module._REEXEC_ENV_VAR] == "1"
+
+    def test_restarts_after_pull_update(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A successful pull triggers a restart before rendering harness files."""
+        _init_project(tmp_path)
+        restarted: list[bool] = []
+
+        monkeypatch.setattr(
+            "runops.cli.update_harness._pull_tools_repo",
+            lambda *_args, **_kwargs: "updated",
+        )
+
+        def fake_restart() -> None:
+            restarted.append(True)
+            raise typer.Exit(code=0)
+
+        monkeypatch.setattr(
+            "runops.cli.update_harness._restart_with_skip_pull",
+            fake_restart,
+        )
+        monkeypatch.delenv(update_harness_module._REEXEC_ENV_VAR, raising=False)
+
+        result = runner.invoke(app, ["update-harness", str(tmp_path)])
+
+        assert result.exit_code == 0
+        assert restarted == [True]
+        assert "tools/runops: updated" in result.output

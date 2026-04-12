@@ -12,7 +12,9 @@ the user can merge manually.
 
 from __future__ import annotations
 
+import os
 import subprocess
+import sys
 from pathlib import Path
 from typing import Annotated, Optional
 
@@ -27,6 +29,8 @@ from runops.harness.builder import (
     read_upstream_feedback_setting,
     save_harness_lock,
 )
+
+_REEXEC_ENV_VAR = "RUNOPS_UPDATE_HARNESS_REEXEC"
 
 
 def _pull_tools_repo(project_dir: Path) -> str | None:
@@ -54,6 +58,17 @@ def _pull_tools_repo(project_dir: Path) -> str | None:
             return "already up to date"
         return "updated"
     return f"pull failed: {(result.stderr or '').strip()[:200]}"
+
+
+def _restart_with_skip_pull() -> None:
+    """Re-exec ``update-harness`` so the pulled editable install is reloaded."""
+    argv = [sys.executable, "-m", "runops.cli.main", *sys.argv[1:]]
+    if "--skip-pull" not in argv[3:]:
+        argv.append("--skip-pull")
+
+    env = dict(os.environ)
+    env[_REEXEC_ENV_VAR] = "1"
+    os.execvpe(sys.executable, argv, env)
 
 
 def _get_knowledge_imports_path(project_dir: Path) -> str:
@@ -130,6 +145,8 @@ def update_harness(
         pull_status = _pull_tools_repo(project_dir)
         if pull_status is not None:
             typer.echo(f"tools/runops: {pull_status}")
+            if pull_status == "updated" and os.environ.get(_REEXEC_ENV_VAR) != "1":
+                _restart_with_skip_pull()
 
     # Load project info
     project = load_project(project_dir)
