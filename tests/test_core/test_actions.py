@@ -263,6 +263,9 @@ def test_export_publication_creates_bundle(tmp_path: Path) -> None:
     assert Path(result.data["manifest_path"]).exists()
     assert result.data["target_kind"] == "run"
     assert result.data["source_run_ids"] == ["R20260330-0001"]
+    with open(result.data["manifest_path"], encoding="utf-8") as f:
+        manifest = json.load(f)
+    assert manifest["export"]["id"] == "draft-a/baseline-export"
 
 
 def test_retry_run_blocks_exit_error_without_log_review(tmp_path: Path) -> None:

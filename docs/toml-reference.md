@@ -721,7 +721,7 @@ project 側 snapshot を `exports/papers/<paper-id>/<export-name>/` に生成す
 
 | File | Description |
 |------|-------------|
-| `exports/papers/<paper-id>/<export-name>/manifest.json` | export の機械可読 manifest。source target, run IDs, exported file list, project git 状態を含む |
+| `exports/papers/<paper-id>/<export-name>/manifest.json` | export の機械可読 manifest。paper/export/project/source/files の各 section を持ち、run provenance と file hash を含む |
 | `exports/papers/<paper-id>/<export-name>/README.md` | 人がざっと確認するための要約 |
 | `exports/papers/<paper-id>/<export-name>/files/**` | 実際の exported artifact 群。既定は copy、`--mode symlink` で symlink 化可 |
 
@@ -730,6 +730,14 @@ project 側 snapshot を `exports/papers/<paper-id>/<export-name>/` に生成す
 - run export: `manifest.toml`, `analysis/summary.json`, `analysis/figures/**`
 - survey export: `summary/survey_summary.csv`, `survey_summary.json`, `figures_index.json`, `survey_summary.md`, `summary/plots/**`, 参照された run figure 群
 - `survey.toml` がある場合は survey export に同梱される
+
+### `manifest.json` の要点
+
+- `paper`: paper repo 側での識別子 (`id`, `slug`)
+- `export`: export 自身の識別子、生成日時、mode、runops version
+- `project`: 元 project の名前と git 状態
+- `source`: `run` / `survey` のどちらを切り出したか、対象 run 一覧、集計状況
+- `files[]`: 各 exported file の `role`, `source_path`, `export_path`, `size_bytes`, `sha256`, `media_type`, `run_id`, `caption`
 
 ### 例
 

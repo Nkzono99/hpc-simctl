@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import mimetypes
 import os
 import shutil
 from dataclasses import dataclass
@@ -12,18 +14,29 @@ from typing import Any
 
 from runops import __version__
 from runops.core.analysis import (
+    SurveyCollectionResult,
     collect_survey_summaries,
     extract_run_figures,
     generate_run_summary,
 )
 from runops.core.discovery import discover_runs
 from runops.core.exceptions import ProvenanceError, SimctlError
-from runops.core.manifest import read_manifest
+from runops.core.manifest import ManifestData, read_manifest
 from runops.core.project import find_project_root, load_project
 from runops.core.provenance import collect_git_provenance
 from runops.core.state import RunState
 
 _EXPORT_MODES = {"copy", "symlink"}
+
+
+@dataclass(frozen=True)
+class PublicationSourceArtifact:
+    """One source artifact collected before export materialization."""
+
+    role: str
+    source_path: Path
+    run_id: str = ""
+    caption: str = ""
 
 
 @dataclass(frozen=True)
@@ -33,6 +46,11 @@ class PublicationExportFile:
     role: str
     source_path: Path
     export_path: Path
+    size_bytes: int
+    sha256: str
+    media_type: str = ""
+    run_id: str = ""
+    caption: str = ""
 
 
 @dataclass(frozen=True)
@@ -76,6 +94,17 @@ def _utc_timestamp() -> str:
 
 def _relative_to_project(project_root: Path, path: Path) -> str:
     return str(path.resolve().relative_to(project_root.resolve())).replace("\\", "/")
+
+
+def _normalize_string_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    result: list[str] = []
+    for item in value:
+        text = str(item).strip()
+        if text:
+            result.append(text)
+    return result
 
 
 def _infer_target_kind(target_path: Path) -> str:
@@ -153,11 +182,81 @@ def _load_json_summary(path: Path) -> dict[str, Any]:
     return data
 
 
+def _compute_sha256(path: Path) -> str:
+    sha256 = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(8192), b""):
+            sha256.update(chunk)
+    return f"sha256:{sha256.hexdigest()}"
+
+
+def _simulator_source_snapshot(manifest: ManifestData) -> dict[str, Any]:
+    fields = (
+        "source_repo",
+        "git_commit",
+        "git_dirty",
+        "executable",
+        "exe_hash",
+        "resolver_mode",
+        "package_version",
+    )
+    snapshot: dict[str, Any] = {}
+    for field in fields:
+        value = manifest.simulator_source.get(field, "")
+        if value in ("", None, []):
+            continue
+        snapshot[field] = value
+    return snapshot
+
+
+def _build_run_record(project_root: Path, run_dir: Path) -> dict[str, Any]:
+    manifest = read_manifest(run_dir)
+    run_id = str(manifest.run.get("id", run_dir.name)).strip() or run_dir.name
+    summary_path = run_dir / "analysis" / "summary.json"
+    summary_available = summary_path.is_file()
+    summary_keys: list[str] = []
+    figure_count = 0
+
+    if summary_available:
+        summary = _load_json_summary(summary_path)
+        summary_keys = sorted(str(key) for key in summary)
+        figure_count = len(extract_run_figures(run_dir, summary))
+
+    record: dict[str, Any] = {
+        "run_id": run_id,
+        "path": _relative_to_project(project_root, run_dir),
+        "display_name": str(manifest.run.get("display_name", "")).strip(),
+        "status": str(manifest.run.get("status", "")).strip(),
+        "case": str(manifest.origin.get("case", "")).strip(),
+        "survey": str(manifest.origin.get("survey", "")).strip(),
+        "simulator": str(
+            manifest.simulator.get("name", manifest.simulator.get("adapter", ""))
+        ).strip(),
+        "adapter": str(manifest.simulator.get("adapter", "")).strip(),
+        "launcher": str(
+            manifest.launcher.get("name", manifest.launcher.get("kind", ""))
+        ).strip(),
+        "tags": _normalize_string_list(manifest.classification.get("tags", [])),
+        "summary_available": summary_available,
+        "summary_path": (
+            _relative_to_project(project_root, summary_path)
+            if summary_available
+            else ""
+        ),
+        "summary_keys": summary_keys,
+        "figure_count": figure_count,
+    }
+    simulator_source = _simulator_source_snapshot(manifest)
+    if simulator_source:
+        record["simulator_source"] = simulator_source
+    return record
+
+
 def _collect_run_export_sources(
     run_dir: Path,
     *,
     include_figures: bool,
-) -> tuple[list[tuple[str, Path]], tuple[str, ...], list[str]]:
+) -> tuple[list[PublicationSourceArtifact], list[str]]:
     manifest = read_manifest(run_dir)
     run_id = str(manifest.run.get("id", run_dir.name)).strip() or run_dir.name
     warnings: list[str] = []
@@ -173,9 +272,17 @@ def _collect_run_export_sources(
         summary_path = generated.summary_path
         warnings.extend(generated.warnings)
 
-    files: list[tuple[str, Path]] = [
-        ("run_manifest", run_dir / "manifest.toml"),
-        ("run_summary", summary_path),
+    files: list[PublicationSourceArtifact] = [
+        PublicationSourceArtifact(
+            role="run_manifest",
+            source_path=run_dir / "manifest.toml",
+            run_id=run_id,
+        ),
+        PublicationSourceArtifact(
+            role="run_summary",
+            source_path=summary_path,
+            run_id=run_id,
+        ),
     ]
     if include_figures:
         summary = _load_json_summary(summary_path)
@@ -186,9 +293,16 @@ def _collect_run_export_sources(
                     f"{run_id}: missing figure referenced by summary: {figure['path']}"
                 )
                 continue
-            files.append(("run_figure", figure_path))
+            files.append(
+                PublicationSourceArtifact(
+                    role="run_figure",
+                    source_path=figure_path,
+                    run_id=run_id,
+                    caption=figure["caption"],
+                )
+            )
 
-    return files, (run_id,), warnings
+    return files, warnings
 
 
 def _collect_survey_export_sources(
@@ -196,26 +310,48 @@ def _collect_survey_export_sources(
     *,
     include_figures: bool,
     include_plots: bool,
-) -> tuple[list[tuple[str, Path]], tuple[str, ...], list[str]]:
+) -> tuple[SurveyCollectionResult, list[PublicationSourceArtifact], list[str]]:
     collection = collect_survey_summaries(survey_dir)
-    files: list[tuple[str, Path]] = [
-        ("survey_summary_csv", collection.csv_path),
-        ("survey_summary_json", collection.json_path),
-        ("survey_figures_index", collection.figures_path),
-        ("survey_report", collection.report_path),
+    files: list[PublicationSourceArtifact] = [
+        PublicationSourceArtifact(
+            role="survey_summary_csv",
+            source_path=collection.csv_path,
+        ),
+        PublicationSourceArtifact(
+            role="survey_summary_json",
+            source_path=collection.json_path,
+        ),
+        PublicationSourceArtifact(
+            role="survey_figures_index",
+            source_path=collection.figures_path,
+        ),
+        PublicationSourceArtifact(
+            role="survey_report",
+            source_path=collection.report_path,
+        ),
     ]
     warnings = list(collection.warnings)
 
     survey_toml = survey_dir / "survey.toml"
     if survey_toml.is_file():
-        files.append(("survey_config", survey_toml))
+        files.append(
+            PublicationSourceArtifact(
+                role="survey_config",
+                source_path=survey_toml,
+            )
+        )
 
     if include_plots:
         plots_dir = survey_dir / "summary" / "plots"
         if plots_dir.is_dir():
             for path in sorted(plots_dir.rglob("*")):
                 if path.is_file():
-                    files.append(("survey_plot", path))
+                    files.append(
+                        PublicationSourceArtifact(
+                            role="survey_plot",
+                            source_path=path,
+                        )
+                    )
 
     if include_figures:
         for figure in collection.figures:
@@ -225,23 +361,122 @@ def _collect_survey_export_sources(
                     f"missing figure indexed in figures_index.json: {figure['path']}"
                 )
                 continue
-            files.append(("run_figure", path))
+            files.append(
+                PublicationSourceArtifact(
+                    role="run_figure",
+                    source_path=path,
+                    run_id=str(figure.get("run_id", "")).strip(),
+                    caption=str(figure.get("caption", "")).strip(),
+                )
+            )
 
-    run_ids: list[str] = []
-    for run_dir in discover_runs(survey_dir):
-        try:
-            run_id = str(read_manifest(run_dir).run.get("id", run_dir.name)).strip()
-        except SimctlError:
-            run_id = run_dir.name
-        if run_id:
-            run_ids.append(run_id)
+    return collection, files, warnings
 
-    return files, tuple(sorted(set(run_ids))), warnings
+
+def _materialize_export_files(
+    artifacts: list[PublicationSourceArtifact],
+    *,
+    project_root: Path,
+    files_dir: Path,
+    mode: str,
+) -> tuple[PublicationExportFile, ...]:
+    exported_files: list[PublicationExportFile] = []
+    seen_sources: set[Path] = set()
+
+    for artifact in artifacts:
+        resolved_source = artifact.source_path.resolve()
+        if resolved_source in seen_sources:
+            continue
+        seen_sources.add(resolved_source)
+
+        rel_source = resolved_source.relative_to(project_root)
+        dest_path = files_dir / rel_source
+        _link_or_copy(resolved_source, dest_path, mode=mode)
+
+        media_type = mimetypes.guess_type(str(resolved_source))[0] or ""
+        exported_files.append(
+            PublicationExportFile(
+                role=artifact.role,
+                source_path=resolved_source,
+                export_path=dest_path,
+                size_bytes=resolved_source.stat().st_size,
+                sha256=_compute_sha256(resolved_source),
+                media_type=media_type,
+                run_id=artifact.run_id,
+                caption=artifact.caption,
+            )
+        )
+
+    return tuple(exported_files)
+
+
+def _artifact_role_counts(files: tuple[PublicationExportFile, ...]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for item in files:
+        counts[item.role] = counts.get(item.role, 0) + 1
+    return counts
+
+
+def _build_run_source_metadata(
+    *,
+    project_root: Path,
+    target_path: Path,
+    run_record: dict[str, Any],
+    files: tuple[PublicationExportFile, ...],
+) -> dict[str, Any]:
+    return {
+        "kind": "run",
+        "path": _relative_to_project(project_root, target_path),
+        "run_count": 1,
+        "artifact_counts": _artifact_role_counts(files),
+        "runs": [run_record],
+        "run": run_record,
+    }
+
+
+def _build_survey_source_metadata(
+    *,
+    project_root: Path,
+    target_path: Path,
+    collection: SurveyCollectionResult,
+    run_records: list[dict[str, Any]],
+    files: tuple[PublicationExportFile, ...],
+) -> dict[str, Any]:
+    survey_toml = target_path / "survey.toml"
+    summary_dir = target_path / "summary"
+
+    return {
+        "kind": "survey",
+        "path": _relative_to_project(project_root, target_path),
+        "run_count": len(run_records),
+        "artifact_counts": _artifact_role_counts(files),
+        "runs": run_records,
+        "survey": {
+            "survey_toml": (
+                _relative_to_project(project_root, survey_toml)
+                if survey_toml.is_file()
+                else ""
+            ),
+            "summary_dir": (
+                _relative_to_project(project_root, summary_dir)
+                if summary_dir.is_dir()
+                else ""
+            ),
+            "total_runs": collection.total_runs,
+            "summaries_collected": collection.summaries_collected,
+            "generated_summaries": collection.generated_summaries,
+            "missing_summaries": collection.missing_summaries,
+            "state_counts": dict(collection.state_counts),
+            "figure_count": len(collection.figures),
+            "plot_count": sum(1 for item in files if item.role == "survey_plot"),
+        },
+    }
 
 
 def _write_export_readme(
     path: Path,
     *,
+    export_id: str,
     paper_id: str,
     export_name: str,
     target_kind: str,
@@ -249,15 +484,20 @@ def _write_export_readme(
     mode: str,
     run_ids: tuple[str, ...],
     files: tuple[PublicationExportFile, ...],
+    warnings: tuple[str, ...],
 ) -> None:
     lines = [
         "# Publication Export",
         "",
+        f"- Export ID: `{export_id}`",
         f"- Paper ID: `{paper_id}`",
         f"- Export name: `{export_name}`",
         f"- Target kind: `{target_kind}`",
         f"- Source target: `{target_relpath}`",
         f"- Export mode: `{mode}`",
+        f"- Run count: {len(run_ids)}",
+        f"- File count: {len(files)}",
+        f"- Warning count: {len(warnings)}",
         f"- Generated at: `{datetime.now(timezone.utc).isoformat(timespec='seconds')}`",
         "",
         "## Run IDs",
@@ -275,7 +515,20 @@ def _write_export_readme(
             "\\",
             "/",
         )
-        lines.append(f"- `{item.export_path.name}`: `{export_relpath}`")
+        details = [item.role]
+        if item.run_id:
+            details.append(f"run={item.run_id}")
+        if item.caption:
+            details.append(f"caption={item.caption}")
+        details_text = "; ".join(details)
+        lines.append(
+            f"- `{item.export_path.name}`: `{export_relpath}` ({details_text})"
+        )
+
+    if warnings:
+        lines.extend(["", "## Warnings", ""])
+        for warning in warnings:
+            lines.append(f"- {warning}")
 
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
@@ -318,47 +571,68 @@ def export_publication_bundle(
             project_root=project_root,
         )
 
+    export_id = f"{paper_dir_token}/{export_name}"
     paper_root = project_root / "exports" / "papers" / paper_dir_token
     export_dir = paper_root / export_name
     _ensure_export_dir(export_dir, force=force)
     files_dir = export_dir / "files"
 
+    source_run_ids: tuple[str, ...]
+    source_metadata: dict[str, Any]
+    warnings: tuple[str, ...]
+
     if target_kind == "run":
-        source_entries, run_ids, warnings = _collect_run_export_sources(
+        source_artifacts, warning_list = _collect_run_export_sources(
             target_path,
             include_figures=include_figures,
         )
+        exported_files = _materialize_export_files(
+            source_artifacts,
+            project_root=project_root,
+            files_dir=files_dir,
+            mode=normalized_mode,
+        )
+        run_record = _build_run_record(project_root, target_path)
+        source_run_ids = (str(run_record["run_id"]),)
+        source_metadata = _build_run_source_metadata(
+            project_root=project_root,
+            target_path=target_path,
+            run_record=run_record,
+            files=exported_files,
+        )
+        warnings = tuple(warning_list)
     else:
-        source_entries, run_ids, warnings = _collect_survey_export_sources(
+        collection, source_artifacts, warning_list = _collect_survey_export_sources(
             target_path,
             include_figures=include_figures,
             include_plots=include_plots,
         )
-
-    exported_files: list[PublicationExportFile] = []
-    seen_sources: set[Path] = set()
-    for role, source_path in source_entries:
-        resolved_source = source_path.resolve()
-        if resolved_source in seen_sources:
-            continue
-        seen_sources.add(resolved_source)
-        rel_source = resolved_source.relative_to(project_root)
-        dest_path = files_dir / rel_source
-        _link_or_copy(resolved_source, dest_path, mode=normalized_mode)
-        exported_files.append(
-            PublicationExportFile(
-                role=role,
-                source_path=resolved_source,
-                export_path=dest_path,
-            )
+        exported_files = _materialize_export_files(
+            source_artifacts,
+            project_root=project_root,
+            files_dir=files_dir,
+            mode=normalized_mode,
         )
+        run_records = [
+            _build_run_record(project_root, run_dir)
+            for run_dir in discover_runs(target_path)
+        ]
+        source_run_ids = tuple(record["run_id"] for record in run_records)
+        source_metadata = _build_survey_source_metadata(
+            project_root=project_root,
+            target_path=target_path,
+            collection=collection,
+            run_records=run_records,
+            files=exported_files,
+        )
+        warnings = tuple(warning_list)
 
     manifest_path = export_dir / "manifest.json"
     readme_path = export_dir / "README.md"
     target_relpath = _relative_to_project(project_root, target_path)
 
     manifest_payload: dict[str, Any] = {
-        "schema_version": 1,
+        "schema_version": 2,
         "paper_id": paper_id,
         "paper_dir": paper_dir_token,
         "export_name": export_name,
@@ -366,13 +640,29 @@ def export_publication_bundle(
         "target_path": target_relpath,
         "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "mode": normalized_mode,
+        "source_run_ids": list(source_run_ids),
+        "paper": {
+            "id": paper_id,
+            "slug": paper_dir_token,
+        },
+        "export": {
+            "id": export_id,
+            "name": export_name,
+            "dir": _relative_to_project(project_root, export_dir),
+            "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "mode": normalized_mode,
+            "tool": {
+                "name": "runops",
+                "version": __version__,
+            },
+        },
         "project": {
             "name": project.name,
             "root": str(project_root),
             "runops_version": __version__,
             **_collect_project_git_info(project_root),
         },
-        "source_run_ids": list(run_ids),
+        "source": source_metadata,
         "files": [
             {
                 "role": item.role,
@@ -381,6 +671,11 @@ def export_publication_bundle(
                     "\\",
                     "/",
                 ),
+                "run_id": item.run_id,
+                "caption": item.caption,
+                "size_bytes": item.size_bytes,
+                "sha256": item.sha256,
+                "media_type": item.media_type,
             }
             for item in exported_files
         ],
@@ -393,13 +688,15 @@ def export_publication_bundle(
 
     _write_export_readme(
         readme_path,
+        export_id=export_id,
         paper_id=paper_id,
         export_name=export_name,
         target_kind=target_kind,
         target_relpath=target_relpath,
         mode=normalized_mode,
-        run_ids=run_ids,
-        files=tuple(exported_files),
+        run_ids=source_run_ids,
+        files=exported_files,
+        warnings=warnings,
     )
 
     return PublicationExportResult(
@@ -411,7 +708,7 @@ def export_publication_bundle(
         manifest_path=manifest_path,
         readme_path=readme_path,
         mode=normalized_mode,
-        source_run_ids=run_ids,
-        files=tuple(exported_files),
-        warnings=tuple(warnings),
+        source_run_ids=source_run_ids,
+        files=exported_files,
+        warnings=warnings,
     )

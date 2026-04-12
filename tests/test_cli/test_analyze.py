@@ -679,8 +679,14 @@ class TestExport:
         with open(export_dir / "manifest.json", encoding="utf-8") as f:
             manifest = json.load(f)
         assert manifest["paper_id"] == "draft-a"
+        assert manifest["schema_version"] == 2
         assert manifest["target_kind"] == "run"
         assert manifest["source_run_ids"] == ["R20260327-0001"]
+        assert manifest["paper"]["id"] == "draft-a"
+        assert manifest["export"]["id"] == "draft-a/fig2-baseline"
+        assert manifest["source"]["run_count"] == 1
+        assert manifest["source"]["run"]["figure_count"] == 1
+        assert manifest["files"][0]["sha256"].startswith("sha256:")
 
     def test_export_survey_collects_summary_outputs(self, tmp_path: Path) -> None:
         _write_project_file(tmp_path)
@@ -741,3 +747,11 @@ class TestExport:
             / "plots"
             / "energy.png"
         ).exists()
+
+        with open(export_dir / "manifest.json", encoding="utf-8") as f:
+            manifest = json.load(f)
+        assert manifest["schema_version"] == 2
+        assert manifest["source"]["kind"] == "survey"
+        assert manifest["source"]["survey"]["summaries_collected"] == 1
+        assert manifest["source"]["survey"]["plot_count"] == 1
+        assert manifest["source"]["run_count"] == 1
