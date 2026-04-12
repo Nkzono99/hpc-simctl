@@ -712,6 +712,35 @@ runops analyze plot runs/sheath/angle_scan --x param.angle --y ion_flux --group 
 
 ---
 
+## publication export outputs
+
+`runops analyze export <run-or-survey> --paper <paper-id>` は、paper repo に渡しやすい
+project 側 snapshot を `exports/papers/<paper-id>/<export-name>/` に生成する。
+
+### 生成されるファイル
+
+| File | Description |
+|------|-------------|
+| `exports/papers/<paper-id>/<export-name>/manifest.json` | export の機械可読 manifest。source target, run IDs, exported file list, project git 状態を含む |
+| `exports/papers/<paper-id>/<export-name>/README.md` | 人がざっと確認するための要約 |
+| `exports/papers/<paper-id>/<export-name>/files/**` | 実際の exported artifact 群。既定は copy、`--mode symlink` で symlink 化可 |
+
+### export 対象
+
+- run export: `manifest.toml`, `analysis/summary.json`, `analysis/figures/**`
+- survey export: `summary/survey_summary.csv`, `survey_summary.json`, `figures_index.json`, `survey_summary.md`, `summary/plots/**`, 参照された run figure 群
+- `survey.toml` がある場合は survey export に同梱される
+
+### 例
+
+```bash
+runops analyze export runs/sheath/angle_scan --paper draft-a
+runops analyze export R20260412-0003 --paper draft-a --name fig2-baseline
+runops analyze export runs/sheath/angle_scan --paper draft-a --mode symlink
+```
+
+---
+
 ## JSON Schema
 
 All TOML files support schema validation via `#:schema` comments:

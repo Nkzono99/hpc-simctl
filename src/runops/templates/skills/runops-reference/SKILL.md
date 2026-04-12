@@ -120,6 +120,7 @@ runops analyze plot runs/sheath/angle_scan --list-columns
 runops analyze plot runs/sheath/angle_scan --list-recipes
 runops analyze plot runs/sheath/angle_scan --recipe completion-vs-dt
 runops analyze plot runs/sheath/angle_scan --x param.angle --y ion_flux
+runops analyze export runs/sheath/angle_scan --paper draft-a
 ```
 
 ## 知見管理

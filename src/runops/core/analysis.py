@@ -536,6 +536,18 @@ def _extract_figures(run_dir: Path, summary: dict[str, Any]) -> list[dict[str, s
     return figures
 
 
+def extract_run_figures(
+    run_dir: Path, summary: dict[str, Any]
+) -> tuple[dict[str, str], ...]:
+    """Return normalized figure metadata for a run summary.
+
+    This exposes the same discovery rules used by survey collection so other
+    features can safely reuse the run-facing analysis artifacts.
+    """
+
+    return tuple(_extract_figures(run_dir, summary))
+
+
 def _format_float(value: float) -> str:
     if (
         math.isfinite(value)

@@ -39,7 +39,8 @@ Series B 完走で確かめる。
 - 1 トピック = 1 ファイル
 - 何度書き直してもよい (lab notebook と違って refined)
 - 図は `notes/reports/figures/` に置くか、`runs/_compare_*/` への相対 link
-- 完成度が高くなってから論文用素材として paper repo に移送する
+- 完成度が高くなってから `runops analyze export --paper <paper-id>` で
+  `exports/papers/<paper-id>/` に束ね、paper repo に移送する
 
 ## 補助コマンド
 

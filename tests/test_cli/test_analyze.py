@@ -19,6 +19,11 @@ runner = CliRunner()
 _PROJECT_TOML: dict[str, Any] = {"project": {"name": "test-project"}}
 
 
+def _write_project_file(project_root: Path) -> None:
+    with open(project_root / "runops.toml", "wb") as f:
+        tomli_w.dump(_PROJECT_TOML, f)
+
+
 def _create_run(
     parent: Path,
     run_id: str,
@@ -621,3 +626,118 @@ class TestPlot:
         assert kwargs["y"] == "energy"
         assert kwargs["group_by"] == "origin.case"
         assert kwargs["kind"] == "line"
+
+
+class TestExport:
+    def test_export_run_writes_publication_bundle(self, tmp_path: Path) -> None:
+        _write_project_file(tmp_path)
+        run_dir = _create_run(tmp_path / "runs", "R20260327-0001")
+        with open(run_dir / "analysis" / "summary.json", "w", encoding="utf-8") as f:
+            json.dump({"energy": 42.0, "figures": [{"path": "figures/phi.png"}]}, f)
+        figure_path = run_dir / "analysis" / "figures" / "phi.png"
+        figure_path.parent.mkdir(parents=True, exist_ok=True)
+        figure_path.write_text("fake image", encoding="utf-8")
+
+        result = runner.invoke(
+            app,
+            [
+                "analyze",
+                "export",
+                str(run_dir),
+                "--paper",
+                "draft-a",
+                "--name",
+                "fig2-baseline",
+            ],
+        )
+
+        export_dir = tmp_path / "exports" / "papers" / "draft-a" / "fig2-baseline"
+        exported_summary = (
+            export_dir
+            / "files"
+            / "runs"
+            / "R20260327-0001"
+            / "analysis"
+            / "summary.json"
+        )
+        exported_figure = (
+            export_dir
+            / "files"
+            / "runs"
+            / "R20260327-0001"
+            / "analysis"
+            / "figures"
+            / "phi.png"
+        )
+        assert result.exit_code == 0
+        assert "Export written" in result.output
+        assert (export_dir / "manifest.json").exists()
+        assert (export_dir / "README.md").exists()
+        assert exported_summary.exists()
+        assert exported_figure.exists()
+
+        with open(export_dir / "manifest.json", encoding="utf-8") as f:
+            manifest = json.load(f)
+        assert manifest["paper_id"] == "draft-a"
+        assert manifest["target_kind"] == "run"
+        assert manifest["source_run_ids"] == ["R20260327-0001"]
+
+    def test_export_survey_collects_summary_outputs(self, tmp_path: Path) -> None:
+        _write_project_file(tmp_path)
+        survey_dir = tmp_path / "runs" / "angle_scan"
+        survey_dir.mkdir(parents=True)
+        (survey_dir / "survey.toml").write_text(
+            "[survey]\n"
+            'id = "S20260412-angle"\n'
+            'name = "angle_scan"\n'
+            'base_case = "base"\n',
+            encoding="utf-8",
+        )
+        run_dir = _create_run(survey_dir, "R20260327-0001")
+        with open(run_dir / "analysis" / "summary.json", "w", encoding="utf-8") as f:
+            json.dump({"energy": 5.0}, f)
+        plot_path = survey_dir / "summary" / "plots" / "energy.png"
+        plot_path.parent.mkdir(parents=True, exist_ok=True)
+        plot_path.write_text("fake plot", encoding="utf-8")
+
+        result = runner.invoke(
+            app,
+            [
+                "analyze",
+                "export",
+                str(survey_dir),
+                "--paper",
+                "draft-a",
+                "--name",
+                "angle-scan-main",
+            ],
+        )
+
+        export_dir = tmp_path / "exports" / "papers" / "draft-a" / "angle-scan-main"
+        assert result.exit_code == 0
+        assert (export_dir / "manifest.json").exists()
+        assert (
+            export_dir
+            / "files"
+            / "runs"
+            / "angle_scan"
+            / "summary"
+            / "survey_summary.csv"
+        ).exists()
+        assert (
+            export_dir
+            / "files"
+            / "runs"
+            / "angle_scan"
+            / "summary"
+            / "survey_summary.json"
+        ).exists()
+        assert (
+            export_dir
+            / "files"
+            / "runs"
+            / "angle_scan"
+            / "summary"
+            / "plots"
+            / "energy.png"
+        ).exists()

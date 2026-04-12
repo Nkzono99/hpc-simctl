@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import typer
 
-from runops.cli.analyze import collect, plot, summarize
+from runops.cli.analyze import collect, export, plot, summarize
 from runops.cli.clone import clone
 from runops.cli.config import config_app
 from runops.cli.context import context
@@ -63,6 +63,7 @@ analyze_app = typer.Typer(
 analyze_app.command("summarize")(summarize)
 analyze_app.command("collect")(collect)
 analyze_app.command("plot")(plot)
+analyze_app.command("export")(export)
 
 notes_app = typer.Typer(
     name="notes",

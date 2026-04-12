@@ -35,6 +35,7 @@ _ALLOW_BASH: Final[tuple[str, ...]] = (
     "Bash(runops analyze summarize*)",
     "Bash(runops analyze collect*)",
     "Bash(runops analyze plot*)",
+    "Bash(runops analyze export*)",
     # Knowledge management (mutates .runops/knowledge/ via runops, reversible)
     "Bash(runops knowledge list*)",
     "Bash(runops knowledge show*)",

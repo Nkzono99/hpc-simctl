@@ -7,7 +7,7 @@ from pathlib import Path
 
 import typer
 
-from runops.cli.run_lookup import resolve_run_or_cwd
+from runops.cli.run_lookup import find_project_runs_dir, resolve_run_or_cwd
 from runops.core.actions import ActionStatus, execute_action
 from runops.core.analysis import (
     list_survey_plot_recipes,
@@ -15,7 +15,49 @@ from runops.core.analysis import (
     render_survey_plot,
     resolve_survey_plot_recipe,
 )
+from runops.core.discovery import discover_runs, resolve_run
 from runops.core.exceptions import SimctlError
+
+
+def _resolve_export_target(target: str | None, *, search_dir: Path) -> Path:
+    cwd = search_dir.resolve()
+
+    def _looks_like_collection(path: Path) -> bool:
+        return (path / "survey.toml").is_file() or bool(discover_runs(path))
+
+    if target is None:
+        if (cwd / "manifest.toml").is_file():
+            return cwd
+        if _looks_like_collection(cwd):
+            return cwd
+        typer.echo(
+            "Error: cwd is neither a run directory nor a directory containing runs. "
+            "Specify a run, run_id, or survey directory.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    candidate = Path(target)
+    resolved = (
+        candidate.resolve() if candidate.is_absolute() else (cwd / candidate).resolve()
+    )
+    if resolved.exists():
+        if (resolved / "manifest.toml").is_file():
+            return resolved
+        if resolved.is_dir() and _looks_like_collection(resolved):
+            return resolved
+        typer.echo(
+            f"Error: {resolved} is neither a run directory"
+            " nor a directory containing runs.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    try:
+        return resolve_run(target, find_project_runs_dir(cwd))
+    except SimctlError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1) from None
 
 
 def summarize(
@@ -220,3 +262,82 @@ def plot(
             "  Auto-summarized:"
             f" {result.generated_summaries} completed runs during plot"
         )
+
+
+def export(
+    target: str = typer.Argument(
+        None,
+        help="Run directory, run_id, or survey directory (defaults to cwd).",
+    ),
+    paper_id: str = typer.Option(
+        ...,
+        "--paper",
+        help="Paper/manuscript identifier used under exports/papers/<paper-id>/.",
+    ),
+    name: str = typer.Option(
+        "",
+        "--name",
+        help=(
+            "Optional export slot name. Defaults to a target-derived timestamped name."
+        ),
+    ),
+    mode: str = typer.Option(
+        "copy",
+        "--mode",
+        help="Export mode: copy or symlink.",
+    ),
+    include_figures: bool = typer.Option(
+        True,
+        "--include-figures/--no-figures",
+        help="Include run-level figure artifacts referenced by analysis outputs.",
+    ),
+    include_plots: bool = typer.Option(
+        True,
+        "--include-plots/--no-plots",
+        help=(
+            "Include survey summary plots under summary/plots/ when exporting a survey."
+        ),
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help=(
+            "Replace an existing export directory when --name resolves to the "
+            "same slot."
+        ),
+    ),
+) -> None:
+    """Create a paper-facing export bundle under exports/papers/."""
+    target_path = _resolve_export_target(target, search_dir=Path.cwd())
+
+    try:
+        result = execute_action(
+            "export_publication",
+            target_path=target_path,
+            paper_id=paper_id,
+            export_name=name,
+            mode=mode,
+            include_figures=include_figures,
+            include_plots=include_plots,
+            force=force,
+        )
+    except (OSError, TypeError, json.JSONDecodeError, SimctlError) as e:
+        typer.echo(f"Error exporting publication bundle: {e}", err=True)
+        raise typer.Exit(code=1) from None
+
+    if result.status is not ActionStatus.SUCCESS:
+        typer.echo(f"Error exporting publication bundle: {result.message}", err=True)
+        raise typer.Exit(code=1)
+
+    typer.echo(f"Export written: {result.data.get('export_dir', '')}")
+    typer.echo(f"  Paper: {result.data.get('paper_id', '')}")
+    typer.echo(f"  Target kind: {result.data.get('target_kind', '')}")
+    typer.echo(f"  Source: {result.data.get('target_path', '')}")
+    typer.echo(f"  Manifest: {result.data.get('manifest_path', '')}")
+    typer.echo(f"  README: {result.data.get('readme_path', '')}")
+    typer.echo(f"  Files: {result.data.get('file_count', 0)}")
+    run_ids = result.data.get("source_run_ids", [])
+    if run_ids:
+        typer.echo(f"  Run IDs: {', '.join(run_ids)}")
+    for warning in result.data.get("warnings", []):
+        typer.echo(f"Warning: {warning}", err=True)

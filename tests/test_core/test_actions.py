@@ -15,6 +15,7 @@ from runops.core.actions import (
     collect_survey,
     create_survey,
     execute_action,
+    export_publication,
     promote_fact,
     purge_work,
     retry_run,
@@ -227,6 +228,41 @@ def test_summarize_run_writes_summary_json(tmp_path: Path) -> None:
     with open(run_dir / "analysis" / "summary.json", encoding="utf-8") as f:
         data = json.load(f)
     assert data["energy"] == 42.0
+
+
+def test_export_publication_creates_bundle(tmp_path: Path) -> None:
+    (tmp_path / "runops.toml").write_text(
+        '[project]\nname = "test-project"\n',
+        encoding="utf-8",
+    )
+    run_dir = tmp_path / "runs" / "R20260330-0001"
+    _write_manifest(
+        run_dir,
+        {
+            "run": {
+                "id": "R20260330-0001",
+                "status": "completed",
+            },
+            "simulator": {
+                "name": "test_sim",
+                "adapter": "test_adapter",
+            },
+        },
+    )
+    (run_dir / "analysis").mkdir(parents=True, exist_ok=True)
+    with open(run_dir / "analysis" / "summary.json", "w", encoding="utf-8") as f:
+        json.dump({"energy": 3.0}, f)
+
+    result = export_publication(
+        run_dir,
+        "draft-a",
+        export_name="baseline-export",
+    )
+
+    assert result.status is ActionStatus.SUCCESS
+    assert Path(result.data["manifest_path"]).exists()
+    assert result.data["target_kind"] == "run"
+    assert result.data["source_run_ids"] == ["R20260330-0001"]
 
 
 def test_retry_run_blocks_exit_error_without_log_review(tmp_path: Path) -> None:

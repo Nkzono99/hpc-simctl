@@ -210,6 +210,21 @@ ACTION_SPECS: dict[str, ActionSpec] = {
         risk_level="low",
         cost_class="medium",
     ),
+    "export_publication": ActionSpec(
+        name="export_publication",
+        description="Create a paper-facing export bundle from a run or survey.",
+        required_params=("target_path", "paper_id"),
+        optional_params=(
+            "export_name",
+            "mode",
+            "include_figures",
+            "include_plots",
+            "force",
+        ),
+        preconditions=("target exists", "target is a run or contains runs"),
+        risk_level="low",
+        cost_class="medium",
+    ),
     "retry_run": ActionSpec(
         name="retry_run",
         description="Prepare a failed run for resubmission.",
@@ -770,6 +785,55 @@ def collect_survey(survey_dir: Path) -> ActionResult:
     )
 
 
+def export_publication(
+    target_path: Path,
+    paper_id: str,
+    *,
+    export_name: str = "",
+    mode: str = "copy",
+    include_figures: bool = True,
+    include_plots: bool = True,
+    force: bool = False,
+) -> ActionResult:
+    """Create a project-side publication export bundle."""
+    from runops.core.publication import export_publication_bundle
+
+    try:
+        result = export_publication_bundle(
+            target_path,
+            paper_id=paper_id,
+            name=export_name,
+            mode=mode,
+            include_figures=include_figures,
+            include_plots=include_plots,
+            force=force,
+        )
+    except SimctlError as e:
+        return _error("export_publication", str(e))
+
+    return ActionResult(
+        action="export_publication",
+        status=ActionStatus.SUCCESS,
+        message=(
+            f"Exported {result.target_kind} bundle for paper {paper_id!r} "
+            f"to {result.export_dir}"
+        ),
+        data={
+            "paper_id": result.paper_id,
+            "export_name": result.export_name,
+            "target_kind": result.target_kind,
+            "target_path": str(result.target_path),
+            "export_dir": str(result.export_dir),
+            "manifest_path": str(result.manifest_path),
+            "readme_path": str(result.readme_path),
+            "mode": result.mode,
+            "source_run_ids": list(result.source_run_ids),
+            "file_count": len(result.files),
+            "warnings": list(result.warnings),
+        },
+    )
+
+
 def retry_run(
     run_dir: Path,
     *,
@@ -1140,6 +1204,7 @@ _DISPATCH: dict[str, Any] = {
     "show_log": show_log,
     "summarize_run": summarize_run,
     "collect_survey": collect_survey,
+    "export_publication": export_publication,
     "retry_run": retry_run,
     "archive_run": archive_run,
     "purge_work": purge_work,

@@ -36,6 +36,7 @@ runops プロジェクトにおける Agent の作業ガイド。
 | run のハード削除 (created/failed/cancelled) | `runops runs delete` |
 | 解析 | `runops analyze summarize` |
 | 集計 | `runops analyze collect` |
+| 論文向け export | `runops analyze export <run-or-survey> --paper <paper-id>` |
 | lab notebook に追記 | `runops notes append "<title>" "<body>"` |
 | lab notebook 日付一覧 | `runops notes list` |
 | lab notebook 内容表示 | `runops notes show [DATE\|today\|latest]` |
