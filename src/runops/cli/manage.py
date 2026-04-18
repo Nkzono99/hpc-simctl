@@ -189,8 +189,7 @@ def cancel(
         if reason.startswith("state is"):
             state = reason.split("'")[1] if "'" in reason else "?"
             typer.echo(
-                "Error: can only cancel submitted/running runs, "
-                f"but run is '{state}'.",
+                f"Error: can only cancel submitted/running runs, but run is '{state}'.",
                 err=True,
             )
         elif "no job_id" in reason:

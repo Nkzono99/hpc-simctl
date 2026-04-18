@@ -155,7 +155,7 @@ def test_status_short_lists_runs_compactly(tmp_path: Path) -> None:
 
 
 def test_status_summary_aggregates_by_case(tmp_path: Path) -> None:
-    """--summary groups runs by origin.case × state."""
+    """--summary groups runs by origin.case x state."""
     (tmp_path / "runops.toml").write_text('[project]\nname = "test"\n')
     survey = tmp_path / "runs"
 

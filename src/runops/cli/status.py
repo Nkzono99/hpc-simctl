@@ -45,7 +45,7 @@ def status(
         bool,
         typer.Option(
             "--summary",
-            help="Aggregate by origin.case × state; no per-run lines.",
+            help="Aggregate by origin.case x state; no per-run lines.",
         ),
     ] = False,
 ) -> None:
@@ -110,7 +110,7 @@ def _print_status_short(targets: list[Path]) -> None:
 
 
 def _print_status_summary(targets: list[Path]) -> None:
-    """Aggregate by origin.case × state."""
+    """Aggregate by origin.case x state."""
     from collections import Counter, defaultdict
 
     by_case: dict[str, Counter[str]] = defaultdict(Counter)

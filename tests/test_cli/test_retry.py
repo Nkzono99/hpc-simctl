@@ -99,9 +99,7 @@ def test_retry_exit_error_with_reviewed_log_succeeds(tmp_path: Path) -> None:
     )
 
     with patch("runops.cli.retry.Path.cwd", return_value=tmp_path):
-        result = runner.invoke(
-            app, ["runs", "retry", str(run_dir), "--reviewed-log"]
-        )
+        result = runner.invoke(app, ["runs", "retry", str(run_dir), "--reviewed-log"])
 
     assert result.exit_code == 0, result.output
     assert "Reset to created" in result.output
@@ -135,9 +133,7 @@ def test_retry_rejects_invalid_adjustment(tmp_path: Path) -> None:
     run_dir = _create_run(tmp_path, "R20260418-0006", status="failed")
 
     with patch("runops.cli.retry.Path.cwd", return_value=tmp_path):
-        result = runner.invoke(
-            app, ["runs", "retry", str(run_dir), "-a", "malformed"]
-        )
+        result = runner.invoke(app, ["runs", "retry", str(run_dir), "-a", "malformed"])
 
     assert result.exit_code != 0
-    assert "missing '='" in result.output or "missing \"=\"" in result.output
+    assert "missing '='" in result.output or 'missing "="' in result.output

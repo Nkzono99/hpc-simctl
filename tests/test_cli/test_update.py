@@ -28,7 +28,7 @@ def test_find_venv_pip_prefers_project_virtualenv(tmp_path: Path) -> None:
 
 
 def test_find_venv_pip_returns_none_when_project_lookup_fails(
-    tmp_path: Path, monkeypatch: "pytest.MonkeyPatch | None" = None
+    tmp_path: Path,
 ) -> None:
     import os
 
