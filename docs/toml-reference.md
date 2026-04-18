@@ -626,6 +626,19 @@ def summarize(run_dir: Path, base_summary: dict) -> dict:
 
 スクリプトが例外を投げた場合は Warning を出力し、Adapter の summary のみで続行する。
 
+### Metrics schema の安定性 (cross-series 比較のために)
+
+`analyze collect` は survey 配下の run の `summary.json` を平坦化して CSV / JSON に集計する。
+`cases` や `variation` を跨いで比較可能にするため、**同じ geometry では同じ metric を常に出す** ことを推奨する:
+
+- Boundary condition やパラメータ違いで metric が存在しない run があると、集計 CSV で `nan` 埋め列が発生し、
+  cross-series の decomposition (例: floating plate と fixed-potential plate を並べて sheath 寄与を分離) が困難になる。
+- 物理的に定義不可能な metric は `nan` や `null` ではなく、定義的に埋められる値 (例: fixed 0V plate では `phi_s_mean = 0`) を出力するか、
+  常に同じ nan を書き込んで列存在を維持する。
+- Depletion isoline fit のように BC 非依存で計算可能な metric は、すべての BC で生成する。
+
+新しい metric を追加するときは、同じ geometry の他のケースでも同名キーを出力するよう summarize.py 側で統一する。
+
 ---
 
 ## survey summary outputs
