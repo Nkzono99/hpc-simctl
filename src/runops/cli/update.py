@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
+import sys
 from pathlib import Path
 from typing import Annotated, Optional
 
@@ -12,19 +14,60 @@ from runops.core.exceptions import SimctlError
 from runops.core.project import find_project_root, load_project
 
 
+def _venv_pip_from_dir(venv_dir: Path) -> Path | None:
+    """Return venv pip path if present, handling Windows layout."""
+    pip_rel = "Scripts/pip.exe" if sys.platform == "win32" else "bin/pip"
+    pip_path = venv_dir / pip_rel
+    if pip_path.exists():
+        return pip_path
+    # Resolve symlinks and retry (some clusters use symlinked .venv)
+    try:
+        resolved = venv_dir.resolve()
+    except OSError:
+        return None
+    if resolved != venv_dir:
+        pip_path = resolved / pip_rel
+        if pip_path.exists():
+            return pip_path
+    return None
+
+
 def _find_venv_pip() -> str | None:
-    """Find pip in the project's .venv."""
+    """Find pip in the project's .venv.
+
+    Resolution order:
+      1. Project root's ``.venv/bin/pip`` (walked up from cwd).
+      2. ``$VIRTUAL_ENV/bin/pip`` if an activated venv is set.
+
+    Both paths are tried with symlink resolution so projects accessed via
+    symlinked paths still work.
+    """
+    candidates: list[Path] = []
+
     cwd = Path.cwd().resolve()
     try:
         root = find_project_root(cwd)
     except SimctlError:
         root = cwd
+    candidates.append(root / ".venv")
 
-    venv_pip = root / ".venv" / "bin" / "pip"
-    if venv_pip.exists():
-        return str(venv_pip)
+    virtual_env = os.environ.get("VIRTUAL_ENV")
+    if virtual_env:
+        candidates.append(Path(virtual_env))
 
-    # Fallback: current interpreter's pip
+    seen: set[Path] = set()
+    for venv_dir in candidates:
+        try:
+            key = venv_dir.resolve()
+        except OSError:
+            key = venv_dir
+        if key in seen:
+            continue
+        seen.add(key)
+        pip_path = _venv_pip_from_dir(venv_dir)
+        if pip_path is not None:
+            return str(pip_path)
+
     return None
 
 

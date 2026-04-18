@@ -27,14 +27,61 @@ def test_find_venv_pip_prefers_project_virtualenv(tmp_path: Path) -> None:
         assert _find_venv_pip() == str(pip_path)
 
 
-def test_find_venv_pip_returns_none_when_project_lookup_fails(tmp_path: Path) -> None:
+def test_find_venv_pip_returns_none_when_project_lookup_fails(
+    tmp_path: Path, monkeypatch: "pytest.MonkeyPatch | None" = None
+) -> None:
+    import os
+
     with (
         patch("runops.cli.update.Path.cwd", return_value=tmp_path),
         patch(
             "runops.cli.update.find_project_root", side_effect=SimctlError("no project")
         ),
+        patch.dict(os.environ, {}, clear=False),
     ):
+        os.environ.pop("VIRTUAL_ENV", None)
         assert _find_venv_pip() is None
+
+
+def test_find_venv_pip_falls_back_to_virtual_env(tmp_path: Path) -> None:
+    """When project .venv is missing, VIRTUAL_ENV should be honored."""
+    import os
+
+    # No project .venv, but VIRTUAL_ENV points to a real venv
+    real_venv = tmp_path / "shared_venv"
+    pip_path = real_venv / "bin" / "pip"
+    pip_path.parent.mkdir(parents=True)
+    pip_path.write_text("", encoding="utf-8")
+
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+
+    with (
+        patch("runops.cli.update.Path.cwd", return_value=project_dir),
+        patch("runops.cli.update.find_project_root", return_value=project_dir),
+        patch.dict(os.environ, {"VIRTUAL_ENV": str(real_venv)}, clear=False),
+    ):
+        assert _find_venv_pip() == str(pip_path)
+
+
+def test_find_venv_pip_resolves_symlinked_venv(tmp_path: Path) -> None:
+    """Symlinked project paths should still locate the real .venv."""
+    real_project = tmp_path / "real" / "project"
+    pip_path = real_project / ".venv" / "bin" / "pip"
+    pip_path.parent.mkdir(parents=True)
+    pip_path.write_text("", encoding="utf-8")
+
+    link_dir = tmp_path / "link"
+    link_dir.symlink_to(real_project)
+
+    with (
+        patch("runops.cli.update.Path.cwd", return_value=link_dir),
+        patch("runops.cli.update.find_project_root", return_value=link_dir),
+    ):
+        # Either the link path or resolved path should find pip
+        result = _find_venv_pip()
+        assert result is not None
+        assert Path(result).resolve() == pip_path.resolve()
 
 
 def test_collect_packages_deduplicates_and_skips_unknown_adapters() -> None:
