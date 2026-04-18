@@ -13,6 +13,7 @@ the user can merge manually.
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -31,6 +32,56 @@ from runops.harness.builder import (
 )
 
 _REEXEC_ENV_VAR = "RUNOPS_UPDATE_HARNESS_REEXEC"
+
+
+def _find_uv() -> str:
+    """Return the uv executable path, falling back to the bare name."""
+    return shutil.which("uv") or "uv"
+
+
+def _venv_python(project_dir: Path) -> Path | None:
+    """Return the venv python path if it exists."""
+    venv_dir = project_dir / ".venv"
+    python_rel = "Scripts/python.exe" if sys.platform == "win32" else "bin/python"
+    python_path = venv_dir / python_rel
+    return python_path if python_path.exists() else None
+
+
+def _reinstall_editable(project_dir: Path) -> str | None:
+    """Re-run ``uv pip install -e tools/runops`` to pick up new dependencies.
+
+    Returns:
+        Short status message, or ``None`` if the venv or tools/runops is missing.
+    """
+    runops_dir = project_dir / "tools" / "runops"
+    if not (runops_dir / "pyproject.toml").is_file():
+        return None
+
+    python_path = _venv_python(project_dir)
+    if python_path is None:
+        return "skipped (no .venv)"
+
+    uv = _find_uv()
+    result = subprocess.run(
+        [
+            uv,
+            "pip",
+            "install",
+            "-e",
+            str(runops_dir),
+            "--python",
+            str(python_path),
+        ],
+        cwd=str(project_dir),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    if result.returncode == 0:
+        return "editable install refreshed"
+    return f"editable install failed: {(result.stderr or '').strip()[:200]}"
 
 
 def _pull_tools_repo(project_dir: Path) -> str | None:
@@ -146,6 +197,9 @@ def update_harness(
         if pull_status is not None:
             typer.echo(f"tools/runops: {pull_status}")
             if pull_status == "updated" and os.environ.get(_REEXEC_ENV_VAR) != "1":
+                install_status = _reinstall_editable(project_dir)
+                if install_status is not None:
+                    typer.echo(f"tools/runops: {install_status}")
                 _restart_with_skip_pull()
 
     # Load project info

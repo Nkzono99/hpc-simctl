@@ -317,3 +317,78 @@ class TestUpdateHarnessReexec:
         assert result.exit_code == 0
         assert restarted == [True]
         assert "tools/runops: updated" in result.output
+
+    def test_reinstall_editable_refreshes_install(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """After a successful pull, editable install is refreshed before re-exec."""
+        _init_project(tmp_path)
+
+        tools_runops = tmp_path / "tools" / "runops"
+        tools_runops.mkdir(parents=True)
+        (tools_runops / "pyproject.toml").write_text("[project]\nname='runops'\n")
+
+        venv_bin = tmp_path / ".venv" / "bin"
+        venv_bin.mkdir(parents=True)
+        (venv_bin / "python").write_text("")
+
+        captured_calls: list[list[str]] = []
+
+        def fake_run(argv, *_, **__):  # type: ignore[no-untyped-def]
+            captured_calls.append(list(argv))
+
+            class _Result:
+                returncode = 0
+                stdout = ""
+                stderr = ""
+
+            return _Result()
+
+        monkeypatch.setattr(
+            "runops.cli.update_harness._pull_tools_repo",
+            lambda *_args, **_kwargs: "updated",
+        )
+        monkeypatch.setattr(
+            "runops.cli.update_harness.subprocess.run",
+            fake_run,
+        )
+        monkeypatch.setattr(
+            "runops.cli.update_harness._restart_with_skip_pull",
+            lambda: (_ for _ in ()).throw(typer.Exit(code=0)),
+        )
+        monkeypatch.delenv(update_harness_module._REEXEC_ENV_VAR, raising=False)
+
+        result = runner.invoke(app, ["update-harness", str(tmp_path)])
+
+        assert result.exit_code == 0
+        # subprocess.run was called with uv pip install -e tools/runops
+        assert any(
+            "pip" in call and "install" in call and "-e" in call
+            for call in captured_calls
+        )
+        assert "editable install refreshed" in result.output
+
+    def test_reinstall_editable_skipped_without_venv(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """When there's no .venv, editable install is skipped gracefully."""
+        _init_project(tmp_path)
+
+        tools_runops = tmp_path / "tools" / "runops"
+        tools_runops.mkdir(parents=True)
+        (tools_runops / "pyproject.toml").write_text("[project]\nname='runops'\n")
+
+        monkeypatch.setattr(
+            "runops.cli.update_harness._pull_tools_repo",
+            lambda *_args, **_kwargs: "updated",
+        )
+        monkeypatch.setattr(
+            "runops.cli.update_harness._restart_with_skip_pull",
+            lambda: (_ for _ in ()).throw(typer.Exit(code=0)),
+        )
+        monkeypatch.delenv(update_harness_module._REEXEC_ENV_VAR, raising=False)
+
+        result = runner.invoke(app, ["update-harness", str(tmp_path)])
+
+        assert result.exit_code == 0
+        assert "skipped (no .venv)" in result.output
