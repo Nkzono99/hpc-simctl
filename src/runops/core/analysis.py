@@ -908,6 +908,7 @@ def render_survey_plot(
 
 def collect_survey_summaries(survey_dir: Path) -> SurveyCollectionResult:
     """Collect run summaries from a survey and write aggregate artifacts."""
+    survey_dir = Path(survey_dir).resolve()
     run_dirs = discover_runs(survey_dir)
     if not run_dirs:
         raise SimctlError("No runs found in survey directory.")

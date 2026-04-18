@@ -11,6 +11,7 @@ import pytest
 import tomli_w
 
 from runops.core.analysis import (
+    collect_survey_summaries,
     list_survey_plot_recipes,
     prepare_survey_plot_data,
     resolve_survey_plot_recipe,
@@ -181,3 +182,32 @@ def test_resolve_survey_plot_recipe_uses_first_available_candidates(
     assert resolved.x == "param.u"
     assert resolved.y == "energy"
     assert resolved.group_by == "origin.case"
+
+
+def test_collect_survey_summaries_accepts_relative_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Relative survey_dir should not raise ValueError in relative_to()."""
+    survey = tmp_path / "surveys" / "my_survey"
+    survey.mkdir(parents=True)
+    _create_run(
+        survey,
+        "R20260401-0001",
+        manifest={
+            "run": {
+                "id": "R20260401-0001",
+                "display_name": "baseline",
+                "status": "completed",
+            },
+            "origin": {"case": "cavity_base"},
+            "simulator": {"name": "test_sim", "adapter": "test_adapter"},
+            "params_snapshot": {"u": 400000.0},
+        },
+        summary={"energy": 10.0},
+    )
+
+    monkeypatch.chdir(tmp_path)
+    # Use a relative path — previously raised ValueError in relative_to()
+    result = collect_survey_summaries(Path("surveys/my_survey"))
+    assert result.total_runs == 1
