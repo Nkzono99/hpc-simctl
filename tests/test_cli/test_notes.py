@@ -81,6 +81,62 @@ def test_append_second_entry_appends_without_duplicate_header(tmp_path: Path) ->
     assert "later body" in text
 
 
+def test_append_date_option_writes_to_specified_day(tmp_path: Path) -> None:
+    """--date YYYY-MM-DD writes to that day's notebook file."""
+    project = _make_project(tmp_path)
+    fixed_now = datetime(2026, 4, 12, 1, 30, 0, tzinfo=notes_module.JST)
+
+    with (
+        patch("runops.cli.notes.Path.cwd", return_value=project),
+        patch("runops.cli.notes.datetime") as dt_mock,
+    ):
+        dt_mock.now.return_value = fixed_now
+        dt_mock.strptime.side_effect = lambda *a, **k: datetime.strptime(*a, **k)
+        result = runner.invoke(
+            app,
+            [
+                "notes",
+                "append",
+                "--date",
+                "2026-04-11",
+                "late-night continuation",
+                "still wrapping up yesterday",
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+    # Entry lands in the requested day, not today (2026-04-12)
+    target = project / "notes" / "2026-04-11.md"
+    today_file = project / "notes" / "2026-04-12.md"
+    assert target.is_file()
+    assert not today_file.exists()
+    text = target.read_text(encoding="utf-8")
+    assert "# 2026-04-11 — lab notebook" in text
+    assert "## 01:30 late-night continuation" in text
+    assert "still wrapping up yesterday" in text
+
+
+def test_append_date_option_rejects_invalid_date(tmp_path: Path) -> None:
+    """Invalid --date argument exits with a clear error."""
+    project = _make_project(tmp_path)
+
+    with patch("runops.cli.notes.Path.cwd", return_value=project):
+        result = runner.invoke(
+            app,
+            [
+                "notes",
+                "append",
+                "--date",
+                "not-a-date",
+                "title",
+                "body",
+            ],
+        )
+
+    assert result.exit_code == 2
+    assert "invalid --date" in result.output
+
+
 def test_append_body_from_stdin(tmp_path: Path) -> None:
     """Omitting body args reads from stdin."""
     project = _make_project(tmp_path)

@@ -86,6 +86,16 @@ def append(
             help="Override the notes directory (defaults to <project>/notes).",
         ),
     ] = None,
+    date: Annotated[
+        Optional[str],
+        typer.Option(
+            "--date",
+            help=(
+                "Write to a specific day's notebook (YYYY-MM-DD) instead of "
+                "today. Useful for catching up on past entries."
+            ),
+        ),
+    ] = None,
 ) -> None:
     """Append a timestamped entry to today's lab notebook.
 
@@ -93,14 +103,14 @@ def append(
     ``## HH:MM <title>`` heading.  The file is created on first use of the
     day with a top-level ``# YYYY-MM-DD — lab notebook`` header.
 
+    Pass ``--date YYYY-MM-DD`` to append to a specific day's notebook
+    (e.g. for catching up on past entries after midnight).
+
     Examples::
 
         runops notes append "cs scaling preview" "tan(alpha) = 0.79 cs/v + 0.02"
         echo "..." | runops notes append "today's TODO"
-        runops notes append "long entry" - <<'EOF'
-        first line
-        second line
-        EOF
+        runops notes append --date 2026-04-10 "yesterday's continuation" "..."
     """
     title = title.strip()
     if not title:
@@ -119,12 +129,22 @@ def append(
     target_dir.mkdir(parents=True, exist_ok=True)
 
     now = datetime.now(JST)
-    path = _today_path(target_dir, now=now)
+    if date is not None:
+        try:
+            entry_date = datetime.strptime(date, "%Y-%m-%d").date()
+        except ValueError as exc:
+            typer.echo(f"Error: invalid --date '{date}': {exc}", err=True)
+            raise typer.Exit(code=2) from None
+        path = target_dir / f"{entry_date.isoformat()}.md"
+        header_date = entry_date.isoformat()
+    else:
+        path = _today_path(target_dir, now=now)
+        header_date = now.date().isoformat()
     needs_header = not path.exists()
 
     with open(path, "a", encoding="utf-8") as f:
         if needs_header:
-            f.write(f"# {now.date().isoformat()} — lab notebook\n\n")
+            f.write(f"# {header_date} — lab notebook\n\n")
         f.write(f"## {now.strftime('%H:%M')} {title}\n\n")
         f.write(text.rstrip() + "\n\n")
 
