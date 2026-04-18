@@ -118,6 +118,90 @@ def test_status_run_not_found(tmp_path: Path) -> None:
     assert result.exit_code != 0
 
 
+def test_status_short_lists_runs_compactly(tmp_path: Path) -> None:
+    """--short produces 1 line per run and skips Slurm queries."""
+    (tmp_path / "runops.toml").write_text('[project]\nname = "test"\n')
+    survey = tmp_path / "runs" / "series_A"
+
+    for i, state in enumerate(["completed", "running", "submitted"], start=1):
+        run_dir = survey / f"R20260407-000{i}"
+        _write_manifest(
+            run_dir,
+            {
+                "run": {
+                    "id": f"R20260407-000{i}",
+                    "display_name": f"vti={0.02 * i:.2f}",
+                    "status": state,
+                },
+                "origin": {"case": "series_A_flat_plate"},
+                "job": {
+                    "scheduler": "slurm",
+                    "job_id": "" if state == "submitted" else "99",
+                },
+            },
+        )
+
+    with patch("runops.cli.status.Path.cwd", return_value=tmp_path):
+        result = runner.invoke(app, ["runs", "status", "--short", str(survey)])
+
+    assert result.exit_code == 0, result.output
+    lines = [ln for ln in result.output.strip().splitlines() if ln.strip()]
+    assert len(lines) == 3
+    assert "R20260407-0001" in result.output
+    assert "completed" in result.output
+    assert "series_A_flat_plate" in result.output
+    assert "Run:    " not in result.output
+    assert "Slurm:" not in result.output
+
+
+def test_status_summary_aggregates_by_case(tmp_path: Path) -> None:
+    """--summary groups runs by origin.case × state."""
+    (tmp_path / "runops.toml").write_text('[project]\nname = "test"\n')
+    survey = tmp_path / "runs"
+
+    layout = [
+        ("series_A", "completed", 2),
+        ("series_A", "running", 1),
+        ("series_B", "failed", 3),
+    ]
+    counter = 0
+    for case, state, n in layout:
+        for _ in range(n):
+            counter += 1
+            run_dir = survey / case / f"R202604{counter:04d}"
+            _write_manifest(
+                run_dir,
+                {
+                    "run": {
+                        "id": f"R202604{counter:04d}",
+                        "display_name": "x",
+                        "status": state,
+                    },
+                    "origin": {"case": case},
+                    "job": {"scheduler": "slurm", "job_id": ""},
+                },
+            )
+
+    with patch("runops.cli.status.Path.cwd", return_value=tmp_path):
+        result = runner.invoke(app, ["runs", "status", "--summary", str(survey)])
+
+    assert result.exit_code == 0, result.output
+    assert "series_A" in result.output
+    assert "completed=2" in result.output
+    assert "running=1" in result.output
+    assert "series_B" in result.output
+    assert "failed=3" in result.output
+    assert "6 run(s)" in result.output
+
+
+def test_status_short_and_summary_are_mutually_exclusive(tmp_path: Path) -> None:
+    (tmp_path / "runops.toml").write_text('[project]\nname = "test"\n')
+    with patch("runops.cli.status.Path.cwd", return_value=tmp_path):
+        result = runner.invoke(app, ["runs", "status", "--short", "--summary"])
+    assert result.exit_code == 2
+    assert "mutually exclusive" in result.output
+
+
 # ---------------------------------------------------------------------------
 # sync command tests
 # ---------------------------------------------------------------------------

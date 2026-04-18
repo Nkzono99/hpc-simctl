@@ -30,6 +30,24 @@ def status(
             )
         ),
     ] = None,
+    short: Annotated[
+        bool,
+        typer.Option(
+            "--short",
+            "-s",
+            help=(
+                "Compact one-line-per-run output: "
+                "run_id  state  origin_case  display_name."
+            ),
+        ),
+    ] = False,
+    summary: Annotated[
+        bool,
+        typer.Option(
+            "--summary",
+            help="Aggregate by origin.case × state; no per-run lines.",
+        ),
+    ] = False,
 ) -> None:
     """Show the current status of one or more runs.
 
@@ -39,14 +57,102 @@ def status(
 
     Multi-target form: pass a survey directory (e.g. ``runs/series_A``)
     or several run_ids; status is printed for each.
+
+    Use ``--short`` for a compact 1-line-per-run view, or ``--summary``
+    for a per-case aggregate. These modes skip the (slower) live Slurm
+    query and rely on manifest state only.
     """
+    if short and summary:
+        typer.echo("Error: --short and --summary are mutually exclusive.", err=True)
+        raise typer.Exit(code=2)
+
     targets = resolve_run_targets(runs, search_dir=Path.cwd())
+
+    if summary:
+        _print_status_summary(targets)
+        return
+
+    if short:
+        _print_status_short(targets)
+        return
 
     multi = len(targets) > 1
     for index, run_dir in enumerate(targets):
         if multi and index > 0:
             typer.echo("")
         _print_status_one(run_dir)
+
+
+def _print_status_short(targets: list[Path]) -> None:
+    """One line per run: run_id  state  case  display_name."""
+    rows: list[tuple[str, str, str, str]] = []
+    for run_dir in targets:
+        try:
+            manifest = read_manifest(run_dir)
+        except ManifestNotFoundError:
+            rows.append((run_dir.name, "unknown", "", "(no manifest)"))
+            continue
+        run_id = str(manifest.run.get("id", run_dir.name))
+        state = str(manifest.run.get("status", "unknown"))
+        case = str(manifest.origin.get("case", ""))
+        display_name = str(manifest.run.get("display_name", ""))
+        rows.append((run_id, state, case, display_name))
+
+    widths = [0, 0, 0]
+    for row in rows:
+        for i in range(3):
+            widths[i] = max(widths[i], len(row[i]))
+    for run_id, state, case, name in rows:
+        typer.echo(
+            f"{run_id:<{widths[0]}}  {state:<{widths[1]}}  "
+            f"{case:<{widths[2]}}  {name}".rstrip()
+        )
+
+
+def _print_status_summary(targets: list[Path]) -> None:
+    """Aggregate by origin.case × state."""
+    from collections import Counter, defaultdict
+
+    by_case: dict[str, Counter[str]] = defaultdict(Counter)
+    total = 0
+    for run_dir in targets:
+        try:
+            manifest = read_manifest(run_dir)
+        except ManifestNotFoundError:
+            by_case["(no manifest)"]["unknown"] += 1
+            total += 1
+            continue
+        case = str(manifest.origin.get("case", "")) or "(none)"
+        state = str(manifest.run.get("status", "unknown"))
+        by_case[case][state] += 1
+        total += 1
+
+    if not by_case:
+        typer.echo("No runs found.")
+        return
+
+    state_order = [
+        "completed",
+        "running",
+        "submitted",
+        "created",
+        "failed",
+        "cancelled",
+        "archived",
+        "purged",
+    ]
+
+    case_width = max(len(case) for case in by_case)
+    for case in sorted(by_case):
+        counts = by_case[case]
+        ordered = [(s, counts[s]) for s in state_order if counts.get(s)]
+        # Append any unknown states we didn't list
+        for s, c in sorted(counts.items()):
+            if s not in state_order and c:
+                ordered.append((s, c))
+        parts = "  ".join(f"{s}={c}" for s, c in ordered)
+        typer.echo(f"{case:<{case_width}}  {parts}")
+    typer.echo(f"\n{total} run(s) across {len(by_case)} case(s)")
 
 
 def _print_status_one(run_dir: Path) -> None:
