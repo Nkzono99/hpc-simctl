@@ -840,11 +840,11 @@ def retry_run(
     adjustments: dict[str, Any] | None = None,
     reviewed_log: bool = False,
 ) -> ActionResult:
-    """Resubmit a failed run as a new attempt."""
+    """Resubmit a failed or cancelled run as a new attempt."""
     from runops.core.manifest import read_manifest, update_manifest
     from runops.core.retry import get_attempt_count
 
-    state_str, err = _require_state(run_dir, RunState.FAILED)
+    state_str, err = _require_state(run_dir, RunState.FAILED, RunState.CANCELLED)
     if err:
         return _precondition_fail("retry_run", err)
 

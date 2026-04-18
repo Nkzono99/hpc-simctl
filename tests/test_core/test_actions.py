@@ -290,6 +290,28 @@ def test_retry_run_blocks_exit_error_without_log_review(tmp_path: Path) -> None:
     assert "requires log review" in result.message
 
 
+def test_retry_run_accepts_cancelled_state(tmp_path: Path) -> None:
+    """Cancelled runs (e.g. after a hang-cancel) can also be retried."""
+    run_dir = tmp_path / "R20260418-0002"
+    _write_manifest(
+        run_dir,
+        {
+            "run": {
+                "id": "R20260418-0002",
+                "status": "cancelled",
+                "failure_reason": "",
+            },
+            "job": {"attempt": 1},
+        },
+    )
+
+    result = retry_run(run_dir)
+
+    assert result.status is ActionStatus.SUCCESS
+    assert result.state_before == "cancelled"
+    assert result.state_after == "created"
+
+
 def test_retry_run_respects_max_attempts(tmp_path: Path) -> None:
     run_dir = tmp_path / "R20260330-0001"
     _write_manifest(

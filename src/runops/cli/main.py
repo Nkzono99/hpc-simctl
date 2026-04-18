@@ -22,6 +22,7 @@ from runops.cli.new import new
 from runops.cli.notes import append as notes_append
 from runops.cli.notes import list_notes as notes_list
 from runops.cli.notes import show as notes_show
+from runops.cli.retry import retry
 from runops.cli.setup import setup
 from runops.cli.status import status, sync
 from runops.cli.submit import run_cmd
@@ -55,6 +56,7 @@ runs_app.command("archive")(archive)
 runs_app.command("purge-work")(purge_work)
 runs_app.command("cancel")(cancel)
 runs_app.command("delete")(delete)
+runs_app.command("retry")(retry)
 
 analyze_app = typer.Typer(
     name="analyze",
