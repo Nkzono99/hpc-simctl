@@ -306,3 +306,69 @@ class TestCancel:
         result = runner.invoke(app, ["runs", "cancel", str(run_dir)], input="n\n")
         assert result.exit_code == 0
         assert "Cancelled." in result.output
+
+    def test_cancel_multiple_runs(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """`runs cancel` accepts multiple run arguments and cancels each."""
+        from runops.core import actions
+        from runops.core.actions import ActionResult, ActionStatus
+
+        (tmp_path / "runops.toml").write_text('[project]\nname = "test"\n')
+        r1 = _create_run(tmp_path, "R20260327-0001", status="running", job_id="100")
+        r2 = _create_run(tmp_path, "R20260327-0002", status="submitted", job_id="101")
+        # A run that should be skipped (already completed)
+        _create_run(tmp_path, "R20260327-0003", status="completed", job_id="102")
+
+        cancel_calls: list[Path] = []
+
+        def fake_cancel(rd: Path) -> ActionResult:
+            cancel_calls.append(rd)
+            return ActionResult(
+                action="cancel_run",
+                status=ActionStatus.SUCCESS,
+                message="cancelled",
+                data={},
+                state_before="running",
+                state_after="cancelled",
+            )
+
+        monkeypatch.setattr(actions, "cancel_run", fake_cancel)
+        monkeypatch.setattr("runops.cli.manage.cancel_run_action", fake_cancel)
+
+        result = runner.invoke(
+            app,
+            ["runs", "cancel", "--yes", str(r1), str(r2)],
+        )
+        assert result.exit_code == 0, result.output
+        assert len(cancel_calls) == 2
+
+    def test_cancel_survey_dir_skips_non_active(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Passing a survey dir cancels only submitted/running runs."""
+        from runops.core import actions
+        from runops.core.actions import ActionResult, ActionStatus
+
+        (tmp_path / "runops.toml").write_text('[project]\nname = "test"\n')
+        survey = tmp_path / "runs" / "series_A"
+        _create_run(survey, "R20260327-0001", status="running", job_id="100")
+        _create_run(survey, "R20260327-0002", status="completed", job_id="101")
+
+        def fake_cancel(rd: Path) -> ActionResult:
+            return ActionResult(
+                action="cancel_run",
+                status=ActionStatus.SUCCESS,
+                message="cancelled",
+                data={},
+                state_before="running",
+                state_after="cancelled",
+            )
+
+        monkeypatch.setattr(actions, "cancel_run", fake_cancel)
+        monkeypatch.setattr("runops.cli.manage.cancel_run_action", fake_cancel)
+
+        result = runner.invoke(app, ["runs", "cancel", "--yes", str(survey)])
+        assert result.exit_code == 0, result.output
+        assert "R20260327-0001" in result.output
+        assert "Skipped 1 run" in result.output

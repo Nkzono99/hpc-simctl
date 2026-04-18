@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Annotated, Optional
 
 import typer
 
-from runops.cli.run_lookup import resolve_run_or_cwd
+from runops.cli.run_lookup import resolve_run_or_cwd, resolve_run_targets
 from runops.core.actions import ActionStatus
 from runops.core.actions import archive_run as archive_run_action
 from runops.core.actions import cancel_run as cancel_run_action
@@ -128,53 +129,113 @@ def purge_work(
 
 
 def cancel(
-    run: str = typer.Argument(None, help="Run directory or run_id (defaults to cwd)."),
-    yes: bool = typer.Option(False, "--yes", help="Skip confirmation prompt."),
+    runs: Annotated[
+        Optional[list[str]],
+        typer.Argument(
+            help=(
+                "Run identifiers or directories. Each item may be a run_id, "
+                "a run directory, or a directory containing runs (recursive). "
+                "Defaults to cwd."
+            )
+        ),
+    ] = None,
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", "-y", help="Skip confirmation prompt."),
+    ] = False,
 ) -> None:
-    """Cancel an active Slurm job (scancel) and sync the run state.
+    """Cancel active Slurm jobs (scancel) and sync run states.
 
-    Combines ``scancel <job_id>`` and ``runops runs sync`` so the manifest is
-    updated automatically.  Use this instead of bare ``scancel`` so the run
-    state ends up consistent.
+    Combines ``scancel <job_id>`` and ``runops runs sync`` so each manifest is
+    updated automatically.  Use this instead of bare ``scancel`` so run states
+    end up consistent.
+
+    Multiple targets and recursive survey directories are supported — any
+    non-cancellable run (not submitted/running, or missing job_id) is reported
+    and skipped in bulk mode.
     """
-    run_dir = resolve_run_or_cwd(run, search_dir=Path.cwd())
+    targets = resolve_run_targets(runs, search_dir=Path.cwd())
 
-    try:
-        manifest = read_manifest(run_dir)
-    except SimctlError as e:
-        typer.echo(f"Error reading manifest: {e}", err=True)
-        raise typer.Exit(code=1) from None
+    # Collect cancellable runs first so we can show a single confirmation.
+    cancellable: list[tuple[Path, str, str]] = []  # (run_dir, run_id, job_id)
+    skipped: list[tuple[str, str]] = []  # (run_id, reason)
 
-    current_status = manifest.run.get("status", "")
-    job_id = manifest.job.get("job_id", "")
-    run_id = manifest.run.get("id", "???")
+    for run_dir in targets:
+        try:
+            manifest = read_manifest(run_dir)
+        except SimctlError as e:
+            skipped.append((run_dir.name, f"error reading manifest: {e}"))
+            continue
 
-    if current_status not in {RunState.SUBMITTED.value, RunState.RUNNING.value}:
-        typer.echo(
-            "Error: can only cancel submitted/running runs, "
-            f"but run is '{current_status}'.",
-            err=True,
-        )
+        run_id = str(manifest.run.get("id", run_dir.name))
+        current_status = str(manifest.run.get("status", ""))
+        job_id = str(manifest.job.get("job_id", ""))
+
+        if current_status not in {
+            RunState.SUBMITTED.value,
+            RunState.RUNNING.value,
+        }:
+            skipped.append((run_id, f"state is '{current_status}'"))
+            continue
+        if not job_id:
+            skipped.append((run_id, "no job_id recorded"))
+            continue
+
+        cancellable.append((run_dir, run_id, job_id))
+
+    # Single-target strict mode: surface explicit errors in the legacy format.
+    if len(targets) == 1 and not cancellable and skipped:
+        run_id, reason = skipped[0]
+        if reason.startswith("state is"):
+            state = reason.split("'")[1] if "'" in reason else "?"
+            typer.echo(
+                "Error: can only cancel submitted/running runs, "
+                f"but run is '{state}'.",
+                err=True,
+            )
+        elif "no job_id" in reason:
+            typer.echo("Error: no job_id recorded in manifest.", err=True)
+        else:
+            typer.echo(f"Error: cannot cancel {run_id}: {reason}", err=True)
         raise typer.Exit(code=1)
-    if not job_id:
-        typer.echo("Error: no job_id recorded in manifest.", err=True)
+
+    if not cancellable:
+        typer.echo("No cancellable runs found.")
+        for run_id, reason in skipped:
+            typer.echo(f"  {run_id}: {reason}")
+        return
+
+    if not yes:
+        if len(cancellable) == 1:
+            _, run_id, job_id = cancellable[0]
+            prompt = f"Cancel run {run_id} (Slurm job {job_id})?"
+        else:
+            ids = ", ".join(r[1] for r in cancellable[:5])
+            if len(cancellable) > 5:
+                ids += f", ... (+{len(cancellable) - 5} more)"
+            prompt = f"Cancel {len(cancellable)} runs? [{ids}]"
+        if not typer.confirm(prompt, default=False):
+            typer.echo("Cancelled.")
+            raise typer.Exit()
+
+    failures = 0
+    for run_dir, run_id, _ in cancellable:
+        result = cancel_run_action(run_dir)
+        if result.status is not ActionStatus.SUCCESS:
+            typer.echo(f"{run_id}: error — {result.message}", err=True)
+            failures += 1
+            continue
+        typer.echo(f"{run_id}: {result.message}")
+        if result.state_after and result.state_before != result.state_after:
+            typer.echo(f"  State: {result.state_before} -> {result.state_after}")
+
+    if skipped:
+        typer.echo(f"\nSkipped {len(skipped)} run(s):")
+        for run_id, reason in skipped:
+            typer.echo(f"  {run_id}: {reason}")
+
+    if failures:
         raise typer.Exit(code=1)
-
-    if not yes and not typer.confirm(
-        f"Cancel run {run_id} (Slurm job {job_id})?",
-        default=False,
-    ):
-        typer.echo("Cancelled.")
-        raise typer.Exit()
-
-    result = cancel_run_action(run_dir)
-    if result.status is not ActionStatus.SUCCESS:
-        typer.echo(f"Error: {result.message}", err=True)
-        raise typer.Exit(code=1)
-
-    typer.echo(result.message)
-    if result.state_after and result.state_before != result.state_after:
-        typer.echo(f"  State: {result.state_before} -> {result.state_after}")
 
 
 def delete(
