@@ -190,6 +190,8 @@ class TestInitUpstreamFeedback:
         assert result.exit_code == 0
         rule = tmp_path / ".claude" / "rules" / "upstream-feedback.md"
         assert not rule.exists()
+        agents = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
+        assert "runops へのフィードバック" not in agents
 
     def test_simproject_records_upstream_feedback(self, tmp_path: Path) -> None:
         """runops.toml includes [harness] upstream_feedback = true."""

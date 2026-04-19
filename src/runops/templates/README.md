@@ -8,7 +8,8 @@ Current layout:
 
 - `harness/` — agent harness output templates. Agent-specific files live under
   `harness/<agent>/`; shared instruction templates live under
-  `harness/shared/`.
+  `harness/shared/`. `CLAUDE.md` and `AGENTS.md` have separate entrypoint
+  templates and include shared partials where their behaviour overlaps.
 - `skills/` — shared `SKILL.md` source templates. They render to both
   `.claude/skills/` and `.agents/skills/`, with agent-specific invocation
   syntax injected by the harness builder.
@@ -28,7 +29,6 @@ templates/
     codex/
     claude/
     shared/
-    skills/
   project/
 ```
 

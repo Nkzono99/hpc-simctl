@@ -213,6 +213,10 @@ class TestInit:
         assert "役割分担" in content
         assert "$new-case" in content
         assert "/new-case" not in content
+        assert "Codex 補助ルール" in content
+        assert "Simulator Cookbook ルール" in content
+        assert "runops へのフィードバック" in content
+        assert "globs: refs/**/cookbook/**" not in content
 
     def test_init_skills(self, tmp_path: Path) -> None:
         """Individual SKILL.md files are created for Claude and Codex."""

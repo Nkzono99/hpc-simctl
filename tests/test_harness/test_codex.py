@@ -112,6 +112,34 @@ def test_agents_md_does_not_use_import_syntax() -> None:
     assert "/new-case" not in agents
 
 
+def test_agents_md_inlines_shared_codex_rules() -> None:
+    """Codex gets shared cookbook/upstream guidance through AGENTS.md."""
+    bundle = build_harness_bundle(
+        "demo",
+        ["emses"],
+        upstream_feedback=True,
+    )
+    agents = bundle.files["AGENTS.md"]
+    assert "## Codex 補助ルール" in agents
+    assert "### Simulator Cookbook ルール" in agents
+    assert "### runops へのフィードバック" in agents
+    # The Claude rule frontmatter must not be embedded into AGENTS.md.
+    assert "globs: refs/**/cookbook/**" not in agents
+
+
+def test_agents_md_omits_empty_codex_rules_section() -> None:
+    """No empty Codex rules section is emitted when no shared rules apply."""
+    bundle = build_harness_bundle(
+        "demo",
+        [],
+        upstream_feedback=False,
+    )
+    agents = bundle.files["AGENTS.md"]
+    assert "## Codex 補助ルール" not in agents
+    assert "Simulator Cookbook ルール" not in agents
+    assert "runops へのフィードバック" not in agents
+
+
 def test_claude_md_keeps_import_syntax() -> None:
     """CLAUDE.md continues to use @file imports (Claude Code supports it)."""
     bundle = build_harness_bundle(
@@ -124,6 +152,7 @@ def test_claude_md_keeps_import_syntax() -> None:
     assert "@.runops/knowledge/enabled/imports.md" in claude
     assert ".claude/skills/" in claude
     assert "/new-case" in claude
+    assert "Codex 補助ルール" not in claude
 
 
 def test_harness_prefixes_include_agents_and_codex() -> None:

@@ -1,15 +1,6 @@
-# {{ doc_name }} — {{ project_name }}
-
 このプロジェクトは runops で管理されています。
 人が研究目的・ベース入力・計算資源上限を決め、Agent はその範囲で
 campaign 設計、case / survey 編集、run 生成、投入、監視、解析、知見整理を進めます。
-{% if doc_name == "AGENTS.md" -%}
-Codex は `AGENTS.md`、`.agents/skills/`、`.codex/config.toml`、`.codex/rules/` を読む。
-Claude Code 用の `CLAUDE.md` と同じ運用ルールを共有する。
-{%- else -%}
-Claude Code は `CLAUDE.md`、`.claude/skills/`、`.claude/rules/`、`.claude/settings.json` を読む。
-Codex 用の `AGENTS.md` と同じ運用ルールを共有する。
-{%- endif %}
 
 ## コミュニケーション
 

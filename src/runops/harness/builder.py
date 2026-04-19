@@ -48,13 +48,14 @@ CODEX_README = ".codex/README.md"
 CODEX_RULES = ".codex/rules/runops.rules"
 AGENTS_SKILLS_PREFIX = ".agents/skills/"
 
-_AGENT_MD_TEMPLATE = "harness/shared/agent.md.j2"
+_CLAUDE_MD_TEMPLATE = "harness/claude/CLAUDE.md.j2"
+_AGENTS_MD_TEMPLATE = "harness/codex/AGENTS.md.j2"
 _CASES_DOC_TEMPLATE = "harness/shared/cases.md"
 _RUNS_DOC_TEMPLATE = "harness/shared/runs.md"
 _RULE_WORKFLOW_TEMPLATE = "harness/claude/rules/runops-workflow.md"
 _RULE_PLAN_BEFORE_ACT_TEMPLATE = "harness/claude/rules/plan-before-act.md"
-_RULE_COOKBOOK_TEMPLATE = "harness/claude/rules/cookbook.md"
-_RULE_UPSTREAM_FEEDBACK_TEMPLATE = "harness/claude/rules/upstream-feedback.md"
+_RULE_COOKBOOK_TEMPLATE = "harness/claude/rules/cookbook.md.j2"
+_RULE_UPSTREAM_FEEDBACK_TEMPLATE = "harness/claude/rules/upstream-feedback.md.j2"
 
 # Files that update-harness is allowed to touch.  Any other file under the
 # project root (campaign.toml, cases/**, runs/**, etc.) is user-owned and
@@ -162,15 +163,18 @@ def _collect_pip_packages(simulator_names: list[str]) -> list[str]:
 
 
 def _render_agent_md(
+    template_path: str,
     doc_name: str,
     project_name: str,
-    simulator_names: list[str],
+    doc_repos: list[tuple[str, str]],
     *,
     knowledge_imports_path: str,
     supports_import: bool,
     skills_dir: str,
+    include_cookbook_rule: bool,
+    include_upstream_feedback: bool,
 ) -> str:
-    """Render the shared ``agent.md`` Jinja template for CLAUDE/AGENTS md.
+    """Render a CLAUDE.md / AGENTS.md Jinja template.
 
     ``supports_import`` controls whether the rendered file may use the
     ``@file`` import syntax.  Claude Code supports it; the Codex CLI
@@ -182,11 +186,13 @@ def _render_agent_md(
     from runops.templates import get_jinja_env
 
     env = get_jinja_env()
-    template = env.get_template(_AGENT_MD_TEMPLATE)
+    template = env.get_template(template_path)
     return template.render(
         doc_name=doc_name,
         project_name=project_name,
-        doc_repos=_collect_doc_repos(simulator_names) if simulator_names else [],
+        doc_repos=doc_repos,
+        include_cookbook_rule=include_cookbook_rule,
+        include_upstream_feedback=include_upstream_feedback,
         knowledge_imports_path=knowledge_imports_path,
         supports_import=supports_import,
         skills_dir=skills_dir,
@@ -270,25 +276,33 @@ def build_harness_bundle(
         build_codex_readme,
         build_codex_rules,
     )
-    from runops.templates import load_static
+    from runops.templates import load_static, render
 
     files: dict[str, str] = {}
+    doc_repos = _collect_doc_repos(simulator_names) if simulator_names else []
+    include_cookbook_rule = bool(simulator_names and doc_repos)
 
     files[CLAUDE_MD] = _render_agent_md(
+        _CLAUDE_MD_TEMPLATE,
         CLAUDE_MD,
         project_name,
-        simulator_names,
+        doc_repos,
         knowledge_imports_path=knowledge_imports_path,
         supports_import=True,
         skills_dir=".claude/skills/",
+        include_cookbook_rule=include_cookbook_rule,
+        include_upstream_feedback=upstream_feedback,
     )
     files[AGENTS_MD] = _render_agent_md(
+        _AGENTS_MD_TEMPLATE,
         AGENTS_MD,
         project_name,
-        simulator_names,
+        doc_repos,
         knowledge_imports_path=knowledge_imports_path,
         supports_import=False,
         skills_dir=AGENTS_SKILLS_PREFIX,
+        include_cookbook_rule=include_cookbook_rule,
+        include_upstream_feedback=upstream_feedback,
     )
 
     files[CLAUDE_SETTINGS] = build_claude_settings()
@@ -304,10 +318,10 @@ def build_harness_bundle(
 
     files[RULE_WORKFLOW] = load_static(_RULE_WORKFLOW_TEMPLATE)
     files[RULE_PLAN_BEFORE_ACT] = load_static(_RULE_PLAN_BEFORE_ACT_TEMPLATE)
-    if simulator_names and _collect_doc_repos(simulator_names):
-        files[RULE_COOKBOOK] = load_static(_RULE_COOKBOOK_TEMPLATE)
+    if include_cookbook_rule:
+        files[RULE_COOKBOOK] = render(_RULE_COOKBOOK_TEMPLATE)
     if upstream_feedback:
-        files[RULE_UPSTREAM_FEEDBACK] = load_static(_RULE_UPSTREAM_FEEDBACK_TEMPLATE)
+        files[RULE_UPSTREAM_FEEDBACK] = render(_RULE_UPSTREAM_FEEDBACK_TEMPLATE)
 
     files[CASES_CLAUDE_MD] = load_static(_CASES_DOC_TEMPLATE)
     files[RUNS_CLAUDE_MD] = load_static(_RUNS_DOC_TEMPLATE)
