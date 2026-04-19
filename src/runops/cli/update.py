@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -14,30 +15,29 @@ from runops.core.exceptions import SimctlError
 from runops.core.project import find_project_root, load_project
 
 
-def _venv_pip_from_dir(venv_dir: Path) -> Path | None:
-    """Return venv pip path if present, handling Windows layout."""
-    pip_rel = "Scripts/pip.exe" if sys.platform == "win32" else "bin/pip"
-    pip_path = venv_dir / pip_rel
-    if pip_path.exists():
-        return pip_path
-    # Resolve symlinks and retry (some clusters use symlinked .venv)
+def _venv_python_from_dir(venv_dir: Path) -> Path | None:
+    """Return the venv's Python interpreter, handling Windows layout and symlinks."""
+    python_rel = "Scripts/python.exe" if sys.platform == "win32" else "bin/python"
+    python_path = venv_dir / python_rel
+    if python_path.exists():
+        return python_path
     try:
         resolved = venv_dir.resolve()
     except OSError:
         return None
     if resolved != venv_dir:
-        pip_path = resolved / pip_rel
-        if pip_path.exists():
-            return pip_path
+        python_path = resolved / python_rel
+        if python_path.exists():
+            return python_path
     return None
 
 
-def _find_venv_pip() -> str | None:
-    """Find pip in the project's .venv.
+def _find_venv_python() -> Path | None:
+    """Locate the project's venv Python interpreter.
 
     Resolution order:
-      1. Project root's ``.venv/bin/pip`` (walked up from cwd).
-      2. ``$VIRTUAL_ENV/bin/pip`` if an activated venv is set.
+      1. Project root's ``.venv/bin/python`` (walked up from cwd).
+      2. ``$VIRTUAL_ENV/bin/python`` if an activated venv is set.
 
     Both paths are tried with symlink resolution so projects accessed via
     symlinked paths still work.
@@ -64,11 +64,45 @@ def _find_venv_pip() -> str | None:
         if key in seen:
             continue
         seen.add(key)
-        pip_path = _venv_pip_from_dir(venv_dir)
-        if pip_path is not None:
-            return str(pip_path)
+        python_path = _venv_python_from_dir(venv_dir)
+        if python_path is not None:
+            return python_path
 
     return None
+
+
+def _find_uv() -> str | None:
+    """Return the uv executable path, or None if not on PATH."""
+    return shutil.which("uv")
+
+
+def _build_install_cmd(
+    venv_python: Path,
+    packages: list[str],
+    *,
+    upgrade: bool = True,
+) -> tuple[list[str], str]:
+    """Build an install command for the given venv Python.
+
+    Prefers ``uv pip install`` (works on pip-less uv venvs) and falls back to
+    ``python -m pip install`` when uv is not available.
+
+    Returns:
+        (command list, short label describing the approach used).
+    """
+    uv = _find_uv()
+    if uv is not None:
+        cmd = [uv, "pip", "install", "--python", str(venv_python)]
+        if upgrade:
+            cmd.append("--upgrade")
+        cmd.extend(packages)
+        return cmd, "uv pip"
+
+    cmd = [str(venv_python), "-m", "pip", "install"]
+    if upgrade:
+        cmd.append("--upgrade")
+    cmd.extend(packages)
+    return cmd, "python -m pip"
 
 
 def _collect_packages(simulator_names: list[str]) -> list[str]:
@@ -137,20 +171,31 @@ def update(
             typer.echo(f"  {pkg}")
         return
 
-    pip_exe = _find_venv_pip()
-    if pip_exe is None:
-        typer.echo("No .venv found. Run 'runops init' first or create .venv manually.")
+    venv_python = _find_venv_python()
+    if venv_python is None:
+        typer.echo(
+            "No .venv found. Run 'runops init' first, activate an existing "
+            "venv, or create one with 'uv venv'.",
+            err=True,
+        )
         raise typer.Exit(code=1)
 
-    typer.echo(f"Upgrading packages for: {', '.join(simulators)}")
-    result = subprocess.run(
-        [pip_exe, "install", "--upgrade", *packages],
-        text=True,
-        check=False,
+    cmd, approach = _build_install_cmd(venv_python, packages, upgrade=True)
+    typer.echo(
+        f"Upgrading packages for: {', '.join(simulators)} "
+        f"(via {approach}, target {venv_python})"
     )
+    result = subprocess.run(cmd, text=True, check=False)
 
     if result.returncode == 0:
         typer.echo(f"Upgraded {len(packages)} packages.")
     else:
-        typer.echo("Upgrade failed.")
+        if approach == "python -m pip":
+            typer.echo(
+                "\nHint: uv is not on PATH. Either install uv "
+                "(https://astral.sh/uv) or ensure pip is installed in the "
+                "venv (e.g. 'uv pip install --python .venv pip').",
+                err=True,
+            )
+        typer.echo("Upgrade failed.", err=True)
         raise typer.Exit(code=1)
