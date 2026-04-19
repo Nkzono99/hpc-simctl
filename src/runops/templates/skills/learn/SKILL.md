@@ -5,9 +5,9 @@ description: Save knowledge insights and structured facts from experiment result
 
 # 実験結果から知見を記録する
 
-`/learn` は curated knowledge (`.runops/insights/`, `.runops/facts.toml`)
-への永続化スキル。これに対して `/note` は raw な lab notebook (`notes/`) への
-時系列追記。`/learn` は **`/note` の中身を素材として利用** する関係になる。
+`{{ skill_prefix }}learn` は curated knowledge (`.runops/insights/`, `.runops/facts.toml`)
+への永続化スキル。これに対して `{{ skill_prefix }}note` は raw な lab notebook (`notes/`) への
+時系列追記。`{{ skill_prefix }}learn` は **`{{ skill_prefix }}note` の中身を素材として利用** する関係になる。
 
 ## 手順
 

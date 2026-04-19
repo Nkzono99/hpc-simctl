@@ -91,9 +91,10 @@ _DENY_BASH: Final[tuple[str, ...]] = (
 # Paths the agent may freely Edit/Write without confirmation.
 # tools/runops/** is included so projects that dev-install the runops
 # repo from tools/runops/ can iterate on it without per-edit prompts.
-# .claude/{rules,skills,commands}/** are allowed because they are
-# documentation-style files.  Only the actual policy files
-# (.claude/settings.json, .claude/hooks/**) require confirmation.
+# .claude/{rules,skills,commands}/** and .agents/skills/** are allowed because
+# they are documentation-style files.  Actual policy files
+# (.claude/settings.json, .claude/hooks/**, .codex/config.toml,
+# .codex/rules/**) require confirmation.
 _ALLOW_EDIT_PATHS: Final[tuple[str, ...]] = (
     "/campaign.toml",
     "/cases/**",
@@ -106,6 +107,8 @@ _ALLOW_EDIT_PATHS: Final[tuple[str, ...]] = (
     "/.claude/rules/**",
     "/.claude/skills/**",
     "/.claude/commands/**",
+    "/.agents/skills/**",
+    "/.codex/README.md",
     "/.vscode/**",
     "/.idea/**",
 )
@@ -118,9 +121,12 @@ _ASK_EDIT_PATHS: Final[tuple[str, ...]] = (
     "/CLAUDE.md",
     "/AGENTS.md",
     "/**/CLAUDE.md",
+    "/**/AGENTS.md",
     "/.claude/settings.json",
     "/.claude/settings.local.json",
     "/.claude/hooks/**",
+    "/.codex/config.toml",
+    "/.codex/rules/**",
 )
 _DENY_EDIT_PATHS: Final[tuple[str, ...]] = (
     "/SITE.md",

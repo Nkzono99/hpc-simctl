@@ -56,7 +56,8 @@
 
 以下は permissions.ask でユーザー承認が必要なファイル:
 `runops.toml`, `simulators.toml`, `launchers.toml`, `CLAUDE.md`,
-`AGENTS.md`, `.claude/settings.json`, `.claude/hooks/**`. 変更前に意図と
+`AGENTS.md`, `**/CLAUDE.md`, `**/AGENTS.md`, `.claude/settings.json`,
+`.claude/hooks/**`, `.codex/config.toml`, `.codex/rules/**`. 変更前に意図と
 差分を提示する。
 
 ## コミットの義務

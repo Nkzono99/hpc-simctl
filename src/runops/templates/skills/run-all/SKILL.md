@@ -26,7 +26,7 @@ runops runs submit --all -qn <queue>
 - 初回の大規模 survey は承認を取る
 - dry-run で確認: `runops runs submit --all --dry-run`
 
-## `/note` で残すべきこと
+## `{{ skill_prefix }}note` で残すべきこと
 
 投入直前と直後に lab notebook に記録する (後でジョブが化けたとき・物理が
 おかしかったとき、何を投入したか辿れるようにする):
@@ -44,4 +44,3 @@ smoke は R20260330-0001/-0010/-0019 (両端と中央).
 完走見込み: 約 8 h × 10 run / 4 並列 = 20 h.
 EOF
 ```
-

@@ -56,7 +56,7 @@ runops case new my_case -s emses --survey
 
 # または既存ケースに survey を追加
 mkdir -p runs/<survey_name>
-# survey.toml を作成 (フォーマットは /survey-design スキル参照)
+# survey.toml を作成 (フォーマットは {{ skill_prefix }}survey-design スキル参照)
 ```
 
 ### survey.toml の例
@@ -102,7 +102,7 @@ runops runs status
 cd runs/test/basic/Rxxxxxxxx-xxxx
 runops runs submit -qn <partition>
 
-# survey 全体を投入 (/run-all スキル推奨)
+# survey 全体を投入 ({{ skill_prefix }}run-all スキル推奨)
 cd runs/sheath/angle_scan
 runops runs submit --all -qn <partition>
 ```
@@ -115,7 +115,7 @@ runops runs submit --all -qn <partition>
 - survey の run 数が多い場合は投入前に plan を出して承認を取る
 - `runops runs submit --all --dry-run` で投入前に確認できる
 
-## `/note` で残すべきこと
+## `{{ skill_prefix }}note` で残すべきこと
 
 run / survey 生成の前後で lab notebook に記録する:
 

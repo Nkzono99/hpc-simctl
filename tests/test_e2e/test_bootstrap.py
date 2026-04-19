@@ -158,8 +158,13 @@ def _assert_minimum_bootstrap_layout(project_dir: Path) -> None:
         project_dir / ".claude" / "settings.json",
         project_dir / ".claude" / "rules",
         project_dir / ".claude" / "skills",
+        project_dir / ".agents" / "skills",
+        project_dir / ".codex" / "config.toml",
+        project_dir / ".codex" / "rules" / "runops.rules",
         project_dir / "CLAUDE.md",
         project_dir / "AGENTS.md",
+        project_dir / "cases" / "AGENTS.md",
+        project_dir / "runs" / "AGENTS.md",
     )
     for expected_path in expected_paths:
         assert expected_path.exists(), expected_path
@@ -190,6 +195,9 @@ def test_e2e_init_minimal(
 
     claude_md = (project_dir / "CLAUDE.md").read_text(encoding="utf-8")
     assert "@.runops/knowledge/enabled/imports.md" in claude_md
+    agents_md = (project_dir / "AGENTS.md").read_text(encoding="utf-8")
+    assert ".runops/knowledge/enabled/imports.md" in agents_md
+    assert "$new-case" in agents_md
 
     settings = json.loads(
         (project_dir / ".claude" / "settings.json").read_text(encoding="utf-8")

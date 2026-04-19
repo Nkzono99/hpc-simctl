@@ -325,7 +325,8 @@ def update_harness(
             err=True,
         )
         typer.echo(
-            "To dismiss:              rm *.new .claude/**/*.new",
+            "To dismiss:              "
+            "rm *.new .claude/**/*.new .codex/**/*.new .agents/**/*.new",
             err=True,
         )
     if unchanged:

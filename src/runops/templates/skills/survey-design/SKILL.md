@@ -48,7 +48,7 @@ runops runs list runs/<category>/<survey_name>
 - `status = "stable"` の entry をベースにする
 - fragment を使う場合は `[merge]` と `[compatibility]` を確認する
 
-## `/note` で残すべきこと
+## `{{ skill_prefix }}note` で残すべきこと
 
 survey 設計の意思決定は `notes/YYYY-MM-DD.md` に残す:
 
@@ -70,4 +70,3 @@ EOF
 ## TOML フォーマット
 
 詳細は `tools/runops/docs/toml-reference.md` の survey.toml セクションを参照。
-

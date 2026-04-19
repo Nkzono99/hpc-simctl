@@ -18,7 +18,12 @@ def test_build_claude_settings_exposes_expected_policy() -> None:
     assert "Bash(runops analyze plot*)" in data["permissions"]["allow"]
     assert "Bash(runops analyze export*)" in data["permissions"]["allow"]
     assert "Edit(/campaign.toml)" in data["permissions"]["allow"]
+    assert "Edit(/.agents/skills/**)" in data["permissions"]["allow"]
+    assert "Edit(/.codex/README.md)" in data["permissions"]["allow"]
     assert "Write(/runops.toml)" in data["permissions"]["ask"]
+    assert "Write(/.codex/config.toml)" in data["permissions"]["ask"]
+    assert "Write(/.codex/rules/**)" in data["permissions"]["ask"]
+    assert "Write(/**/AGENTS.md)" in data["permissions"]["ask"]
     assert "Write(/SITE.md)" in data["permissions"]["deny"]
     assert "Edit(/runs/**/manifest.toml)" in data["permissions"]["deny"]
     assert data["permissions"]["disableBypassPermissionsMode"] == "disable"

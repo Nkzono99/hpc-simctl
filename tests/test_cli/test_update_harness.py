@@ -56,6 +56,11 @@ class TestUpdateHarnessBasic:
         assert ".claude/settings.json" in lock
         assert ".claude/rules/runops-workflow.md" in lock
         assert ".claude/rules/upstream-feedback.md" in lock
+        assert ".codex/config.toml" in lock
+        assert ".codex/rules/runops.rules" in lock
+        assert ".agents/skills/new-case/SKILL.md" in lock
+        assert "cases/AGENTS.md" in lock
+        assert "runs/AGENTS.md" in lock
 
     def test_overwrites_unedited_files(self, tmp_path: Path) -> None:
         """Files matching their lock hash are silently overwritten."""

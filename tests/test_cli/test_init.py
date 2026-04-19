@@ -41,6 +41,9 @@ class TestInit:
         assert (tmp_path / "AGENTS.md").exists()
         assert (tmp_path / ".runops" / "knowledge" / "candidates" / "facts").is_dir()
         assert (tmp_path / ".claude" / "skills").is_dir()
+        assert (tmp_path / ".agents" / "skills").is_dir()
+        assert (tmp_path / ".codex" / "config.toml").exists()
+        assert (tmp_path / ".codex" / "rules" / "runops.rules").exists()
         assert (tmp_path / ".vscode" / "settings.json").exists()
         # Lab notebook scaffolding
         assert (tmp_path / "notes").is_dir()
@@ -56,13 +59,21 @@ class TestInit:
         assert "notes/YYYY-MM-DD.md" in readme
 
     def test_init_creates_note_skill(self, tmp_path: Path) -> None:
-        """The /note skill is scaffolded next to the other skills."""
+        """The note skill is scaffolded next to the other skills."""
         runner.invoke(app, ["init", "-y", "--path", str(tmp_path)])
         skill_md = tmp_path / ".claude" / "skills" / "note" / "SKILL.md"
+        codex_skill_md = tmp_path / ".agents" / "skills" / "note" / "SKILL.md"
         assert skill_md.is_file()
+        assert codex_skill_md.is_file()
         content = skill_md.read_text(encoding="utf-8")
+        codex_content = codex_skill_md.read_text(encoding="utf-8")
         assert "name: note" in content
         assert "runops notes append" in content
+        assert "name: note" in codex_content
+        assert "runops notes append" in codex_content
+        assert "`/note`" in content
+        assert "`$note`" in codex_content
+        assert "`/note`" not in codex_content
 
     def test_init_simproject_content(self, tmp_path: Path) -> None:
         """runops.toml has correct project name derived from dir name."""
@@ -117,6 +128,7 @@ class TestInit:
         assert "runs/**/status/" in content
         assert "runs/**/input/plasma.inp" in content
         assert "runs/**/analysis/scratch/" in content
+        assert "AGENTS.override.md" in content
 
     def test_init_skips_existing_files(self, tmp_path: Path) -> None:
         """Init does not overwrite existing files."""
@@ -199,16 +211,21 @@ class TestInit:
         assert "runops" in content
         assert "runops context" in content
         assert "役割分担" in content
+        assert "$new-case" in content
+        assert "/new-case" not in content
 
     def test_init_skills(self, tmp_path: Path) -> None:
-        """Individual SKILL.md files are created under .claude/skills/."""
+        """Individual SKILL.md files are created for Claude and Codex."""
         runner.invoke(app, ["init", "-y", "--path", str(tmp_path)])
         skills_dir = tmp_path / ".claude" / "skills"
+        codex_skills_dir = tmp_path / ".agents" / "skills"
         assert (skills_dir / "setup-env" / "SKILL.md").exists()
         assert (skills_dir / "survey-design" / "SKILL.md").exists()
         assert (skills_dir / "check-status" / "SKILL.md").exists()
         assert (skills_dir / "analyze" / "SKILL.md").exists()
         assert (skills_dir / "runops-reference" / "SKILL.md").exists()
+        assert (codex_skills_dir / "setup-env" / "SKILL.md").exists()
+        assert (codex_skills_dir / "runops-reference" / "SKILL.md").exists()
         setup_content = (skills_dir / "setup-env" / "SKILL.md").read_text(
             encoding="utf-8"
         )
@@ -253,6 +270,24 @@ class TestInit:
         # is captured in .claude/rules/runops-workflow.md instead.
         assert "hooks" not in data
 
+    def test_init_codex_config_and_rules(self, tmp_path: Path) -> None:
+        """Codex project config and execpolicy rules are scaffolded."""
+        runner.invoke(app, ["init", "-y", "--path", str(tmp_path)])
+        config = (tmp_path / ".codex" / "config.toml").read_text(encoding="utf-8")
+        assert 'approval_policy = "on-request"' in config
+        assert 'sandbox_mode = "workspace-write"' in config
+        assert "project_doc_max_bytes = 65536" in config
+        assert "[sandbox_workspace_write]" in config
+        assert "network_access = false" in config
+
+        rules = (tmp_path / ".codex" / "rules" / "runops.rules").read_text(
+            encoding="utf-8"
+        )
+        assert 'pattern = ["runops", "runs", "submit"]' in rules
+        assert 'decision = "prompt"' in rules
+        assert 'pattern = ["rm", "-rf"]' in rules
+        assert 'decision = "forbidden"' in rules
+
     def test_init_does_not_create_claude_hooks_dir(self, tmp_path: Path) -> None:
         """init must not scaffold .claude/hooks/ shell scripts."""
         runner.invoke(app, ["init", "-y", "--path", str(tmp_path)])
@@ -282,17 +317,26 @@ class TestInit:
         runner.invoke(app, ["init", "-y", "--path", str(tmp_path)])
         assert (tmp_path / "cases" / "CLAUDE.md").exists()
         assert (tmp_path / "runs" / "CLAUDE.md").exists()
+        assert (tmp_path / "cases" / "AGENTS.md").exists()
+        assert (tmp_path / "runs" / "AGENTS.md").exists()
         cases_content = (tmp_path / "cases" / "CLAUDE.md").read_text(encoding="utf-8")
         assert "case.toml" in cases_content
         runs_content = (tmp_path / "runs" / "CLAUDE.md").read_text(encoding="utf-8")
         assert "manifest.toml" in runs_content
         assert "analysis/scratch/" in runs_content
+        assert (tmp_path / "cases" / "AGENTS.md").read_text(
+            encoding="utf-8"
+        ) == cases_content
+        assert (tmp_path / "runs" / "AGENTS.md").read_text(
+            encoding="utf-8"
+        ) == runs_content
 
     def test_init_gitignore_personal_overrides(self, tmp_path: Path) -> None:
         """.gitignore excludes personal agent override files."""
         runner.invoke(app, ["init", "-y", "--path", str(tmp_path)])
         content = (tmp_path / ".gitignore").read_text(encoding="utf-8")
         assert "CLAUDE.local.md" in content
+        assert "AGENTS.override.md" in content
         assert "settings.local.json" in content
 
     def test_init_with_simulators(self, tmp_path: Path) -> None:

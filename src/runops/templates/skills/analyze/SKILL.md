@@ -44,4 +44,4 @@ runops analyze export $ARGUMENTS --paper draft-a
 7. completed run に `analysis/summary.json` が無い場合、`collect` が自動 summarize することを前提に進めてよい
 8. paper repo に渡す段階では `runops analyze export <run-or-survey> --paper <paper-id>` で `exports/papers/` に束ねる
 9. 結果の概要と注目すべき傾向を報告する
-10. 知見があれば `/learn` で保存する
+10. 知見があれば `{{ skill_prefix }}learn` で保存する

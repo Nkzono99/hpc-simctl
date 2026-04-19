@@ -27,4 +27,5 @@ runs/**/analysis/.ipynb_checkpoints/
 
 # Personal agent overrides (not shared)
 CLAUDE.local.md
+AGENTS.override.md
 .claude/settings.local.json

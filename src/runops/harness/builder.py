@@ -2,7 +2,9 @@
 
 The builder renders every harness file (``CLAUDE.md``, ``AGENTS.md``,
 ``.claude/skills/*``, ``.claude/rules/*``, ``.claude/settings.json``,
-``cases/CLAUDE.md``, ``runs/CLAUDE.md``) into an in-memory mapping of
+``.codex/*``, ``.agents/skills/*``, ``cases/CLAUDE.md``,
+``cases/AGENTS.md``, ``runs/CLAUDE.md``, ``runs/AGENTS.md``) into an
+in-memory mapping of
 ``relative_path -> rendered_content``.
 
 ``runops init`` iterates the mapping and writes each file (``_write_if_missing``),
@@ -33,10 +35,26 @@ AGENTS_MD = "AGENTS.md"
 CLAUDE_SETTINGS = ".claude/settings.json"
 CASES_CLAUDE_MD = "cases/CLAUDE.md"
 RUNS_CLAUDE_MD = "runs/CLAUDE.md"
+CASES_AGENTS_MD = "cases/AGENTS.md"
+RUNS_AGENTS_MD = "runs/AGENTS.md"
 RULE_WORKFLOW = ".claude/rules/runops-workflow.md"
 RULE_PLAN_BEFORE_ACT = ".claude/rules/plan-before-act.md"
 RULE_COOKBOOK = ".claude/rules/cookbook.md"
 RULE_UPSTREAM_FEEDBACK = ".claude/rules/upstream-feedback.md"
+
+# Codex-side outputs (see runops.harness.codex for rationale).
+CODEX_CONFIG = ".codex/config.toml"
+CODEX_README = ".codex/README.md"
+CODEX_RULES = ".codex/rules/runops.rules"
+AGENTS_SKILLS_PREFIX = ".agents/skills/"
+
+_AGENT_MD_TEMPLATE = "harness/shared/agent.md.j2"
+_CASES_DOC_TEMPLATE = "harness/shared/cases.md"
+_RUNS_DOC_TEMPLATE = "harness/shared/runs.md"
+_RULE_WORKFLOW_TEMPLATE = "harness/claude/rules/runops-workflow.md"
+_RULE_PLAN_BEFORE_ACT_TEMPLATE = "harness/claude/rules/plan-before-act.md"
+_RULE_COOKBOOK_TEMPLATE = "harness/claude/rules/cookbook.md"
+_RULE_UPSTREAM_FEEDBACK_TEMPLATE = "harness/claude/rules/upstream-feedback.md"
 
 # Files that update-harness is allowed to touch.  Any other file under the
 # project root (campaign.toml, cases/**, runs/**, etc.) is user-owned and
@@ -47,8 +65,12 @@ _ALL_HARNESS_PREFIXES: tuple[str, ...] = (
     CLAUDE_SETTINGS,
     CASES_CLAUDE_MD,
     RUNS_CLAUDE_MD,
+    CASES_AGENTS_MD,
+    RUNS_AGENTS_MD,
     ".claude/skills/",
     ".claude/rules/",
+    ".codex/",
+    AGENTS_SKILLS_PREFIX,
 )
 
 
@@ -145,25 +167,47 @@ def _render_agent_md(
     simulator_names: list[str],
     *,
     knowledge_imports_path: str,
+    supports_import: bool,
+    skills_dir: str,
 ) -> str:
-    """Render the shared ``agent.md`` Jinja template for CLAUDE/AGENTS md."""
+    """Render the shared ``agent.md`` Jinja template for CLAUDE/AGENTS md.
+
+    ``supports_import`` controls whether the rendered file may use the
+    ``@file`` import syntax.  Claude Code supports it; the Codex CLI
+    does not, so AGENTS.md falls back to plain path references.
+
+    ``skills_dir`` is the directory (``.claude/skills`` or
+    ``.agents/skills``) mentioned in the "information priority" section.
+    """
     from runops.templates import get_jinja_env
 
     env = get_jinja_env()
-    template = env.get_template("agent.md")
+    template = env.get_template(_AGENT_MD_TEMPLATE)
     return template.render(
         doc_name=doc_name,
         project_name=project_name,
         doc_repos=_collect_doc_repos(simulator_names) if simulator_names else [],
         knowledge_imports_path=knowledge_imports_path,
+        supports_import=supports_import,
+        skills_dir=skills_dir,
+        agent_name="Claude Code" if supports_import else "Codex",
+        skill_prefix="/" if supports_import else "$",
     )
 
 
 def _render_skill_files(
     project_name: str,
     simulator_names: list[str],
+    *,
+    skill_prefix: str,
+    agent_name: str,
 ) -> dict[str, str]:
-    """Return ``{"<skill-name>/SKILL.md": content}`` for all bundled skills."""
+    """Return ``{"<skill-name>/SKILL.md": content}`` for bundled skills.
+
+    Claude Code invokes project skills as slash commands (``/note``), while
+    Codex mentions them with ``$`` (``$note``).  The shared SKILL.md templates
+    may use ``skill_prefix`` so each harness gets native instructions.
+    """
     pip_pkgs = _collect_pip_packages(simulator_names) if simulator_names else []
     if pip_pkgs:
         pip_install_line = f"uv pip install {' '.join(pip_pkgs)}"
@@ -185,8 +229,10 @@ def _render_skill_files(
             env = get_jinja_env()
             template = env.from_string(content)
             content = template.render(
+                agent_name=agent_name,
                 project_name=project_name,
                 pip_install_line=pip_install_line,
+                skill_prefix=skill_prefix,
             )
         results[f"{skill_path.name}/SKILL.md"] = content
     return results
@@ -219,6 +265,11 @@ def build_harness_bundle(
         files or to compute template hashes for ``.runops/harness.lock``.
     """
     from runops.harness import build_claude_settings
+    from runops.harness.codex import (
+        build_codex_config,
+        build_codex_readme,
+        build_codex_rules,
+    )
     from runops.templates import load_static
 
     files: dict[str, str] = {}
@@ -228,30 +279,59 @@ def build_harness_bundle(
         project_name,
         simulator_names,
         knowledge_imports_path=knowledge_imports_path,
+        supports_import=True,
+        skills_dir=".claude/skills/",
     )
     files[AGENTS_MD] = _render_agent_md(
         AGENTS_MD,
         project_name,
         simulator_names,
         knowledge_imports_path=knowledge_imports_path,
+        supports_import=False,
+        skills_dir=AGENTS_SKILLS_PREFIX,
     )
 
     files[CLAUDE_SETTINGS] = build_claude_settings()
 
-    for rel_path, content in _render_skill_files(project_name, simulator_names).items():
+    rendered_claude_skills = _render_skill_files(
+        project_name,
+        simulator_names,
+        skill_prefix="/",
+        agent_name="Claude Code",
+    )
+    for rel_path, content in rendered_claude_skills.items():
         files[f".claude/skills/{rel_path}"] = content
 
-    files[RULE_WORKFLOW] = load_static("scaffold/rules/runops-workflow.md")
-    files[RULE_PLAN_BEFORE_ACT] = load_static("scaffold/rules/plan-before-act.md")
+    files[RULE_WORKFLOW] = load_static(_RULE_WORKFLOW_TEMPLATE)
+    files[RULE_PLAN_BEFORE_ACT] = load_static(_RULE_PLAN_BEFORE_ACT_TEMPLATE)
     if simulator_names and _collect_doc_repos(simulator_names):
-        files[RULE_COOKBOOK] = load_static("rules/cookbook.md")
+        files[RULE_COOKBOOK] = load_static(_RULE_COOKBOOK_TEMPLATE)
     if upstream_feedback:
-        files[RULE_UPSTREAM_FEEDBACK] = load_static(
-            "scaffold/rules/upstream-feedback.md"
-        )
+        files[RULE_UPSTREAM_FEEDBACK] = load_static(_RULE_UPSTREAM_FEEDBACK_TEMPLATE)
 
-    files[CASES_CLAUDE_MD] = load_static("scaffold/cases_claude.md")
-    files[RUNS_CLAUDE_MD] = load_static("scaffold/runs_claude.md")
+    files[CASES_CLAUDE_MD] = load_static(_CASES_DOC_TEMPLATE)
+    files[RUNS_CLAUDE_MD] = load_static(_RUNS_DOC_TEMPLATE)
+    files[CASES_AGENTS_MD] = load_static(_CASES_DOC_TEMPLATE)
+    files[RUNS_AGENTS_MD] = load_static(_RUNS_DOC_TEMPLATE)
+
+    # Codex harness.  Codex auto-loads .codex/config.toml (with trust),
+    # .codex/rules/*.rules, .agents/skills/<name>/SKILL.md, and AGENTS.md
+    # files from the project root down to the current working directory.
+    # Project-local slash-command prompts have no Codex equivalent, so we
+    # do not emit them.
+    files[CODEX_CONFIG] = build_codex_config(project_name)
+    files[CODEX_README] = build_codex_readme(project_name)
+    files[CODEX_RULES] = build_codex_rules()
+    # SKILL.md frontmatter is shared, but invocation syntax differs:
+    # Claude uses `/skill`; Codex uses `$skill`.
+    rendered_codex_skills = _render_skill_files(
+        project_name,
+        simulator_names,
+        skill_prefix="$",
+        agent_name="Codex",
+    )
+    for rel_path, content in rendered_codex_skills.items():
+        files[f"{AGENTS_SKILLS_PREFIX}{rel_path}"] = content
 
     return HarnessBundle(files=files, upstream_feedback=upstream_feedback)
 

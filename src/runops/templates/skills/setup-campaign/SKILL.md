@@ -73,15 +73,15 @@ unit = "V (normalized)"
 
 1. `campaign.toml` を更新する
 2. 記入内容のサマリーを表示する
-3. **`/note` で経緯を残す** (下記参照)
+3. **`{{ skill_prefix }}note` で経緯を残す** (下記参照)
 4. 次のステップを提案する:
    - ケースが未作成なら `runops case new <case_name> -s <simulator>` を提案 (cases/<sim>/ に自動生成)
    - ケースが既存なら survey 設計を提案
 
-## `/note` で残すべきこと
+## `{{ skill_prefix }}note` で残すべきこと
 
 campaign 設計の意思決定は raw な状態で `notes/YYYY-MM-DD.md` に残しておく
-(後の `/learn` の素材になる):
+(後の `{{ skill_prefix }}learn` の素材になる):
 
 - どのテーマ・仮説を採用したか、なぜか
 - 却下した代替仮説 (一度考えてやめたもの)
@@ -108,4 +108,3 @@ EOF
 - シミュレータの agent_guide に記載されたパラメータ名を優先的に使う
 - 物理単位は必ず `unit` に記入する
 - `reason` は将来の自分や共同研究者が読んで意図がわかるように書く
-
